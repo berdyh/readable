@@ -75,8 +75,8 @@ export async function verifyWeaviateConnection(
     throw error;
   }
 
-  let liveResponse: { status?: string } | undefined;
-  let readyResponse: { status?: string } | undefined;
+  let liveResponse: unknown;
+  let readyResponse: unknown;
 
   try {
     [liveResponse, readyResponse] = await Promise.all([
@@ -97,10 +97,29 @@ export async function verifyWeaviateConnection(
     throw error;
   }
 
-  const liveStatus = liveResponse?.status ?? 'UNKNOWN';
-  const readyStatus = readyResponse?.status ?? 'UNKNOWN';
+  const liveOk =
+    liveResponse === true ||
+    (typeof liveResponse === 'string' &&
+      liveResponse.toUpperCase() === 'LIVE') ||
+    (typeof liveResponse === 'object' &&
+      liveResponse !== null &&
+      'status' in liveResponse &&
+      typeof (liveResponse as { status?: string }).status === 'string' &&
+      (liveResponse as { status: string }).status.toUpperCase() === 'LIVE');
 
-  if (liveStatus !== 'LIVE' || readyStatus !== 'READY') {
+  const readyOk =
+    readyResponse === true ||
+    (typeof readyResponse === 'string' &&
+      readyResponse.toUpperCase() === 'READY') ||
+    (typeof readyResponse === 'object' &&
+      readyResponse !== null &&
+      'status' in readyResponse &&
+      typeof (readyResponse as { status?: string }).status === 'string' &&
+      (readyResponse as { status: string }).status.toUpperCase() === 'READY');
+
+  if (!liveOk || !readyOk) {
+    const liveStatus = JSON.stringify(liveResponse);
+    const readyStatus = JSON.stringify(readyResponse);
     const message = `[weaviate] Health check failed for ${env.scheme}://${env.host} (timeout ${env.timeoutMs}ms). Live=${liveStatus} Ready=${readyStatus}`;
     console.error(message);
     throw new Error(message);

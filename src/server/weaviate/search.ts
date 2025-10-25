@@ -143,12 +143,14 @@ async function runPaperChunkHybridQuery(
     'distance',
     ...(options.additionalFields ?? []),
   ]);
-  const additionalFields = Array.from(additionalFieldSet).join(' ');
+  const additionalClause = `_additional { ${Array.from(additionalFieldSet).join(
+    ' ',
+  )} }`;
 
   const response = await client.graphql
     .get()
     .withClassName('PaperChunk')
-    .withFields(PAPER_CHUNK_FIELDS)
+    .withFields(`${PAPER_CHUNK_FIELDS} ${additionalClause}`)
     .withWhere(whereFilter)
     .withLimit(options.limit ?? 10)
     .withOffset(options.offset ?? 0)
@@ -159,7 +161,6 @@ async function runPaperChunkHybridQuery(
       alpha: options.alpha,
       fusionType: FusionType.rankedFusion,
     })
-    .withAdditional(additionalFields)
     .do();
 
   const rawItems =
@@ -183,10 +184,12 @@ async function runPaperWindowExpansion(
   const min = Math.min(...pages);
   const max = Math.max(...pages);
 
+  const additionalClause = '_additional { id score distance }';
+
   const windowResponse = await client.graphql
     .get()
     .withClassName('PaperChunk')
-    .withFields(PAPER_CHUNK_FIELDS)
+    .withFields(`${PAPER_CHUNK_FIELDS} ${additionalClause}`)
     .withWhere(buildPaperWindowFilter(paperId, min, max))
     .withLimit(limit)
     .withAdditional('id score distance')

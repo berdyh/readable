@@ -13,11 +13,22 @@ import HorizontalRule from "@tiptap/extension-horizontal-rule";
 import CharacterCount from "@tiptap/extension-character-count";
 import BubbleMenuExtension from "@tiptap/extension-bubble-menu";
 import { clsx } from "clsx";
-import { Flame, MoonStar, SunMedium } from "lucide-react";
+import {
+  Flame,
+  MessageSquare,
+  MoonStar,
+  Sparkles,
+  SunMedium,
+} from "lucide-react";
+import { useTheme } from "next-themes";
 
 import { EditorToolbar } from "./EditorToolbar";
 import { SlashCommandExtension } from "./SlashCommand";
 import { SLASH_COMMAND_ITEMS } from "./commands";
+import {
+  emitEditorIntent,
+  type EditorIntentAction,
+} from "./intents";
 
 const INITIAL_CONTENT = `
 <h1>Designing persona-aware reading experiences</h1>
@@ -33,26 +44,8 @@ const INITIAL_CONTENT = `
 const CHARACTER_LIMIT = 8000;
 
 export function ResearchEditor() {
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
-    if (typeof window === "undefined") {
-      return false;
-    }
-    return window.matchMedia("(prefers-color-scheme: dark)").matches;
-  });
-
-  useEffect(() => {
-    const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const handler = (event: MediaQueryListEvent) => {
-      setIsDarkMode(event.matches);
-    };
-
-    media.addEventListener("change", handler);
-    return () => media.removeEventListener("change", handler);
-  }, []);
-
-  const toggleTheme = useCallback(() => {
-    setIsDarkMode((prev) => !prev);
-  }, []);
+  const { resolvedTheme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
 
   const slashCommandItems = useMemo(() => SLASH_COMMAND_ITEMS, []);
 
@@ -104,29 +97,44 @@ export function ResearchEditor() {
   });
 
   useEffect(() => {
-    if (!editor) {
-      return;
-    }
-
-    const handler = (event: Event) => {
-      const detail = (event as CustomEvent<{ text: string }>).detail;
-      if (!detail?.text) {
-        return;
-      }
-
-      const insert = `AI summary placeholder for: "${detail.text.slice(0, 120)}"`;
-      editor
-        .chain()
-        .focus()
-        .insertContent(insert)
-        .run();
-    };
-
-    window.addEventListener("editor-ai-action", handler);
-    return () => window.removeEventListener("editor-ai-action", handler);
-  }, [editor]);
+    const id = window.requestAnimationFrame(() => {
+      setMounted(true);
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, []);
 
   const characterCount = editor?.storage.characterCount.characters() ?? 0;
+  const selectionText =
+    editor?.state.doc.textBetween(
+      editor.state.selection.from,
+      editor.state.selection.to,
+      " ",
+    ) ?? "";
+  const trimmedSelection = selectionText.trim();
+
+  const sendIntent = useCallback(
+    (action: EditorIntentAction, text: string, origin?: string) => {
+      const normalized = text.trim();
+      if (!normalized) {
+        return;
+      }
+      emitEditorIntent({
+        action,
+        text: normalized,
+        origin: origin ?? "research-editor",
+      });
+    },
+    [],
+  );
+
+  if (!mounted) {
+    return null;
+  }
+
+  const isDarkMode = resolvedTheme === "dark";
+  const toggleTheme = () => {
+    setTheme(isDarkMode ? "light" : "dark");
+  };
 
   const containerClasses = clsx(
     "relative rounded-3xl border shadow-sm ring-1 transition",
@@ -203,54 +211,104 @@ export function ResearchEditor() {
                 : "border-neutral-200 bg-white",
             )}
           >
-            <button
-              type="button"
-              onClick={() => editor.chain().focus().toggleBold().run()}
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => editor.chain().focus().toggleBold().run()}
+                className={clsx(
+                  "h-7 w-7 rounded-md text-xs font-semibold transition",
+                  editor.isActive("bold")
+                    ? "bg-blue-600 text-white"
+                    : isDarkMode
+                    ? "text-neutral-200 hover:bg-neutral-800"
+                    : "text-neutral-600 hover:bg-neutral-100",
+                )}
+              >
+                B
+              </button>
+              <button
+                type="button"
+                onClick={() => editor.chain().focus().toggleItalic().run()}
+                className={clsx(
+                  "h-7 w-7 rounded-md text-xs font-semibold italic transition",
+                  editor.isActive("italic")
+                    ? "bg-blue-600 text-white"
+                    : isDarkMode
+                    ? "text-neutral-200 hover:bg-neutral-800"
+                    : "text-neutral-600 hover:bg-neutral-100",
+                )}
+              >
+                I
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  editor
+                    .chain()
+                    .focus()
+                    .toggleHighlight({ color: "#fde68a" })
+                    .run()
+                }
+                className={clsx(
+                  "h-7 w-7 rounded-md text-xs font-semibold transition",
+                  editor.isActive("highlight", { color: "#fde68a" })
+                    ? "bg-amber-400 text-neutral-900"
+                    : isDarkMode
+                    ? "text-neutral-200 hover:bg-neutral-800"
+                    : "text-neutral-600 hover:bg-neutral-100",
+                )}
+              >
+                ✦
+              </button>
+            </div>
+
+            <span
               className={clsx(
-                "h-7 w-7 rounded-md text-xs font-semibold transition",
-                editor.isActive("bold")
-                  ? "bg-blue-600 text-white"
-                  : isDarkMode
-                  ? "text-neutral-200 hover:bg-neutral-800"
-                  : "text-neutral-600 hover:bg-neutral-100",
+                "mx-1 h-5 w-px",
+                isDarkMode ? "bg-neutral-800" : "bg-neutral-200",
               )}
-            >
-              B
-            </button>
-            <button
-              type="button"
-              onClick={() => editor.chain().focus().toggleItalic().run()}
-              className={clsx(
-                "h-7 w-7 rounded-md text-xs font-semibold italic transition",
-                editor.isActive("italic")
-                  ? "bg-blue-600 text-white"
-                  : isDarkMode
-                  ? "text-neutral-200 hover:bg-neutral-800"
-                  : "text-neutral-600 hover:bg-neutral-100",
-              )}
-            >
-              I
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                editor
-                  .chain()
-                  .focus()
-                  .toggleHighlight({ color: "#fde68a" })
-                  .run()
-              }
-              className={clsx(
-                "h-7 w-7 rounded-md text-xs font-semibold transition",
-                editor.isActive("highlight", { color: "#fde68a" })
-                  ? "bg-amber-400 text-neutral-900"
-                  : isDarkMode
-                  ? "text-neutral-200 hover:bg-neutral-800"
-                  : "text-neutral-600 hover:bg-neutral-100",
-              )}
-            >
-              ✦
-            </button>
+            />
+
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                disabled={!trimmedSelection}
+                onClick={() =>
+                  sendIntent("go-deeper", trimmedSelection, "research-editor")
+                }
+                title="Ask for deeper explanation"
+                className={clsx(
+                  "flex h-7 items-center justify-center rounded-md px-2 text-xs font-medium transition",
+                  trimmedSelection
+                    ? isDarkMode
+                      ? "bg-blue-500/20 text-blue-200 hover:bg-blue-500/30"
+                      : "bg-blue-100 text-blue-700 hover:bg-blue-200"
+                    : "cursor-not-allowed opacity-40",
+                )}
+              >
+                <MessageSquare className="mr-1 h-3.5 w-3.5" />
+                Deepen
+              </button>
+              <button
+                type="button"
+                disabled={!trimmedSelection}
+                onClick={() =>
+                  sendIntent("condense", trimmedSelection, "research-editor")
+                }
+                title="Summarize more concisely"
+                className={clsx(
+                  "flex h-7 items-center justify-center rounded-md px-2 text-xs font-medium transition",
+                  trimmedSelection
+                    ? isDarkMode
+                      ? "bg-purple-500/20 text-purple-200 hover:bg-purple-500/30"
+                      : "bg-purple-100 text-purple-700 hover:bg-purple-200"
+                    : "cursor-not-allowed opacity-40",
+                )}
+              >
+                <Sparkles className="mr-1 h-3.5 w-3.5" />
+                Condense
+              </button>
+            </div>
           </BubbleMenu>
         )}
 

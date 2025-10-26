@@ -32,7 +32,7 @@ const QA_RESPONSE_SCHEMA: Record<string, unknown> = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['chunk_id'],
+        required: ['chunk_id', 'page'],
         properties: {
           chunk_id: { type: 'string', minLength: 1 },
           page: { type: 'integer', minimum: 1 },

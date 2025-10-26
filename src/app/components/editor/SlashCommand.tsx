@@ -167,12 +167,15 @@ export const SlashCommandExtension = Extension.create<SlashCommandOptions>({
             .slice(0, 8);
         },
         render: () => {
-          let component: ReactRenderer<SlashCommandListProps> | null = null;
+          let component:
+            | ReactRenderer<SlashCommandListHandle, SlashCommandListProps>
+            | null = null;
           let popup: Instance<TippyProps>[] = [];
 
           return {
             onStart: (props: SuggestionProps<SlashCommandItem>) => {
               component = new ReactRenderer(SlashCommandList, {
+                editor: props.editor,
                 props: {
                   items: props.items,
                   editor: props.editor,

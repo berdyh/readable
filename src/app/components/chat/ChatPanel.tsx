@@ -14,6 +14,10 @@ import type { AnswerResult, QuestionSelection } from "@/server/qa/types";
 import SlashCommandMenu, {
   type SlashCommandOption,
 } from "./SlashCommandMenu";
+import {
+  EDITOR_INTENT_EVENT,
+  type EditorIntentDetail,
+} from "../editor/intents";
 
 type MessageRole = "user" | "assistant";
 
@@ -338,6 +342,43 @@ const ChatPanel = ({
     }
     scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages]);
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<EditorIntentDetail>).detail;
+      if (!detail?.text) {
+        return;
+      }
+
+      const normalized = detail.text.trim();
+      if (!normalized) {
+        return;
+      }
+
+      let prompt: string;
+      switch (detail.action) {
+        case "go-deeper": {
+          prompt = `Dig deeper on this passage. Include derivations or supporting evidence when relevant:\n“${normalized}”`;
+          break;
+        }
+        case "condense": {
+          prompt = `Condense this passage into a concise bullet:\n“${normalized}”`;
+          break;
+        }
+        case "summarize-selection":
+        default: {
+          prompt = `Summarize the key insight from this excerpt:\n“${normalized}”`;
+          break;
+        }
+      }
+
+      onDraftChange(prompt);
+      textareaRef.current?.focus();
+    };
+
+    window.addEventListener(EDITOR_INTENT_EVENT, handler);
+    return () => window.removeEventListener(EDITOR_INTENT_EVENT, handler);
+  }, [onDraftChange]);
 
   const reportError = useCallback(
     (message: string) => {

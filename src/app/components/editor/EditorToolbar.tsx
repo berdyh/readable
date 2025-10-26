@@ -18,6 +18,7 @@ import {
   Underline,
   Undo,
 } from "lucide-react";
+import { emitEditorIntent } from "./intents";
 
 interface ToolbarButtonConfig {
   key: string;
@@ -161,16 +162,26 @@ export function EditorToolbar({
         label: "Summarise selection (⌘+Shift+I)",
         icon: <Sparkles className="h-4 w-4 text-purple-500" />,
         onClick: (ed) => {
-          const text = ed.state.doc.textBetween(
+          const selection = ed.state.doc.textBetween(
             ed.state.selection.from,
             ed.state.selection.to,
             " ",
           );
-          window.dispatchEvent(
-            new CustomEvent("editor-ai-action", {
-              detail: { text },
-            }),
+          const normalizedSelection = selection.trim();
+          const fallback = ed.state.doc.textBetween(
+            0,
+            ed.state.doc.content.size,
+            " ",
           );
+          const text = normalizedSelection || fallback.trim();
+          if (!text) {
+            return;
+          }
+          emitEditorIntent({
+            action: "summarize-selection",
+            text,
+            origin: "editor-toolbar",
+          });
         },
       },
     ],

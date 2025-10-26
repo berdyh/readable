@@ -260,6 +260,10 @@ export async function ensureWeaviateSchema(
   await verifyWeaviateConnection(client);
 
   for (const schemaClass of classes) {
+    if (!schemaClass.class) {
+      continue;
+    }
+
     const exists = await client.schema.exists(schemaClass.class);
 
     if (!exists) {

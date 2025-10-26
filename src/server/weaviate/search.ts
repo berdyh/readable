@@ -1,6 +1,7 @@
 import type { WeaviateClient, WhereFilter } from 'weaviate-ts-client';
 import { FusionType } from 'weaviate-ts-client';
 
+import { extractAdditionalId, mapPaperChunkBase, PAPER_CHUNK_FIELDS, type PaperChunkGraphQLRow } from './common';
 import { getWeaviateClient } from './client';
 
 export interface HybridPaperChunkQueryOptions {
@@ -34,33 +35,17 @@ export interface HybridPaperChunkQueryResult {
   expandedWindow: HybridPaperChunkHit[];
 }
 
-const PAPER_CHUNK_FIELDS =
-  'paperId chunkId text section pageNumber tokenStart tokenEnd citations figureIds';
-
-interface PaperChunkGraphQLRow {
-  paperId: string;
-  chunkId: string;
-  text: string;
-  section?: string | null;
-  pageNumber?: number | null;
-  tokenStart?: number | null;
-  tokenEnd?: number | null;
-  citations?: string[] | null;
-  figureIds?: string[] | null;
-  _additional?: Record<string, unknown> | null;
-}
-
 function mapHybridHit(item: PaperChunkGraphQLRow): HybridPaperChunkHit {
+  const base = mapPaperChunkBase(item);
   const additional = (item._additional ?? {}) as Record<string, unknown>;
 
   return {
-    id: additional.id ?? '',
-    paperId: item.paperId,
-    chunkId: item.chunkId,
-    text: item.text,
-    section: item.section ?? undefined,
-    pageNumber:
-      typeof item.pageNumber === 'number' ? item.pageNumber : undefined,
+    id: extractAdditionalId(additional) ?? '',
+    paperId: base.paperId,
+    chunkId: base.chunkId,
+    text: base.text,
+    section: base.section,
+    pageNumber: base.pageNumber,
     score:
       typeof additional.score === 'number'
         ? additional.score
@@ -73,8 +58,8 @@ function mapHybridHit(item: PaperChunkGraphQLRow): HybridPaperChunkHit {
         : additional?.distance
         ? Number(additional.distance)
         : undefined,
-    citations: item.citations ?? undefined,
-    figureIds: item.figureIds ?? undefined,
+    citations: base.citations,
+    figureIds: base.figureIds,
     additional,
   };
 }
@@ -192,7 +177,6 @@ async function runPaperWindowExpansion(
     .withFields(`${PAPER_CHUNK_FIELDS} ${additionalClause}`)
     .withWhere(buildPaperWindowFilter(paperId, min, max))
     .withLimit(limit)
-    .withAdditional('id score distance')
     .do();
 
   const rawItems =

@@ -25,7 +25,7 @@ export interface Citation {
   id?: string;
   paperId: string;
   citationId: string;
-  title: string;
+  title?: string;
   authors?: string[];
   year?: number;
   source?: string;

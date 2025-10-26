@@ -194,13 +194,14 @@ This project aims to build a web application that helps users read and understan
 **Steps**
 
 1. **HTML first**: try **ar5iv** HTML for sections/math/captions; parse headings/paragraphs/captions. ([ar5iv][4])
-2. **PDF path**: fetch arXiv PDF URL, render with PDF.js when needed; for server-side extraction, use pdfjs-dist or a node parser to get text spans + page mapping. ([GitHub][5])
+2. **PDF path**: fetch arXiv PDF URL and run `pdfjs-dist` (server-side) to extract page text and detect figure/table captions via regex for now; capture image metadata via operator list. ([GitHub][5])
 3. **Structure/refs**: run **GROBID** (docker) to get TEI (sections, bibliography, figure captions). Parse TEI into `PaperChunk`, `Citation`, `Figure`. ([GitHub][6])
-4. **OCR fallback**: **DeepSeek-OCR** for scanned or image-heavy docs; prefer when text layer is thin. ([GitHub][7])
-5. **Metadata**: fetch title/abstract/authors from arXiv API as fast path. ([info.arxiv.org][8])
-6. **Contact email**: pull the user-provided contact email from local storage/session and include it in arXiv requests (query param or header) to respect usage etiquette.
-7. **Upsert**: chunk by section with `(text, section, pageStart/End, refIds, figIds, tags)` and embed (OpenAI or Weaviate embeddings).
-8. Return an internal `IngestResult { paperId, pages, sections[], refs[], figures[] }`.
+4. **Hybrid detection**: sample the first three PDF pages (avg text per page + image density) to decide if the document is likely scanned; keep `pdfjs-dist` as default, routing to DeepSeek only when the heuristic (or force flag) says so.
+5. **OCR fallback**: **DeepSeek-OCR** for scanned or image-heavy docs; prefer when text layer is thin. When we’re ready to host it, use RunPod Serverless (vLLM template → model `deepseek-ai/deepseek-ocr`, ≥24 GB VRAM), then drop the endpoint/API key into env to enable the fallback automatically. ([GitHub][7])
+6. **Metadata**: fetch title/abstract/authors from arXiv API as fast path. ([info.arxiv.org][8])
+7. **Contact email**: pull the user-provided contact email from local storage/session and include it in arXiv requests (query param or header) to respect usage etiquette.
+8. **Upsert**: chunk by section with `(text, section, pageStart/End, refIds, figIds, tags)` and embed (OpenAI or Weaviate embeddings).
+9. Return an internal `IngestResult { paperId, pages, sections[], refs[], figures[] }`.
 
 **MCP tools**
 

@@ -54,11 +54,34 @@ async function batchUpsert(
 
   const response = await client.batch.objectsBatcher().withObjects(...objects).do();
 
-  return response.map((item) => ({
-    id: item.id ?? '',
-    status: item.result?.status === 'SUCCESS' ? 'SUCCESS' : 'FAILED',
-    error: item.result?.errors?.error,
-  }));
+  return response.map((item) => {
+    const errorDetails = item.result?.errors?.error;
+    let errorMessage: string | undefined;
+
+    if (typeof errorDetails === 'string') {
+      errorMessage = errorDetails;
+    } else if (Array.isArray(errorDetails)) {
+      errorMessage = errorDetails
+        .map((entry) => {
+          if (!entry || typeof entry !== 'object') {
+            return String(entry);
+          }
+
+          if ('message' in entry && typeof entry.message === 'string') {
+            return entry.message;
+          }
+
+          return JSON.stringify(entry);
+        })
+        .join('; ');
+    }
+
+    return {
+      id: item.id ?? '',
+      status: item.result?.status === 'SUCCESS' ? 'SUCCESS' : 'FAILED',
+      error: errorMessage,
+    } satisfies BatchUpsertResult;
+  });
 }
 
 const buildPaperChunkObject = (chunk: PaperChunk): WeaviateObject => {

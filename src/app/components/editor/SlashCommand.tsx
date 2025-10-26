@@ -15,9 +15,33 @@ import { ReactRenderer } from "@tiptap/react";
 import { Extension } from "@tiptap/core";
 import tippy, { type Instance, type Props as TippyProps } from "tippy.js";
 import { clsx } from "clsx";
-import * as Icons from "lucide-react";
+import {
+  CircleDashed,
+  Code,
+  Heading1,
+  Heading2,
+  Heading3,
+  List,
+  ListOrdered,
+  Minus,
+  Quote,
+  Type,
+  type LucideIcon,
+} from "lucide-react";
 
 import type { SlashCommandItem } from "./commands";
+
+const ICONS: Record<string, LucideIcon> = {
+  Type,
+  Heading1,
+  Heading2,
+  Heading3,
+  List,
+  ListOrdered,
+  Quote,
+  Code,
+  Minus,
+};
 
 interface SlashCommandListProps {
   items: SlashCommandItem[];
@@ -97,8 +121,7 @@ const SlashCommandList = forwardRef<
       </div>
       <ul className="flex flex-col gap-1">
         {items.map((item, index) => {
-          const Icon = (Icons as Record<string, Icons.LucideIcon>)[item.icon] ??
-            Icons.CircleDashed;
+          const Icon = ICONS[item.icon] ?? CircleDashed;
 
           return (
             <li key={item.title}>

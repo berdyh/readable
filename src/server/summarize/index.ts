@@ -34,6 +34,7 @@ const SUMMARY_SCHEMA: Record<string, unknown> = {
           reasoning: { type: 'string' },
           key_points: {
             type: 'array',
+            minItems: 1,
             items: { type: 'string' },
             maxItems: 4,
           },

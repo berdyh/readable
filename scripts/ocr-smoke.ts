@@ -12,10 +12,10 @@ async function loadEnv(): Promise<void> {
 }
 
 function bufferToArrayBuffer(buffer: Buffer): ArrayBuffer {
-  return buffer.buffer.slice(
-    buffer.byteOffset,
-    buffer.byteOffset + buffer.byteLength,
-  );
+  const arrayBuffer = new ArrayBuffer(buffer.byteLength);
+  const view = new Uint8Array(arrayBuffer);
+  view.set(buffer);
+  return arrayBuffer;
 }
 
 async function main(): Promise<void> {

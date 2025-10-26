@@ -7,6 +7,7 @@ import {
   upsertPaperChunks,
 } from '@/server/weaviate';
 import type { Citation, Figure, PaperChunk } from '@/server/weaviate';
+import { buildPaperChunkUuid } from '@/server/weaviate/ids';
 
 import { fetchAr5ivHtml, fetchArxivMetadata, fetchArxivPdf } from './arxiv';
 import { parseAr5ivHtml } from './ar5iv';
@@ -409,24 +410,84 @@ function buildChunks(
   return { chunks, citationToChunks: citationMap, figureToChunks: figureMap };
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function normalizeChunkReferenceIds(
+  paperId: string,
+  candidates: Array<string | undefined>,
+): string[] | undefined {
+  const ids = new Set<string>();
+
+  for (const candidate of candidates) {
+    const value = candidate?.trim();
+    if (!value) {
+      continue;
+    }
+
+    if (UUID_PATTERN.test(value)) {
+      ids.add(value);
+    } else {
+      ids.add(buildPaperChunkUuid(paperId, value));
+    }
+  }
+
+  if (ids.size === 0) {
+    return undefined;
+  }
+
+  return Array.from(ids);
+}
+
 function attachChunkRefsToFigures(
   figures: PaperFigure[],
   mapping: Map<string, string[]>,
+  paperId: string,
 ): PaperFigure[] {
-  return figures.map((figure) => ({
-    ...figure,
-    chunkIds: mapping.get(figure.id) ?? figure.chunkIds,
-  }));
+  return figures.map((figure) => {
+    const combined = [
+      ...(figure.chunkIds ?? []),
+      ...(mapping.get(figure.id) ?? []),
+    ];
+    const normalized = normalizeChunkReferenceIds(paperId, combined);
+
+    if (!normalized) {
+      return {
+        ...figure,
+        chunkIds: undefined,
+      };
+    }
+
+    return {
+      ...figure,
+      chunkIds: normalized,
+    };
+  });
 }
 
 function attachChunkRefsToReferences(
   references: PaperReference[],
   mapping: Map<string, string[]>,
+  paperId: string,
 ): PaperReference[] {
-  return references.map((reference) => ({
-    ...reference,
-    chunkIds: mapping.get(reference.id) ?? reference.chunkIds,
-  }));
+  return references.map((reference) => {
+    const combined = [
+      ...(reference.chunkIds ?? []),
+      ...(mapping.get(reference.id) ?? []),
+    ];
+    const normalized = normalizeChunkReferenceIds(paperId, combined);
+
+    if (!normalized) {
+      return {
+        ...reference,
+        chunkIds: undefined,
+      };
+    }
+
+    return {
+      ...reference,
+      chunkIds: normalized,
+    };
+  });
 }
 
 function toWeaviateFigures(
@@ -578,10 +639,12 @@ export async function ingestPaper(
   const figuresWithChunks = attachChunkRefsToFigures(
     figures,
     figureToChunks,
+    metadata.id,
   );
   const referencesWithChunks = attachChunkRefsToReferences(
     references,
     citationToChunks,
+    metadata.id,
   );
 
   await upsertPaperChunks(chunks, client);

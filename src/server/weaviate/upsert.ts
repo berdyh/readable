@@ -1,5 +1,4 @@
 import type { WeaviateClient, WeaviateObject } from 'weaviate-ts-client';
-import { generateUuid5 } from 'weaviate-ts-client';
 
 import { getWeaviateClient } from './client';
 import type {
@@ -9,14 +8,19 @@ import type {
   PaperChunk,
   PersonaConcept,
 } from './types';
+import {
+  buildCitationUuid,
+  buildFigureUuid,
+  buildInteractionUuid,
+  buildPaperChunkUuid,
+  buildPersonaConceptUuid,
+} from './ids';
 
 interface BatchUpsertResult {
   id: string;
   status: 'SUCCESS' | 'FAILED';
   error?: string;
 }
-
-const CLEAN_NAMESPACE = 'readable';
 
 const removeUndefined = (
   payload: Record<string, unknown>,
@@ -86,8 +90,7 @@ async function batchUpsert(
 
 const buildPaperChunkObject = (chunk: PaperChunk): WeaviateObject => {
   const id =
-    chunk.id ??
-    generateUuid5(`${chunk.paperId}:${chunk.chunkId}`, CLEAN_NAMESPACE);
+    chunk.id ?? buildPaperChunkUuid(chunk.paperId, chunk.chunkId);
 
   return {
     class: 'PaperChunk',
@@ -108,8 +111,7 @@ const buildPaperChunkObject = (chunk: PaperChunk): WeaviateObject => {
 
 const buildFigureObject = (figure: Figure): WeaviateObject => {
   const id =
-    figure.id ??
-    generateUuid5(`${figure.paperId}:${figure.figureId}`, CLEAN_NAMESPACE);
+    figure.id ?? buildFigureUuid(figure.paperId, figure.figureId);
 
   return {
     class: 'Figure',
@@ -128,10 +130,7 @@ const buildFigureObject = (figure: Figure): WeaviateObject => {
 const buildCitationObject = (citation: Citation): WeaviateObject => {
   const id =
     citation.id ??
-    generateUuid5(
-      `${citation.paperId}:${citation.citationId}`,
-      CLEAN_NAMESPACE,
-    );
+    buildCitationUuid(citation.paperId, citation.citationId);
 
   return {
     class: 'Citation',
@@ -154,8 +153,7 @@ const buildPersonaConceptObject = (
   concept: PersonaConcept,
 ): WeaviateObject => {
   const id =
-    concept.id ??
-    generateUuid5(`${concept.userId}:${concept.concept}`, CLEAN_NAMESPACE);
+    concept.id ?? buildPersonaConceptUuid(concept.userId, concept.concept);
 
   return {
     class: 'PersonaConcept',
@@ -174,9 +172,11 @@ const buildPersonaConceptObject = (
 const buildInteractionObject = (interaction: Interaction): WeaviateObject => {
   const id =
     interaction.id ??
-    generateUuid5(
-      `${interaction.userId}:${interaction.paperId}:${interaction.interactionType}:${interaction.prompt}`,
-      CLEAN_NAMESPACE,
+    buildInteractionUuid(
+      interaction.userId,
+      interaction.paperId,
+      interaction.interactionType,
+      interaction.prompt,
     );
 
   return {

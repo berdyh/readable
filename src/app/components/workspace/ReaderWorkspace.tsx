@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { IHighlight } from "react-pdf-highlighter";
 
 import ChatPanel from "../chat/ChatPanel";
@@ -16,11 +16,55 @@ import SummaryPanel, {
 } from "../summary/SummaryPanel";
 import type { QuestionSelection } from "@/server/qa/types";
 import { ResearchEditor } from "../editor/ResearchEditor";
+import type { SummaryResult } from "@/server/summarize/types";
 
 const DEFAULT_PDF_URL = "https://arxiv.org/pdf/1706.03762.pdf";
 const DEFAULT_PAPER_ID = "arxiv:1706.03762";
 
 type MobilePane = "summary" | "chat" | "pdf";
+
+const inferArxivPdfUrl = (paperId: string | undefined): string | undefined => {
+  if (!paperId) {
+    return undefined;
+  }
+
+  const normalized = paperId.startsWith("arxiv:")
+    ? paperId.slice("arxiv:".length)
+    : paperId;
+
+  if (!normalized) {
+    return undefined;
+  }
+
+  return `https://arxiv.org/pdf/${normalized}.pdf`;
+};
+
+const extractPageNumber = (anchor?: string | null): number | undefined => {
+  if (!anchor) {
+    return undefined;
+  }
+
+  const match = anchor.match(/(\d+)/);
+  if (!match) {
+    return undefined;
+  }
+
+  const value = Number.parseInt(match[1], 10);
+  return Number.isFinite(value) && value > 0 ? value : undefined;
+};
+
+const isSummaryResult = (value: unknown): value is SummaryResult => {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+  return (
+    Array.isArray(record.sections) &&
+    Array.isArray(record.key_findings) &&
+    Array.isArray(record.figures)
+  );
+};
 
 const mobilePaneOptions: Array<{ key: MobilePane; label: string }> = [
   { key: "summary", label: "Summary" },
@@ -78,60 +122,6 @@ const truncateForPrompt = (text: string, maxLength = 320) => {
   return `${trimmed.slice(0, maxLength)}…`;
 };
 
-const demoFigureCallouts: FigureCallout[] = [
-  {
-    id: "fig-architecture",
-    label: "Figure 1",
-    caption:
-      "Transformer architecture illustrating stacked encoder-decoder blocks connected through multi-head attention and residual pathways.",
-    pageNumber: 3,
-    referencedSections: ["S1", "S2"],
-    supportingText: [
-      "The diagram highlights how self-attention layers replace recurrence for sequence modelling.",
-    ],
-    highlightRegion: {
-      x: 0.08,
-      y: 0.18,
-      width: 0.84,
-      height: 0.58,
-    },
-  },
-  {
-    id: "fig-attention",
-    label: "Figure 2",
-    caption:
-      "Scaled dot-product attention pipeline comparing single-head computations against the richer representations of multi-head attention.",
-    pageNumber: 5,
-    referencedSections: ["S2"],
-    supportingText: [
-      "This figure is cited when explaining how projecting queries, keys, and values enables parallel attention heads.",
-    ],
-    highlightRegion: {
-      x: 0.1,
-      y: 0.2,
-      width: 0.8,
-      height: 0.52,
-    },
-  },
-  {
-    id: "fig-results",
-    label: "Figure 3",
-    caption:
-      "BLEU score improvements on WMT translation benchmarks demonstrating the Transformer’s gains over recurrent and convolutional baselines.",
-    pageNumber: 8,
-    referencedSections: ["S3"],
-    supportingText: [
-      "Used in the results section to show the gap versus GNMT and ConvS2S across English↔German pairs.",
-    ],
-    highlightRegion: {
-      x: 0.12,
-      y: 0.22,
-      width: 0.76,
-      height: 0.5,
-    },
-  },
-];
-
 export interface ReaderWorkspaceProps {
   paperId?: string;
   pdfUrl?: string;
@@ -142,15 +132,103 @@ const ReaderWorkspace = ({
   pdfUrl,
 }: ReaderWorkspaceProps) => {
   const resolvedPaperId = paperId && paperId.trim() ? paperId : DEFAULT_PAPER_ID;
-  const resolvedPdfUrl = pdfUrl ?? DEFAULT_PDF_URL;
+  const fallbackPdfUrl = inferArxivPdfUrl(resolvedPaperId);
+  const resolvedPdfUrl = pdfUrl ?? fallbackPdfUrl ?? DEFAULT_PDF_URL;
 
   const viewerRef = useRef<PdfViewerHandle>(null);
+  const [summary, setSummary] = useState<SummaryResult | null>(null);
+  const [isSummaryLoading, setIsSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
   const [mobilePane, setMobilePane] = useState<MobilePane>("summary");
   const [chatDraft, setChatDraft] = useState("");
   const [selection, setSelection] = useState<QuestionSelection | undefined>();
   const [personaEnabled, setPersonaEnabled] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isPdfOpen, setIsPdfOpen] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    const controller = new AbortController();
+
+    const loadSummary = async () => {
+      try {
+        const response = await fetch("/api/summarize", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ paperId: resolvedPaperId }),
+          signal: controller.signal,
+        });
+
+        const payload = (await response.json().catch(() => null)) as
+          | SummaryResult
+          | { error?: string }
+          | null;
+
+        if (!response.ok) {
+          const message =
+            payload &&
+            typeof payload === "object" &&
+            payload !== null &&
+            "error" in payload &&
+            typeof payload.error === "string"
+              ? payload.error
+              : `Summary request failed with status ${response.status}.`;
+          throw new Error(message);
+        }
+
+        if (!isSummaryResult(payload)) {
+          throw new Error("Summary response was malformed.");
+        }
+
+        if (isMounted) {
+          setSummary(payload);
+        }
+      } catch (caught) {
+        if (!isMounted || controller.signal.aborted) {
+          return;
+        }
+
+        const message =
+          caught instanceof Error
+            ? caught.message
+            : "Failed to load summary for this paper.";
+        setSummaryError(message);
+        setSummary(null);
+      } finally {
+        if (isMounted) {
+          setIsSummaryLoading(false);
+        }
+      }
+    };
+
+    setSummary(null);
+    setSummaryError(null);
+    setIsSummaryLoading(true);
+    void loadSummary();
+
+    return () => {
+      isMounted = false;
+      controller.abort();
+    };
+  }, [resolvedPaperId]);
+
+  useEffect(() => {
+    if (!summary) {
+      return;
+    }
+    setStatusMessage((previous) =>
+      previous ?? "Summary refreshed from the latest ingest.",
+    );
+  }, [summary]);
+
+  useEffect(() => {
+    if (!summaryError) {
+      return;
+    }
+    setStatusMessage((previous) => previous ?? summaryError);
+  }, [summaryError]);
 
   const handlePageJump = useCallback(
     (
@@ -231,7 +309,30 @@ const ReaderWorkspace = ({
     }
   }, []);
 
-  const figureCallouts = demoFigureCallouts;
+  const figureCallouts = useMemo<FigureCallout[]>(() => {
+    if (!summary?.figures?.length) {
+      return [];
+    }
+
+    return summary.figures.map((figure) => {
+      const pageNumber = extractPageNumber(figure.page_anchor);
+      const caption =
+        figure.caption?.trim() ||
+        figure.insight?.trim() ||
+        "Figure insight unavailable.";
+      const supporting = figure.insight?.trim()
+        ? [figure.insight.trim()]
+        : undefined;
+
+      return {
+        id: figure.figure_id,
+        label: figure.figure_id,
+        caption,
+        pageNumber,
+        supportingText: supporting,
+      };
+    });
+  }, [summary]);
 
   const handleFigureNavigation = useCallback(
     (figure: FigureCallout) => {
@@ -250,67 +351,129 @@ const ReaderWorkspace = ({
     [handlePageJump],
   );
 
-  const summaryNotes: SummaryNote[] = [
-    {
-      title: "Quick takeaway",
-      body: (
-        <p>
-          Translation is reframed as pure attention: the Transformer stacks
-          multi-head self-attention with feed-forward blocks to parallelize
-          sequence modeling while retaining relational context{" "}
-          <PageReference page={1} onJump={handlePageJump} />.
-        </p>
-      ),
-    },
-    {
-      title: "Model recipe",
-      body: (
-        <ul>
-          <li>
-            Positional encodings inject order so attention layers reason about
-            token positions without recurrence{" "}
-            <PageReference page={4} onJump={handlePageJump} />.
-          </li>
-          <li>
-            Multi-head attention surfaces complementary relations that are
-            combined via learned projections{" "}
-            <PageReference page={5} onJump={handlePageJump} />.
-          </li>
-          <li>
-            Residual paths + layer norm stabilize the deep stack across encoder
-            and decoder blocks{" "}
-            <PageReference page={6} onJump={handlePageJump} />.
-          </li>
-        </ul>
-      ),
-    },
-    {
-      title: "Reading plan",
-      body: (
-        <div className="space-y-3">
-          <p>
-            Start with the encoder sketch to ground the attention math, then
-            jump into the training section to see how the model beats recurrent
-            baselines on WMT benchmarks.
+  const summaryNotes = useMemo<SummaryNote[]>(() => {
+    if (summary) {
+      const notes: SummaryNote[] = [];
+
+      if (summary.key_findings?.length) {
+        notes.push({
+          title: "Key findings",
+          body: (
+            <ul className="space-y-3">
+              {summary.key_findings.map((finding, index) => {
+                const evidencePage = extractPageNumber(
+                  finding.page_anchors?.[0],
+                );
+
+                return (
+                  <li key={`finding-${index}`} className="space-y-2">
+                    <p className="font-medium text-zinc-700">
+                      {finding.statement}
+                    </p>
+                    <p className="text-sm leading-relaxed text-zinc-600">
+                      {finding.evidence}
+                    </p>
+                    <div className="flex flex-wrap gap-3 text-xs text-zinc-500">
+                      {evidencePage ? (
+                        <span className="inline-flex items-center gap-1">
+                          Evidence <PageReference page={evidencePage} onJump={handlePageJump} />
+                        </span>
+                      ) : null}
+                      {finding.supporting_sections?.length ? (
+                        <span>
+                          Sections: {finding.supporting_sections.join(", ")}
+                        </span>
+                      ) : null}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          ),
+        });
+      }
+
+      summary.sections.forEach((section, index) => {
+        const anchorPage =
+          extractPageNumber(section.page_anchor) ??
+          section.page_span?.start ??
+          section.page_span?.end;
+
+        notes.push({
+          title: section.title || `Section ${index + 1}`,
+          body: (
+            <div className="space-y-3">
+              <p className="text-sm leading-relaxed text-zinc-700">
+                {section.summary}
+              </p>
+              {section.reasoning ? (
+                <p className="text-sm leading-relaxed text-zinc-500">
+                  {section.reasoning}
+                </p>
+              ) : null}
+              {section.key_points?.length ? (
+                <ul className="space-y-2 text-sm leading-relaxed text-zinc-700">
+                  {section.key_points.map((point, pointIndex) => (
+                    <li key={`${section.section_id ?? index}-point-${pointIndex}`}>
+                      {point}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {anchorPage ? (
+                <div className="text-xs text-zinc-500">
+                  <PageReference page={anchorPage} onJump={handlePageJump} />
+                </div>
+              ) : null}
+            </div>
+          ),
+        });
+      });
+
+      if (notes.length) {
+        return notes;
+      }
+    }
+
+    if (isSummaryLoading) {
+      return [
+        {
+          title: "Generating summary",
+          body: (
+            <p className="text-sm leading-relaxed text-zinc-600">
+              Building a personalized summary for{" "}
+              <span className="font-medium">{resolvedPaperId}</span>…
+            </p>
+          ),
+        },
+      ];
+    }
+
+    if (summaryError) {
+      return [
+        {
+          title: "Summary unavailable",
+          body: (
+            <p className="text-sm leading-relaxed text-red-600">
+              {summaryError}
+            </p>
+          ),
+        },
+      ];
+    }
+
+    return [
+      {
+        title: "Summary pending",
+        body: (
+          <p className="text-sm leading-relaxed text-zinc-600">
+            Waiting for the paper summary pipeline to finish processing. This
+            usually takes a few moments after ingest completes.
           </p>
-          <ul>
-            <li>
-              Encode pass: multi-head, add&amp;norm details{" "}
-              <PageReference page={3} onJump={handlePageJump} />.
-            </li>
-            <li>
-              Training loop + label smoothing{" "}
-              <PageReference page={7} onJump={handlePageJump} />.
-            </li>
-            <li>
-              Results table vs GNMT and ConvS2S{" "}
-              <PageReference page={8} onJump={handlePageJump} />.
-            </li>
-          </ul>
-        </div>
-      ),
-    },
-  ];
+        ),
+      },
+    ];
+  }, [summary, isSummaryLoading, summaryError, handlePageJump, resolvedPaperId]);
 
   const handlePdfSelection = useCallback(
     (action: "Explain" | "Ask", highlight: IHighlight) => {

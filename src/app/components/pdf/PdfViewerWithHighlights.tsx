@@ -27,9 +27,12 @@ import clsx from "clsx";
 
 const PDFJS_WORKER_URL =
   "https://unpkg.com/pdfjs-dist@5.4.296/build/pdf.worker.min.js";
+const PDFJS_STANDARD_FONT_URL =
+  "https://unpkg.com/pdfjs-dist@5.4.296/standard_fonts/";
 
 if (typeof window !== "undefined") {
   pdfjs.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL;
+  pdfjs.GlobalWorkerOptions.standardFontDataUrl = PDFJS_STANDARD_FONT_URL;
 }
 
 type SelectionAction = "Explain" | "Ask";

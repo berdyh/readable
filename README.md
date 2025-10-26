@@ -1,58 +1,83 @@
-Readable is a Next.js application that personalizes research paper summaries and tutoring. It now integrates a managed Weaviate instance for hybrid retrieval over paper chunks, figures, citations, and persona concepts.
+# Readable
 
-## Getting Started
+Readable is a Next.js application that ingests arXiv papers, builds a retrieval graph in Weaviate, and serves persona-aware summaries plus question answering. The system can enrich responses with persona context fetched from Kontext.dev while keeping raw mailbox data out of the runtime.
 
-First, install dependencies and run the development server with [pnpm](https://pnpm.io):
+## Prerequisites
+
+- Node.js 18.18+ (Next.js 16 requirement)
+- [pnpm](https://pnpm.io) 9.x (the repository is configured with `packageManager: pnpm@9.12.0`)
+- Access to:
+  - OpenAI API (summaries, Q&A)
+  - Weaviate instance (paper/figure/reference store + persona graph)
+  - Kontext.dev API (optional persona enrichment)
+  - arXiv and Semantic Scholar APIs for metadata
+
+## Setup
+
+1. Install dependencies:
+   ```bash
+   pnpm install
+   ```
+2. Create a local environment file:
+   ```bash
+   cp .env.local.example .env.local
+   ```
+3. Populate `.env.local`:
+   - **Required**
+     - `OPENAI_API_KEY`
+     - `WEAVIATE_URL` (e.g. `https://cluster.weaviate.network`)
+     - `WEAVIATE_API_KEY`
+     - `SEMANTIC_SCHOLAR_KEY`
+   - **Recommended**
+     - `KONTEXT_API_KEY` and `KONTEXT_API_URL` for persona-aware prompts
+     - `POSTHOG_KEY` for analytics
+   - **Model + pipeline switches**
+     - `OPENAI_SUMMARY_MODEL` (defaults to `gpt-4o-mini`)
+     - `ENABLE_OCR_FALLBACK`, `DEEPSEEK_OCR_URL`, `GROBID_URL` to tune the ingestion pipeline
+     - `ARXIV_API_BASE_URL`, `AR5IV_BASE_URL`, and `ARXIV_CONTACT_EMAIL` to match your arXiv integration policy
+     - Timeouts such as `INGEST_*_TIMEOUT_MS` for long-running PDF work
+
+Environment values can point to managed services or local Docker containers. The repo ships a certificate authority placeholder at `certs/kontext-ca.crt` for contexts where Kontext requires a custom CA chain (`NODE_EXTRA_CA_CERTS`).
+
+## Run the app
+
+Start the development server:
 
 ```bash
-pnpm install
 pnpm dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Navigate to [http://localhost:3000](http://localhost:3000). The UI walks through ingesting a paper by arXiv ID, generating a reasoning-first summary, and asking follow-up questions.
 
-You can start editing the page by modifying `src/app/page.tsx`. The page auto-updates as you edit the file.
+Useful scripts:
 
-Once your environment variables are in place (see below), you can validate the Weaviate connection and schema with:
+- `pnpm build` -> production bundle
+- `pnpm start` -> serve the built app
+- `pnpm lint` / `pnpm lint:fix` -> ESLint
+- `pnpm test` -> Vitest suite
+- `pnpm test:weaviate` -> smoke test that the configured Weaviate cluster is reachable, initialized, and able to perform hybrid search
 
-```bash
-pnpm test:weaviate
-```
+## Data flow overview
 
-This script checks liveness/ready status, ensures the hybrid schema, and runs a smoke hybrid query.
+1. **Ingest** - fetch arXiv metadata, prefer ar5iv HTML, fall back to PDF (PDF.js or OCR via DeepSeek) and GROBID. Parsed sections, figures, and references land in Weaviate.
+2. **Summaries** - load persona context (`systemPrompt`) from Kontext or the persona graph, gather relevant paper sections, and prompt OpenAI for structured JSON.
+3. **Q&A** - perform hybrid retrieval in Weaviate constrained to the selected paper, combine chunks/figures/citations, and answer with grounded citations.
 
-## Environment variables
+See `API.md` for JSON contracts if you are integrating with the backend programmatically.
 
-Copy `.env.local.example` to `.env.local` and fill in the values before running the app:
+## Working with personas & models
 
-```bash
-cp .env.local.example .env.local
-```
+- Personas are stored in Weaviate as the primary source of truth. Kontext is queried per request when an external account is linked, and only a derived system prompt is retained.
+- To switch LLMs, set `OPENAI_SUMMARY_MODEL` (and matching settings in `src/server/summarize/openai.ts` if custom parameters are needed).
+- For self-hosted or Azure OpenAI deployments, configure `OPENAI_API_BASE_URL`, `OPENAI_ORGANIZATION`, and `OPENAI_PROJECT`.
 
-At minimum you should provide values for:
+## External services & policies
 
-- `OPENAI_API_KEY`
-- `WEAVIATE_URL`
-- `WEAVIATE_API_KEY`
-- `POSTHOG_KEY`
-- `KONTEXT_API_KEY`
-- `SEMANTIC_SCHOLAR_KEY`
+Readable pulls metadata and PDFs from arXiv. Make sure your deployment complies with the [arXiv API access guidelines](https://info.arxiv.org/help/api/index.html) and sets an identifying `ARXIV_CONTACT_EMAIL`. The ingestion pipeline may download PDFs directly from arXiv mirrors; review their terms before production use.
 
-Additional variables:
+Kontext API usage follows their [Get Context](https://docs.kontext.dev/api-reference/get-context) contract. Persona data remains in your Weaviate cluster; no raw emails or documents leave Kontext.
 
-- `WEAVIATE_TIMEOUT_MS` (optional) — override the default 20s health-check timeout for managed clusters.
+## Next steps
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Review `PRIVACY.md` for data-handling notes.
+- Check `TASKS.md` for outstanding operational to-dos tied to the project plan.

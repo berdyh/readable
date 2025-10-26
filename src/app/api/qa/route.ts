@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { answerPaperQuestion } from '@/server/qa';
 import type { QuestionSelection } from '@/server/qa/types';
+import { parseQuestionSelection } from '@/server/qa/selection';
 
 interface QaRequestPayload {
   paperId: string;
@@ -9,45 +10,6 @@ interface QaRequestPayload {
   userId?: string;
   personaId?: string;
   selection?: QuestionSelection;
-}
-
-function parseSelection(value: unknown): QuestionSelection | undefined {
-  if (!value || typeof value !== 'object') {
-    return undefined;
-  }
-
-  const record = value as Record<string, unknown>;
-  const selection: QuestionSelection = {};
-
-  if (typeof record.text === 'string') {
-    const trimmed = record.text.trim();
-    if (trimmed) {
-      selection.text = trimmed;
-    }
-  }
-
-  if (typeof record.section === 'string') {
-    const trimmed = record.section.trim();
-    if (trimmed) {
-      selection.section = trimmed;
-    }
-  }
-
-  const pageRaw = record.page;
-  if (typeof pageRaw === 'number' && Number.isFinite(pageRaw)) {
-    selection.page = pageRaw;
-  } else if (typeof pageRaw === 'string') {
-    const parsed = Number(pageRaw);
-    if (Number.isFinite(parsed)) {
-      selection.page = parsed;
-    }
-  }
-
-  if (!selection.text && !selection.section && selection.page === undefined) {
-    return undefined;
-  }
-
-  return selection;
 }
 
 function parseRequestPayload(data: unknown): QaRequestPayload {
@@ -80,7 +42,7 @@ function parseRequestPayload(data: unknown): QaRequestPayload {
     result.personaId = payload.personaId.trim();
   }
 
-  const selection = parseSelection(payload.selection);
+  const selection = parseQuestionSelection(payload.selection);
   if (selection) {
     result.selection = selection;
   }

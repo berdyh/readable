@@ -10,43 +10,34 @@ import Suggestion, {
   type SuggestionKeyDownProps,
   type SuggestionProps,
 } from "@tiptap/suggestion";
-import type { Editor } from "@tiptap/react";
 import { ReactRenderer } from "@tiptap/react";
 import { Extension } from "@tiptap/core";
 import tippy, { type Instance, type Props as TippyProps } from "tippy.js";
 import { clsx } from "clsx";
 import {
   CircleDashed,
-  Code,
-  Heading1,
-  Heading2,
-  Heading3,
-  List,
-  ListOrdered,
-  Minus,
+  FileText,
+  Globe,
+  Image,
+  Layers,
   Quote,
-  Type,
+  Sparkles,
   type LucideIcon,
 } from "lucide-react";
 
 import type { SlashCommandItem } from "./commands";
 
 const ICONS: Record<string, LucideIcon> = {
-  Type,
-  Heading1,
-  Heading2,
-  Heading3,
-  List,
-  ListOrdered,
+  Sparkles,
+  Layers,
+  Image,
   Quote,
-  Code,
-  Minus,
+  FileText,
+  Globe,
 };
 
 interface SlashCommandListProps {
   items: SlashCommandItem[];
-  editor: Editor;
-  range: { from: number; to: number };
   command: (item: SlashCommandItem) => void;
 }
 
@@ -109,7 +100,7 @@ const SlashCommandList = forwardRef<
   if (!items.length) {
     return (
       <div className="min-w-[240px] rounded-lg border border-neutral-200 bg-white p-3 text-sm text-neutral-500 shadow-lg dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400">
-        No matches. Try searching for “heading” or “list”.
+        No matches. Try searching for “summary” or “pdf”.
       </div>
     );
   }
@@ -117,7 +108,7 @@ const SlashCommandList = forwardRef<
   return (
     <div className="min-w-[260px] max-w-[320px] rounded-xl border border-neutral-200 bg-white p-2 shadow-xl ring-1 ring-neutral-950/5 dark:border-neutral-700 dark:bg-neutral-900 dark:ring-white/10">
       <div className="px-2 pb-2 text-xs font-semibold uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
-        Insert block
+        Notebook commands
       </div>
       <ul className="flex flex-col gap-1">
         {items.map((item, index) => {
@@ -159,7 +150,8 @@ const SlashCommandList = forwardRef<
 SlashCommandList.displayName = "SlashCommandList";
 
 export interface SlashCommandOptions {
-  items: SlashCommandItem[];
+  items?: SlashCommandItem[];
+  getItems?: () => SlashCommandItem[];
 }
 
 export const SlashCommandExtension = Extension.create<SlashCommandOptions>({
@@ -168,13 +160,13 @@ export const SlashCommandExtension = Extension.create<SlashCommandOptions>({
   addOptions() {
     return {
       items: [],
+      getItems: undefined,
     };
   },
 
   addProseMirrorPlugins() {
     return [
       Suggestion({
-        editor: this.editor,
         char: "/",
         startOfLine: true,
         allow: ({ state, range }) => {
@@ -183,9 +175,14 @@ export const SlashCommandExtension = Extension.create<SlashCommandOptions>({
           return parentNode.type.name === "paragraph";
         },
         items: ({ query }) => {
-          return this.options.items
-            .filter((item) =>
-              item.title.toLowerCase().includes(query.toLowerCase()),
+          const needle = query.toLowerCase();
+          const available =
+            this.options.getItems?.() ?? this.options.items ?? [];
+          return available
+            .filter(
+              (item) =>
+                item.title.toLowerCase().includes(needle) ||
+                item.id.toLowerCase().startsWith(needle),
             )
             .slice(0, 8);
         },
@@ -198,11 +195,8 @@ export const SlashCommandExtension = Extension.create<SlashCommandOptions>({
           return {
             onStart: (props: SuggestionProps<SlashCommandItem>) => {
               component = new ReactRenderer(SlashCommandList, {
-                editor: props.editor,
                 props: {
                   items: props.items,
-                  editor: props.editor,
-                  range: props.range,
                   command: (item) => {
                     props.command(item);
                   },
@@ -225,8 +219,6 @@ export const SlashCommandExtension = Extension.create<SlashCommandOptions>({
             onUpdate: (props: SuggestionProps<SlashCommandItem>) => {
               component?.updateProps({
                 items: props.items,
-                editor: props.editor,
-                range: props.range,
                 command: (item) => props.command(item),
               });
 
@@ -257,7 +249,7 @@ export const SlashCommandExtension = Extension.create<SlashCommandOptions>({
             .deleteRange(range)
             .run();
 
-          props.item.command(editor);
+          props.item.run();
         },
       }),
     ];

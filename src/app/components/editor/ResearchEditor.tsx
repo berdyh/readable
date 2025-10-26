@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -22,38 +21,39 @@ import { clsx } from "clsx";
 import {
   FileText,
   Flame,
+  Globe,
+  Image,
+  Layers,
+  Loader2,
   MessageSquare,
   MoonStar,
+  Quote,
   Sparkles,
   SunMedium,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 
-import { EditorToolbar } from "./EditorToolbar";
 import { SlashCommandExtension } from "./SlashCommand";
-import { SLASH_COMMAND_ITEMS } from "./commands";
-import {
-  emitEditorIntent,
-  type EditorIntentAction,
-} from "./intents";
+import { buildSlashCommandItems, type SlashCommandItem } from "./commands";
+import { useResearchCommands } from "./useResearchCommands";
 import SummaryPanel, {
   type SummaryNote,
 } from "../summary/SummaryPanel";
 
 interface ResearchEditorProps {
+  paperId: string;
   summaryHeading?: string;
   summaryDescription?: string;
   summaryNotes?: SummaryNote[];
   onSummarySelection?: (payload: { text: string; section?: string }) => void;
   onOpenChat?: () => void;
-  onOpenPdf?: () => void;
   statusMessage?: string | null;
   onStatusClear?: () => void;
 }
 
 const INITIAL_CONTENT = `
 <h1>Designing persona-aware reading experiences</h1>
-<p>Use this canvas to capture insights that should flow into summaries, Q&amp;A prompts, or persona tailoring. The toolbar and slash menu expose the same primitives as our AI orchestration layer.</p>
+<p>Use this canvas to capture insights that flow into summaries, deeper dives, or citations. Highlight any passage to reveal inline tools, or press / to insert blocks.</p>
 <ul>
   <li><strong>Summaries</strong> – jot down narrative arcs, evidence anchors, and page references.</li>
   <li><strong>Q&amp;A</strong> – draft clarifying questions and expected citations.</li>
@@ -65,19 +65,18 @@ const INITIAL_CONTENT = `
 const CHARACTER_LIMIT = 8000;
 
 export function ResearchEditor({
+  paperId,
   summaryHeading = "Summary at a glance",
   summaryDescription,
   summaryNotes,
   onSummarySelection,
   onOpenChat,
-  onOpenPdf,
   statusMessage,
   onStatusClear,
 }: ResearchEditorProps) {
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
-
-  const slashCommandItems = useMemo(() => SLASH_COMMAND_ITEMS, []);
+  const [slashItems, setSlashItems] = useState<SlashCommandItem[]>([]);
 
   const editor = useEditor({
     extensions: [
@@ -115,7 +114,7 @@ export function ResearchEditor({
         },
       }),
       SlashCommandExtension.configure({
-        items: slashCommandItems,
+        getItems: () => slashItems,
       }),
     ],
     editorProps: {
@@ -125,6 +124,28 @@ export function ResearchEditor({
     },
     content: INITIAL_CONTENT,
   });
+
+  const commands = useResearchCommands({
+    editor,
+    paperId,
+  });
+
+  useEffect(() => {
+    setSlashItems(buildSlashCommandItems(commands));
+  }, [commands]);
+
+  const {
+    summarizeSelection,
+    expandCallout,
+    insertFigures,
+    insertCitations,
+    insertArxiv,
+    insertPdf,
+    status: commandStatus,
+    error: commandError,
+    isRunning: commandRunning,
+    clearStatus: clearCommandStatus,
+  } = commands;
 
   useEffect(() => {
     const id = window.requestAnimationFrame(() => {
@@ -142,21 +163,6 @@ export function ResearchEditor({
     ) ?? "";
   const trimmedSelection = selectionText.trim();
 
-  const sendIntent = useCallback(
-    (action: EditorIntentAction, text: string, origin?: string) => {
-      const normalized = text.trim();
-      if (!normalized) {
-        return;
-      }
-      emitEditorIntent({
-        action,
-        text: normalized,
-        origin: origin ?? "research-editor",
-      });
-    },
-    [],
-  );
-
   const actionButtons = useMemo(
     () =>
       [
@@ -167,19 +173,26 @@ export function ResearchEditor({
               onClick: onOpenChat,
             }
           : null,
-        onOpenPdf
-          ? {
-              label: "Open PDF",
-              icon: FileText,
-              onClick: onOpenPdf,
-            }
-          : null,
+        {
+          label: "Insert arXiv",
+          icon: Globe,
+          onClick: () => {
+            void insertArxiv();
+          },
+        },
+        {
+          label: "Insert PDF",
+          icon: FileText,
+          onClick: () => {
+            void insertPdf();
+          },
+        },
       ].filter(Boolean) as Array<{
         label: string;
         icon: ComponentType<{ className?: string }>;
         onClick: () => void;
       }>,
-    [onOpenChat, onOpenPdf],
+    [insertArxiv, insertPdf, onOpenChat],
   );
 
   if (!mounted) {
@@ -224,33 +237,85 @@ export function ResearchEditor({
             Capture snippets before promoting to summary, Q&amp;A, or persona
             updates.
           </span>
-          {statusMessage ? (
-            <div
-              className={clsx(
-                "inline-flex items-center gap-3 rounded-md border px-3 py-1 text-[11px] font-medium",
-                isDarkMode
-                  ? "border-blue-700/60 bg-blue-900/40 text-blue-200"
-                  : "border-blue-200 bg-blue-50 text-blue-600",
-              )}
-            >
-              <span className="uppercase tracking-wide">Update</span>
-              <span className="line-clamp-2 max-w-[320px] text-left">
-                {statusMessage}
-              </span>
-              {onStatusClear ? (
+          <div className="flex flex-col gap-2">
+            {commandStatus ? (
+              <div
+                className={clsx(
+                  "inline-flex items-center gap-3 rounded-md border px-3 py-1 text-[11px] font-medium",
+                  isDarkMode
+                    ? "border-purple-600/60 bg-purple-900/40 text-purple-100"
+                    : "border-purple-200 bg-purple-50 text-purple-700",
+                )}
+              >
+                <span className="uppercase tracking-wide">Notebook</span>
+                <span className="line-clamp-2 max-w-[320px] text-left">
+                  {commandStatus}
+                </span>
                 <button
                   type="button"
-                  onClick={onStatusClear}
+                  onClick={clearCommandStatus}
                   className={clsx(
                     "text-[10px] uppercase",
-                    isDarkMode ? "text-blue-300" : "text-blue-500",
+                    isDarkMode ? "text-purple-200" : "text-purple-600",
                   )}
                 >
                   Dismiss
                 </button>
-              ) : null}
-            </div>
-          ) : null}
+              </div>
+            ) : null}
+            {commandError ? (
+              <div
+                className={clsx(
+                  "inline-flex items-center gap-3 rounded-md border px-3 py-1 text-[11px] font-medium",
+                  isDarkMode
+                    ? "border-red-600/50 bg-red-900/40 text-red-200"
+                    : "border-red-200 bg-red-50 text-red-600",
+                )}
+              >
+                <span className="uppercase tracking-wide">Error</span>
+                <span className="line-clamp-2 max-w-[320px] text-left">
+                  {commandError}
+                </span>
+                <button
+                  type="button"
+                  onClick={clearCommandStatus}
+                  className={clsx(
+                    "text-[10px] uppercase",
+                    isDarkMode ? "text-red-200" : "text-red-600",
+                  )}
+                >
+                  Dismiss
+                </button>
+              </div>
+            ) : null}
+            {statusMessage ? (
+              <div
+                className={clsx(
+                  "inline-flex items-center gap-3 rounded-md border px-3 py-1 text-[11px] font-medium",
+                  isDarkMode
+                    ? "border-blue-700/60 bg-blue-900/40 text-blue-200"
+                    : "border-blue-200 bg-blue-50 text-blue-600",
+                )}
+              >
+                <span className="uppercase tracking-wide">Update</span>
+                <span className="line-clamp-2 max-w-[320px] text-left">
+                  {statusMessage}
+                </span>
+                {onStatusClear ? (
+                  <button
+                    type="button"
+                    onClick={onStatusClear}
+                    className={clsx(
+                      "text-[10px] uppercase",
+                      isDarkMode ? "text-blue-300" : "text-blue-500",
+                    )}
+                  >
+                    Dismiss
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
         </div>
         <div className="flex items-center gap-3">
           {actionButtons.length ? (
@@ -280,10 +345,6 @@ export function ResearchEditor({
               ))}
             </div>
           ) : null}
-          <EditorToolbar
-            editor={editor}
-            theme={isDarkMode ? "dark" : "light"}
-          />
           <button
             type="button"
             onClick={toggleTheme}
@@ -340,110 +401,64 @@ export function ResearchEditor({
               placement: "top",
             }}
             className={clsx(
-              "flex items-center gap-1 rounded-xl border px-2 py-1 shadow-lg",
+              "flex items-center gap-2 rounded-2xl border px-3 py-2 shadow-lg",
               isDarkMode
                 ? "border-neutral-700 bg-neutral-900"
                 : "border-neutral-200 bg-white",
             )}
           >
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => editor.chain().focus().toggleBold().run()}
-                className={clsx(
-                  "h-7 w-7 rounded-md text-xs font-semibold transition",
-                  editor.isActive("bold")
-                    ? "bg-blue-600 text-white"
-                    : isDarkMode
-                    ? "text-neutral-200 hover:bg-neutral-800"
-                    : "text-neutral-600 hover:bg-neutral-100",
-                )}
-              >
-                B
-              </button>
-              <button
-                type="button"
-                onClick={() => editor.chain().focus().toggleItalic().run()}
-                className={clsx(
-                  "h-7 w-7 rounded-md text-xs font-semibold italic transition",
-                  editor.isActive("italic")
-                    ? "bg-blue-600 text-white"
-                    : isDarkMode
-                    ? "text-neutral-200 hover:bg-neutral-800"
-                    : "text-neutral-600 hover:bg-neutral-100",
-                )}
-              >
-                I
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  editor
-                    .chain()
-                    .focus()
-                    .toggleHighlight({ color: "#fde68a" })
-                    .run()
-                }
-                className={clsx(
-                  "h-7 w-7 rounded-md text-xs font-semibold transition",
-                  editor.isActive("highlight", { color: "#fde68a" })
-                    ? "bg-amber-400 text-neutral-900"
-                    : isDarkMode
-                    ? "text-neutral-200 hover:bg-neutral-800"
-                    : "text-neutral-600 hover:bg-neutral-100",
-                )}
-              >
-                ✦
-              </button>
-            </div>
-
-            <span
-              className={clsx(
-                "mx-1 h-5 w-px",
-                isDarkMode ? "bg-neutral-800" : "bg-neutral-200",
-              )}
-            />
-
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                disabled={!trimmedSelection}
-                onClick={() =>
-                  sendIntent("go-deeper", trimmedSelection, "research-editor")
-                }
-                title="Ask for deeper explanation"
-                className={clsx(
-                  "flex h-7 items-center justify-center rounded-md px-2 text-xs font-medium transition",
-                  trimmedSelection
-                    ? isDarkMode
-                      ? "bg-blue-500/20 text-blue-200 hover:bg-blue-500/30"
-                      : "bg-blue-100 text-blue-700 hover:bg-blue-200"
-                    : "cursor-not-allowed opacity-40",
-                )}
-              >
-                <MessageSquare className="mr-1 h-3.5 w-3.5" />
-                Deepen
-              </button>
-              <button
-                type="button"
-                disabled={!trimmedSelection}
-                onClick={() =>
-                  sendIntent("condense", trimmedSelection, "research-editor")
-                }
-                title="Summarize more concisely"
-                className={clsx(
-                  "flex h-7 items-center justify-center rounded-md px-2 text-xs font-medium transition",
-                  trimmedSelection
-                    ? isDarkMode
-                      ? "bg-purple-500/20 text-purple-200 hover:bg-purple-500/30"
-                      : "bg-purple-100 text-purple-700 hover:bg-purple-200"
-                    : "cursor-not-allowed opacity-40",
-                )}
-              >
-                <Sparkles className="mr-1 h-3.5 w-3.5" />
-                Condense
-              </button>
-            </div>
+            {[
+              {
+                label: "Quick Summary",
+                icon: Sparkles,
+                onClick: () => void summarizeSelection(),
+                requiresSelection: true,
+              },
+              {
+                label: "Deeper Dive",
+                icon: Layers,
+                onClick: () => expandCallout(),
+                requiresSelection: false,
+              },
+              {
+                label: "Fetch Figures",
+                icon: Image,
+                onClick: () => void insertFigures(),
+                requiresSelection: true,
+              },
+              {
+                label: "Cite",
+                icon: Quote,
+                onClick: () => void insertCitations(),
+                requiresSelection: true,
+              },
+            ].map(({ label, icon: Icon, onClick, requiresSelection }) => {
+              const disabled =
+                commandRunning || (requiresSelection && !trimmedSelection);
+              return (
+                <button
+                  key={label}
+                  type="button"
+                  disabled={disabled}
+                  onClick={onClick}
+                  className={clsx(
+                    "inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition",
+                    !disabled
+                      ? isDarkMode
+                        ? "bg-neutral-800 text-neutral-50 hover:bg-neutral-700"
+                        : "bg-neutral-100 text-neutral-800 hover:bg-neutral-200"
+                      : "cursor-not-allowed opacity-40",
+                  )}
+                >
+                  {commandRunning ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Icon className="h-3 w-3" />
+                  )}
+                  {label}
+                </button>
+              );
+            })}
           </BubbleMenu>
         )}
 

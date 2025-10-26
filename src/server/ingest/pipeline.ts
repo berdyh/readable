@@ -553,9 +553,17 @@ export async function ingestPaper(
     throw new Error(`Unable to fetch arXiv metadata for ${arxivId}.`);
   }
 
+  const ar5ivImageBase = (() => {
+    try {
+      return new URL(environment.ar5ivBaseUrl).origin;
+    } catch {
+      return undefined;
+    }
+  })();
+
   const htmlResult =
     htmlPayload && htmlPayload.length > 0
-      ? parseAr5ivHtml(htmlPayload)
+      ? parseAr5ivHtml(htmlPayload, { imageBaseUrl: ar5ivImageBase })
       : undefined;
 
   let teiResult: ParsedTeiResult | undefined;

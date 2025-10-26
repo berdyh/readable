@@ -1,83 +1,68 @@
-import type { Editor } from "@tiptap/react";
+import type { ResearchEditorCommands } from "./useResearchCommands";
 
 export interface SlashCommandItem {
+  id: string;
   title: string;
   description: string;
   icon: string;
-  command: (editor: Editor) => void;
+  run: () => void;
 }
 
-export const SLASH_COMMAND_ITEMS: SlashCommandItem[] = [
-  {
-    title: "Text",
-    description: "Start with a plain paragraph block.",
-    icon: "Type",
-    command: (editor) => {
-      editor.chain().focus().setParagraph().run();
+export function buildSlashCommandItems(
+  actions: ResearchEditorCommands,
+): SlashCommandItem[] {
+  return [
+    {
+      id: "summary",
+      title: "Summary",
+      description: "Insert a quick callout for the highlighted passage.",
+      icon: "Sparkles",
+      run: () => {
+        void actions.summarizeSelection();
+      },
     },
-  },
-  {
-    title: "Heading 1",
-    description: "Introduce a major section.",
-    icon: "Heading1",
-    command: (editor) => {
-      editor.chain().focus().toggleHeading({ level: 1 }).run();
+    {
+      id: "deeper",
+      title: "Deeper dive",
+      description: "Expand the most recent callout’s hidden context.",
+      icon: "Layers",
+      run: actions.expandCallout,
     },
-  },
-  {
-    title: "Heading 2",
-    description: "Use for key subsections.",
-    icon: "Heading2",
-    command: (editor) => {
-      editor.chain().focus().toggleHeading({ level: 2 }).run();
+    {
+      id: "figures",
+      title: "Figures",
+      description: "Fetch nearby figures and drop them inline.",
+      icon: "Image",
+      run: () => {
+        void actions.insertFigures();
+      },
     },
-  },
-  {
-    title: "Heading 3",
-    description: "Break down details under a section.",
-    icon: "Heading3",
-    command: (editor) => {
-      editor.chain().focus().toggleHeading({ level: 3 }).run();
+    {
+      id: "cite",
+      title: "Citations",
+      description: "Insert the citations referenced by this snippet.",
+      icon: "Quote",
+      run: () => {
+        void actions.insertCitations();
+      },
     },
-  },
-  {
-    title: "Bullet List",
-    description: "Present unordered ideas.",
-    icon: "List",
-    command: (editor) => {
-      editor.chain().focus().toggleBulletList().run();
+    {
+      id: "insert-pdf",
+      title: "Insert PDF",
+      description: "Import pages and figures from a PDF URL.",
+      icon: "FileText",
+      run: () => {
+        void actions.insertPdf();
+      },
     },
-  },
-  {
-    title: "Numbered List",
-    description: "Outline a sequence or steps.",
-    icon: "ListOrdered",
-    command: (editor) => {
-      editor.chain().focus().toggleOrderedList().run();
+    {
+      id: "insert-arxiv",
+      title: "Insert arXiv",
+      description: "Pull sections + figures directly from arXiv.",
+      icon: "Globe",
+      run: () => {
+        void actions.insertArxiv();
+      },
     },
-  },
-  {
-    title: "Quote",
-    description: "Emphasise supporting evidence.",
-    icon: "Quote",
-    command: (editor) => {
-      editor.chain().focus().toggleBlockquote().run();
-    },
-  },
-  {
-    title: "Code Block",
-    description: "Embed preformatted snippets.",
-    icon: "Code",
-    command: (editor) => {
-      editor.chain().focus().toggleCodeBlock().run();
-    },
-  },
-  {
-    title: "Divider",
-    description: "Visually separate sections.",
-    icon: "Minus",
-    command: (editor) => {
-      editor.chain().focus().setHorizontalRule().run();
-    },
-  },
-];
+  ];
+}

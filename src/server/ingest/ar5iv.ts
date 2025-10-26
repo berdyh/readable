@@ -1,9 +1,19 @@
 import { load, type Cheerio, type CheerioAPI } from 'cheerio';
 
-import type { HtmlParseResult, PaperFigure, PaperSection, SectionParagraph } from './types';
+import type {
+  HtmlParseResult,
+  PaperFigure,
+  PaperSection,
+  SectionParagraph,
+} from './types';
 import { normalizeWhitespace } from './utils';
 
 const HEADING_SELECTOR = '> h1, > h2, > h3, > h4, > h5, > h6, > header > h1, > header > h2, > header > h3, > header > h4, > header > h5, > header > h6';
+const DEFAULT_IMAGE_BASE = 'https://ar5iv.org';
+
+interface ParseAr5ivOptions {
+  imageBaseUrl?: string;
+}
 
 function resolveSectionLevel(tagName?: string | null, depthAttr?: string): number {
   if (tagName && /^h\d$/i.test(tagName)) {
@@ -69,7 +79,39 @@ function extractParagraphs(
   return paragraphs;
 }
 
-function extractFigures($root: CheerioAPI): PaperFigure[] {
+function resolveImageUrl(
+  src: string | undefined,
+  baseUrl: string | undefined,
+): string | undefined {
+  if (!src) {
+    return undefined;
+  }
+
+  const trimmed = src.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith('data:')) {
+    return trimmed;
+  }
+
+  if (trimmed.startsWith('//')) {
+    return `https:${trimmed}`;
+  }
+
+  const base = baseUrl ?? DEFAULT_IMAGE_BASE;
+  if (trimmed.startsWith('/')) {
+    return `${base.replace(/\/+$/, '')}${trimmed}`;
+  }
+
+  return `${base.replace(/\/+$/, '')}/${trimmed}`;
+}
+
+function extractFigures(
+  $root: CheerioAPI,
+  imageBaseUrl: string,
+): PaperFigure[] {
   const figures: PaperFigure[] = [];
 
   $root('figure, div.ltx_figure, div.figure').each((index, element) => {
@@ -88,20 +130,32 @@ function extractFigures($root: CheerioAPI): PaperFigure[] {
       return;
     }
 
+    const $image = $figure.find('img').first();
+    const imageSrc =
+      $image.attr('data-src') ??
+      $image.attr('src') ??
+      $image.attr('data-original');
+    const imageUrl = resolveImageUrl(imageSrc, imageBaseUrl);
+
     figures.push({
       id,
       label,
       caption,
+      imageUrl,
     });
   });
 
   return figures;
 }
 
-export function parseAr5ivHtml(html: string): HtmlParseResult {
+export function parseAr5ivHtml(
+  html: string,
+  options?: ParseAr5ivOptions,
+): HtmlParseResult {
   const $ = load(html);
   const $root = $('article#document, article#ltx_document, body');
   const sections: PaperSection[] = [];
+  const imageBaseUrl = options?.imageBaseUrl ?? DEFAULT_IMAGE_BASE;
 
   $root.find('section').each((index, element) => {
     const $section = $(element);
@@ -130,6 +184,6 @@ export function parseAr5ivHtml(html: string): HtmlParseResult {
 
   return {
     sections,
-    figures: extractFigures($),
+    figures: extractFigures($, imageBaseUrl),
   };
 }

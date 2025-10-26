@@ -565,14 +565,23 @@ const ReaderWorkspace = ({
     <div className="flex min-h-screen flex-col bg-zinc-50 font-sans text-zinc-900">
       <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col px-5 py-10">
         <ResearchEditor
+          paperId={resolvedPaperId}
           summaryNotes={summaryNotes}
           summaryDescription="Structured bullets stay narrow for readability. Highlight any passage to tee up a follow-up question."
           onSummarySelection={handleSummarySelection}
           onOpenChat={() => setIsChatModalOpen(true)}
-          onOpenPdf={() => setIsPdfModalOpen(true)}
           statusMessage={statusMessage}
           onStatusClear={clearStatus}
         />
+        <div className="mt-4 flex justify-end">
+          <button
+            type="button"
+            onClick={() => setIsPdfModalOpen(true)}
+            className="rounded-full border border-zinc-300 px-4 py-2 text-xs font-semibold text-zinc-700 transition hover:border-zinc-400 hover:text-zinc-900"
+          >
+            View PDF panel
+          </button>
+        </div>
       </main>
 
       <WorkspaceModal

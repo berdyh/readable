@@ -32,7 +32,7 @@ const QA_RESPONSE_SCHEMA: Record<string, unknown> = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['chunk_id', 'page'],
+        required: ['chunk_id', 'page', 'quote'],
         properties: {
           chunk_id: { type: 'string', minLength: 1 },
           page: { type: 'integer', minimum: 1 },
@@ -44,9 +44,9 @@ const QA_RESPONSE_SCHEMA: Record<string, unknown> = {
 };
 
 interface LlmCitationPayload {
-  chunk_id?: string;
-  page?: number;
-  quote?: string;
+  chunk_id: string;
+  page: number;
+  quote: string;
 }
 
 interface LlmQaPayload {

@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ComponentType,
+} from "react";
 import { EditorContent, useEditor, BubbleMenu } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
@@ -14,6 +20,7 @@ import CharacterCount from "@tiptap/extension-character-count";
 import BubbleMenuExtension from "@tiptap/extension-bubble-menu";
 import { clsx } from "clsx";
 import {
+  FileText,
   Flame,
   MessageSquare,
   MoonStar,
@@ -29,6 +36,20 @@ import {
   emitEditorIntent,
   type EditorIntentAction,
 } from "./intents";
+import SummaryPanel, {
+  type SummaryNote,
+} from "../summary/SummaryPanel";
+
+interface ResearchEditorProps {
+  summaryHeading?: string;
+  summaryDescription?: string;
+  summaryNotes?: SummaryNote[];
+  onSummarySelection?: (payload: { text: string; section?: string }) => void;
+  onOpenChat?: () => void;
+  onOpenPdf?: () => void;
+  statusMessage?: string | null;
+  onStatusClear?: () => void;
+}
 
 const INITIAL_CONTENT = `
 <h1>Designing persona-aware reading experiences</h1>
@@ -43,7 +64,16 @@ const INITIAL_CONTENT = `
 
 const CHARACTER_LIMIT = 8000;
 
-export function ResearchEditor() {
+export function ResearchEditor({
+  summaryHeading = "Summary at a glance",
+  summaryDescription,
+  summaryNotes,
+  onSummarySelection,
+  onOpenChat,
+  onOpenPdf,
+  statusMessage,
+  onStatusClear,
+}: ResearchEditorProps) {
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
@@ -127,6 +157,31 @@ export function ResearchEditor() {
     [],
   );
 
+  const actionButtons = useMemo(
+    () =>
+      [
+        onOpenChat
+          ? {
+              label: "Open chat",
+              icon: MessageSquare,
+              onClick: onOpenChat,
+            }
+          : null,
+        onOpenPdf
+          ? {
+              label: "Open PDF",
+              icon: FileText,
+              onClick: onOpenPdf,
+            }
+          : null,
+      ].filter(Boolean) as Array<{
+        label: string;
+        icon: ComponentType<{ className?: string }>;
+        onClick: () => void;
+      }>,
+    [onOpenChat, onOpenPdf],
+  );
+
   if (!mounted) {
     return null;
   }
@@ -151,7 +206,7 @@ export function ResearchEditor() {
           isDarkMode ? "border-neutral-800" : "border-neutral-200",
         )}
       >
-        <div className="flex flex-col">
+        <div className="flex flex-col gap-1">
           <span
             className={clsx(
               "text-sm font-semibold",
@@ -169,8 +224,62 @@ export function ResearchEditor() {
             Capture snippets before promoting to summary, Q&amp;A, or persona
             updates.
           </span>
+          {statusMessage ? (
+            <div
+              className={clsx(
+                "inline-flex items-center gap-3 rounded-md border px-3 py-1 text-[11px] font-medium",
+                isDarkMode
+                  ? "border-blue-700/60 bg-blue-900/40 text-blue-200"
+                  : "border-blue-200 bg-blue-50 text-blue-600",
+              )}
+            >
+              <span className="uppercase tracking-wide">Update</span>
+              <span className="line-clamp-2 max-w-[320px] text-left">
+                {statusMessage}
+              </span>
+              {onStatusClear ? (
+                <button
+                  type="button"
+                  onClick={onStatusClear}
+                  className={clsx(
+                    "text-[10px] uppercase",
+                    isDarkMode ? "text-blue-300" : "text-blue-500",
+                  )}
+                >
+                  Dismiss
+                </button>
+              ) : null}
+            </div>
+          ) : null}
         </div>
         <div className="flex items-center gap-3">
+          {actionButtons.length ? (
+            <div
+              className={clsx(
+                "hidden items-center gap-2 rounded-full border px-2 py-1 text-xs font-medium transition sm:flex",
+                isDarkMode
+                  ? "border-neutral-700 bg-neutral-900 text-neutral-200"
+                  : "border-neutral-300 bg-white text-neutral-600",
+              )}
+            >
+              {actionButtons.map(({ label, icon: Icon, onClick }) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={onClick}
+                  className={clsx(
+                    "inline-flex items-center gap-1 rounded-full px-3 py-1.5 transition",
+                    isDarkMode
+                      ? "hover:bg-neutral-800"
+                      : "hover:bg-neutral-100",
+                  )}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  {label}
+                </button>
+              ))}
+            </div>
+          ) : null}
           <EditorToolbar
             editor={editor}
             theme={isDarkMode ? "dark" : "light"}
@@ -196,6 +305,32 @@ export function ResearchEditor() {
       </div>
 
       <div className="grid gap-2 px-5 pb-5 pt-4">
+        {actionButtons.length ? (
+          <div
+            className={clsx(
+              "flex items-center gap-3 sm:hidden",
+              isDarkMode ? "text-neutral-300" : "text-neutral-600",
+            )}
+          >
+            {actionButtons.map(({ label, icon: Icon, onClick }) => (
+              <button
+                key={label}
+                type="button"
+                onClick={onClick}
+                className={clsx(
+                  "inline-flex flex-1 items-center justify-center gap-1 rounded-full border px-3 py-2 text-xs font-medium transition",
+                  isDarkMode
+                    ? "border-neutral-700 bg-neutral-900 hover:bg-neutral-800"
+                    : "border-neutral-200 bg-white hover:bg-neutral-100",
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {label}
+              </button>
+            ))}
+          </div>
+        ) : null}
+
         {editor && (
           <BubbleMenu
             editor={editor}
@@ -328,6 +463,24 @@ export function ResearchEditor() {
             )}
           />
         </div>
+
+        {summaryNotes?.length ? (
+          <div
+            className={clsx(
+              "rounded-2xl border px-4 py-4",
+              isDarkMode
+                ? "border-neutral-800 bg-neutral-950/30"
+                : "border-neutral-200 bg-white/70",
+            )}
+          >
+            <SummaryPanel
+              heading={summaryHeading}
+              description={summaryDescription}
+              notes={summaryNotes}
+              onSelection={onSummarySelection}
+            />
+          </div>
+        ) : null}
 
         <div
           className={clsx(

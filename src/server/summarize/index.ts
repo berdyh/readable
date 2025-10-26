@@ -26,7 +26,7 @@ const SUMMARY_SCHEMA: Record<string, unknown> = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['section_id', 'title', 'summary', 'reasoning'],
+        required: ['section_id', 'title', 'summary', 'reasoning', 'key_points'],
         properties: {
           section_id: { type: 'string' },
           title: { type: 'string' },
@@ -46,7 +46,12 @@ const SUMMARY_SCHEMA: Record<string, unknown> = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['statement', 'evidence', 'supporting_sections'],
+        required: [
+          'statement',
+          'evidence',
+          'supporting_sections',
+          'related_figures',
+        ],
         properties: {
           statement: { type: 'string' },
           evidence: { type: 'string' },
@@ -70,7 +75,7 @@ const SUMMARY_SCHEMA: Record<string, unknown> = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['figure_id', 'insight'],
+        required: ['figure_id', 'caption_summary', 'insight'],
         properties: {
           figure_id: { type: 'string' },
           caption_summary: { type: 'string' },
@@ -86,19 +91,19 @@ interface LlmSection {
   title: string;
   summary: string;
   reasoning: string;
-  key_points?: string[];
+  key_points: string[];
 }
 
 interface LlmKeyFinding {
   statement: string;
   evidence: string;
   supporting_sections: string[];
-  related_figures?: string[];
+  related_figures: string[];
 }
 
 interface LlmFigure {
   figure_id: string;
-  caption_summary?: string;
+  caption_summary: string;
   insight: string;
 }
 
@@ -363,7 +368,7 @@ function coerceSections(input: unknown): LlmSection[] {
           )
           .filter((item): item is string => Boolean(item))
           .slice(0, 4)
-      : undefined;
+      : [];
 
     sections.push({
       section_id: sectionId,
@@ -423,7 +428,7 @@ function coerceKeyFindings(input: unknown): LlmKeyFinding[] {
           )
           .filter((item): item is string => Boolean(item))
           .slice(0, 3)
-      : undefined;
+      : [];
 
     findings.push({
       statement,
@@ -467,7 +472,7 @@ function coerceFigures(input: unknown): LlmFigure[] {
     const caption =
       typeof record.caption_summary === 'string'
         ? record.caption_summary.trim()
-        : undefined;
+        : '';
 
     figures.push({
       figure_id: figureId,

@@ -123,6 +123,7 @@ export function ResearchEditor({
       },
     },
     content: INITIAL_CONTENT,
+    immediatelyRender: false,
   });
 
   const commands = useResearchCommands({

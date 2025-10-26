@@ -5,13 +5,13 @@ import type { TextItem } from "pdfjs-dist/types/src/display/api";
 const WORKER_SRC =
   "https://unpkg.com/pdfjs-dist@5.4.296/build/pdf.worker.min.js";
 
-type PdfJsModule = typeof import("pdfjs-dist/build/pdf");
+type PdfJsModule = typeof import("pdfjs-dist");
 
 let pdfModulePromise: Promise<PdfJsModule> | null = null;
 
 async function loadPdfModule(): Promise<PdfJsModule> {
   if (!pdfModulePromise) {
-    pdfModulePromise = import("pdfjs-dist/build/pdf").then((module) => {
+    pdfModulePromise = import("pdfjs-dist").then((module) => {
       module.GlobalWorkerOptions.workerSrc = WORKER_SRC;
       return module;
     });
@@ -84,7 +84,7 @@ export async function importPdfDocument(
       );
 
       const viewport = page.getViewport({ scale });
-      const canvas = document.createElement("canvas");
+      const canvas = window.document.createElement("canvas");
       const context = canvas.getContext("2d");
 
       if (!context) {
@@ -95,6 +95,7 @@ export async function importPdfDocument(
       canvas.height = viewport.height;
 
       const renderTask = page.render({
+        canvas,
         canvasContext: context,
         viewport,
       });

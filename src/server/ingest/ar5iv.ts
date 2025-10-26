@@ -1,4 +1,5 @@
 import { load, type Cheerio, type CheerioAPI } from 'cheerio';
+import type { AnyNode } from 'domhandler';
 
 import type {
   HtmlParseResult,
@@ -34,7 +35,7 @@ function resolveSectionLevel(tagName?: string | null, depthAttr?: string): numbe
 }
 
 function extractParagraphs(
-  $section: Cheerio<unknown>,
+  $section: Cheerio<AnyNode>,
   sectionId: string,
   $: CheerioAPI,
 ): SectionParagraph[] {
@@ -158,7 +159,7 @@ export function parseAr5ivHtml(
   const imageBaseUrl = options?.imageBaseUrl ?? DEFAULT_IMAGE_BASE;
 
   $root.find('section').each((index, element) => {
-    const $section = $(element);
+    const $section = $(element) as Cheerio<AnyNode>;
     const sectionId = $section.attr('id') ?? `section-${index + 1}`;
     const $heading = $section.find(HEADING_SELECTOR).first();
     const title = normalizeWhitespace($heading.text());

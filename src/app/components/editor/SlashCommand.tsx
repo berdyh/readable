@@ -167,6 +167,7 @@ export const SlashCommandExtension = Extension.create<SlashCommandOptions>({
   addProseMirrorPlugins() {
     return [
       Suggestion({
+        editor: this.editor,
         char: "/",
         startOfLine: true,
         allow: ({ state, range }) => {
@@ -195,9 +196,10 @@ export const SlashCommandExtension = Extension.create<SlashCommandOptions>({
           return {
             onStart: (props: SuggestionProps<SlashCommandItem>) => {
               component = new ReactRenderer(SlashCommandList, {
+                editor: this.editor,
                 props: {
                   items: props.items,
-                  command: (item) => {
+                  command: (item: SlashCommandItem) => {
                     props.command(item);
                   },
                 },
@@ -219,7 +221,7 @@ export const SlashCommandExtension = Extension.create<SlashCommandOptions>({
             onUpdate: (props: SuggestionProps<SlashCommandItem>) => {
               component?.updateProps({
                 items: props.items,
-                command: (item) => props.command(item),
+                command: (item: SlashCommandItem) => props.command(item),
               });
 
               popup[0]?.setProps({

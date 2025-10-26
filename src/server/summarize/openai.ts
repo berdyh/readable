@@ -1,5 +1,3 @@
-const DEFAULT_BASE_URL = 'https://api.openai.com/v1';
-const DEFAULT_SUMMARY_MODEL = 'gpt-4o-mini';
 const DEFAULT_TIMEOUT_MS = 60_000;
 
 interface OpenAiConfig {
@@ -11,20 +9,32 @@ interface OpenAiConfig {
   timeoutMs: number;
 }
 
-function getOpenAiConfig(): OpenAiConfig {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error(
-      'OPENAI_API_KEY is required to summarize papers. Set it in your environment.',
-    );
+function requireEnvVar(name: string, purpose: string): string {
+  const value = process.env[name];
+  if (!value || !value.trim()) {
+    throw new Error(`${name} is required ${purpose}`);
   }
+  return value.trim();
+}
+
+function getOpenAiConfig(): OpenAiConfig {
+  const apiKey = requireEnvVar(
+    'OPENAI_API_KEY',
+    'to summarize papers. Set it in your environment.',
+  );
+  const baseUrl = requireEnvVar(
+    'OPENAI_API_BASE_URL',
+    'to summarize papers. Update .env.local if needed.',
+  );
+  const model = requireEnvVar(
+    'OPENAI_SUMMARY_MODEL',
+    'to summarize papers. Update .env.local if needed.',
+  );
 
   return {
     apiKey,
-    baseUrl: (
-      process.env.OPENAI_API_BASE_URL ?? DEFAULT_BASE_URL
-    ).replace(/\/+$/, ''),
-    model: process.env.OPENAI_SUMMARY_MODEL ?? DEFAULT_SUMMARY_MODEL,
+    baseUrl: baseUrl.replace(/\/+$/, ''),
+    model,
     organization: process.env.OPENAI_ORGANIZATION,
     project: process.env.OPENAI_PROJECT,
     timeoutMs: Number(process.env.OPENAI_TIMEOUT_MS ?? DEFAULT_TIMEOUT_MS),

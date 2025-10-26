@@ -323,7 +323,9 @@ export function useResearchCommands({
       nextMap.set(key, calloutId);
       while (nextMap.size > CALL_OUT_LIMIT) {
         const firstKey = nextMap.keys().next().value;
-        nextMap.delete(firstKey);
+        if (firstKey !== undefined) {
+          nextMap.delete(firstKey);
+        }
       }
       calloutLookupRef.current = nextMap;
       lastCalloutIdRef.current = calloutId;

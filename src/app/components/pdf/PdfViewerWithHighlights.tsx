@@ -32,8 +32,14 @@ const PDFJS_STANDARD_FONT_URL =
 
 if (typeof window !== "undefined") {
   pdfjs.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL;
-  pdfjs.GlobalWorkerOptions.standardFontDataUrl = PDFJS_STANDARD_FONT_URL;
 }
+
+// Pass standard font data URL via loader options instead of setting it on the
+// global worker options. PdfLoader forwards props into `getDocument`, so
+// spreading `pdfOptions` into `PdfLoader` will pass this through.
+const pdfOptions = {
+  standardFontDataUrl: PDFJS_STANDARD_FONT_URL,
+};
 
 type SelectionAction = "Explain" | "Ask";
 
@@ -416,7 +422,7 @@ const PdfViewerWithHighlights = forwardRef<
 
   return (
     <div className={clsx("relative h-full w-full overflow-hidden", className)}>
-      <PdfLoader url={pdfUrl} beforeLoad={<Loader />}>
+  <PdfLoader url={pdfUrl} beforeLoad={<Loader />} {...pdfOptions}>
         {(pdfDocument) => (
           <PdfHighlighter
             pdfDocument={pdfDocument}

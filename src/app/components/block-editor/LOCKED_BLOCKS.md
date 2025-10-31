@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Notion-style editor includes a **locked blocks** feature that prevents accidental editing of blocks generated from API calls (summaries, figures, citations, etc.). Locked blocks are read-only by default, but can be unlocked for manual editing.
+The block-based editor includes a **locked blocks** feature that prevents accidental editing of blocks generated from API calls (summaries, figures, citations, etc.). Locked blocks are read-only by default, but can be unlocked for manual editing.
 
 ## Behavior
 
@@ -72,4 +72,3 @@ All parser functions in `parsers.ts` automatically mark generated blocks as lock
 - Locked blocks can still be deleted using Backspace/Delete on empty content
 - Checkboxes in todo blocks are disabled when locked
 - The slash command system is aware of locked blocks and adjusts insertion behavior accordingly
-

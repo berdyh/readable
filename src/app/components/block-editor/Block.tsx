@@ -19,6 +19,7 @@ import { QuoteBlock } from "./blocks/QuoteBlock";
 import { DividerBlock } from "./blocks/DividerBlock";
 import { CalloutBlock } from "./blocks/CalloutBlock";
 import { ChatMessageBlock } from "./blocks/ChatMessageBlock";
+import { FigureBlock } from "./blocks/FigureBlock";
 
 interface BlockProps {
   block: BlockType;
@@ -104,8 +105,8 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
       blockContent === "<br>" ||
       textContent.length === 0;
     
-    // If todo block is empty, convert to paragraph instead of deleting
-    if (isEmpty && block.type === "to_do_list") {
+    // If list block (todo, bullet, number) is empty, convert to paragraph instead of deleting
+    if (isEmpty && (block.type === "to_do_list" || block.type === "bullet_list" || block.type === "number_list")) {
       changeBlockType(block.id, "paragraph");
       setTimeout(() => {
         const blockElement = document.querySelector(
@@ -140,27 +141,9 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
         }
       }
       deleteBlock(block.id);
-    } else if (index > 0) {
-      const prevBlockElement = document.querySelector(
-        `[data-block-id="${block.id}"]`,
-      )?.previousElementSibling as HTMLElement;
-      
-      if (prevBlockElement) {
-        const prevTipTap = prevBlockElement.querySelector(".ProseMirror") as HTMLElement;
-        if (prevTipTap) {
-          prevTipTap.focus();
-          setTimeout(() => {
-            const range = document.createRange();
-            const sel = window.getSelection();
-            range.selectNodeContents(prevTipTap);
-            range.collapse(false);
-            sel?.removeAllRanges();
-            sel?.addRange(range);
-          }, 0);
-        }
-      }
-      deleteBlock(block.id);
     }
+    // Note: For non-empty blocks, TipTap handles normal backspace behavior internally.
+    // We only intervene when the block is empty to delete it and move focus.
   }, [block.id, block.content, block.type, deleteBlock, index, changeBlockType]);
 
   const handleSlashCommand = useCallback(
@@ -171,7 +154,7 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
   );
 
   const handleAddClick = useCallback(() => {
-    // Add same type of block (like Notion)
+    // Add same type of block
     addBlock(block.type, index);
     setShowOptions(false);
   }, [addBlock, block.type, index]);
@@ -294,8 +277,7 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
             blockIndex={index}
             onChangeBlockType={changeBlockType}
             onInsertBlock={(type, idx, content) => {
-              const newBlock = addBlock(type, idx, content);
-              insertBlock(newBlock, idx);
+              addBlock(type, idx, content);
             }}
             onExecuteApi={handleExecuteApi}
             isLocked={isLocked}
@@ -315,8 +297,7 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
             blockIndex={index}
             onChangeBlockType={changeBlockType}
             onInsertBlock={(type, idx, content) => {
-              const newBlock = addBlock(type, idx, content);
-              insertBlock(newBlock, idx);
+              addBlock(type, idx, content);
             }}
             onExecuteApi={handleExecuteApi}
             isLocked={isLocked}
@@ -335,8 +316,7 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
             blockIndex={index}
             onChangeBlockType={changeBlockType}
             onInsertBlock={(type, idx, content) => {
-              const newBlock = addBlock(type, idx, content);
-              insertBlock(newBlock, idx);
+              addBlock(type, idx, content);
             }}
             onExecuteApi={handleExecuteApi}
             isLocked={isLocked}
@@ -354,8 +334,7 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
             blockIndex={index}
             onChangeBlockType={changeBlockType}
             onInsertBlock={(type, idx, content) => {
-              const newBlock = addBlock(type, idx, content);
-              insertBlock(newBlock, idx);
+              addBlock(type, idx, content);
             }}
             onExecuteApi={handleExecuteApi}
             isLocked={isLocked}
@@ -373,8 +352,7 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
             blockIndex={index}
             onChangeBlockType={changeBlockType}
             onInsertBlock={(type, idx, content) => {
-              const newBlock = addBlock(type, idx, content);
-              insertBlock(newBlock, idx);
+              addBlock(type, idx, content);
             }}
             onExecuteApi={handleExecuteApi}
             isLocked={isLocked}
@@ -394,8 +372,7 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
             blockIndex={index}
             onChangeBlockType={changeBlockType}
             onInsertBlock={(type, idx, content) => {
-              const newBlock = addBlock(type, idx, content);
-              insertBlock(newBlock, idx);
+              addBlock(type, idx, content);
             }}
             onExecuteApi={handleExecuteApi}
             isLocked={isLocked}
@@ -416,6 +393,15 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
             onDelete={() => deleteBlock(block.id)}
           />
         );
+      case "figure":
+        return (
+          <FigureBlock
+            block={block}
+            paperId={state.paperId}
+            isLocked={isLocked}
+            onUpdate={handleUpdate}
+          />
+        );
       default:
         return (
           <TextBlock
@@ -428,8 +414,7 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
             blockIndex={index}
             onChangeBlockType={changeBlockType}
             onInsertBlock={(type, idx, content) => {
-              const newBlock = addBlock(type, idx, content);
-              insertBlock(newBlock, idx);
+              addBlock(type, idx, content);
             }}
             onExecuteApi={handleExecuteApi}
             isLocked={isLocked}
@@ -441,10 +426,11 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
   return (
     <div
       className={clsx(
-        "group relative flex items-start gap-2 rounded-md px-2 py-1 transition-colors",
+        "group relative flex items-start gap-2 rounded-md px-2 py-1 transition-all duration-150",
+        "hover:bg-neutral-50/50 dark:hover:bg-neutral-900/50",
         isFocused && !isDragging && "bg-neutral-50 dark:bg-neutral-900",
-        isDragging && "opacity-50 pointer-events-none",
-        dragOver && "ring-2 ring-blue-500 dark:ring-blue-400",
+        isDragging && "opacity-50 pointer-events-none scale-[0.98]",
+        dragOver && "ring-2 ring-blue-500 dark:ring-blue-400 bg-blue-50/50 dark:bg-blue-950/30",
       )}
       data-block-id={block.id}
       onFocus={handleFocus}
@@ -455,31 +441,31 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
       draggable={false}
     >
       {/* Lock/Edit toggle button - always in top-right corner */}
-      <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity z-10">
+      <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 z-10">
         <button
           type="button"
           onClick={(e) => {
             e.stopPropagation(); // Prevent event bubbling
             handleToggleLock();
           }}
-          className="flex h-6 w-6 items-center justify-center rounded hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors"
+          className="flex h-6 w-6 items-center justify-center rounded hover:bg-neutral-200 dark:hover:bg-neutral-700 active:scale-95 transition-all duration-150 text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
           title={isLocked ? "Click to unlock and edit" : "Click to lock (make read-only)"}
         >
           {isLocked ? (
-            <Edit2 className="h-4 w-4 text-neutral-400" />
+            <Edit2 className="h-4 w-4" />
           ) : (
-            <Lock className="h-4 w-4 text-neutral-400" />
+            <Lock className="h-4 w-4" />
           )}
         </button>
       </div>
 
       {/* Block options (shown on hover/focus) */}
       {(isFocused || showOptions) && (
-        <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+        <div className="flex items-center gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
           <button
             type="button"
             onClick={handleAddClick}
-            className="flex h-6 w-6 items-center justify-center rounded hover:bg-neutral-200 dark:hover:bg-neutral-700"
+            className="flex h-6 w-6 items-center justify-center rounded hover:bg-neutral-200 dark:hover:bg-neutral-700 active:scale-95 transition-all duration-150 text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
             title="Add block"
           >
             <Plus className="h-4 w-4" />
@@ -489,7 +475,7 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
             draggable
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
-            className="flex h-6 w-6 items-center justify-center rounded hover:bg-neutral-200 dark:hover:bg-neutral-700 cursor-move"
+            className="flex h-6 w-6 items-center justify-center rounded hover:bg-neutral-200 dark:hover:bg-neutral-700 active:scale-95 transition-all duration-150 cursor-move text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
             title="Drag to reorder"
           >
             <GripVertical className="h-4 w-4" />

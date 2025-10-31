@@ -9,7 +9,7 @@ import type { Block as BlockType } from "./types";
 import { ChatButton, ChatSidePanel } from "./ChatIntegration";
 import type { QuestionSelection } from "@/server/qa/types";
 
-interface NotionEditorProps {
+interface BlockEditorProps {
   paperId: string;
   initialBlocks?: BlockType[];
   onSlashCommand?: (query: string, blockIndex: number) => void;
@@ -22,7 +22,7 @@ interface NotionEditorProps {
   userId?: string;
 }
 
-export function NotionEditor({
+export function BlockEditor({
   paperId,
   initialBlocks = [],
   onSlashCommand,
@@ -33,13 +33,13 @@ export function NotionEditor({
   personaEnabled = false,
   onPersonaToggle,
   userId,
-}: NotionEditorProps) {
+}: BlockEditorProps) {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatSelection, setChatSelection] = useState<QuestionSelection | undefined>(undefined);
 
   return (
     <EditorProvider paperId={paperId} initialBlocks={initialBlocks}>
-      <NotionEditorContent
+      <BlockEditorContent
         onSlashCommand={onSlashCommand}
         statusMessage={statusMessage}
         errorMessage={errorMessage}
@@ -58,7 +58,7 @@ export function NotionEditor({
   );
 }
 
-function NotionEditorContent({
+function BlockEditorContent({
   onSlashCommand,
   statusMessage,
   errorMessage,
@@ -156,7 +156,7 @@ function NotionEditorContent({
       )}
 
       {/* Block Editor */}
-      <div className={clsx("min-h-[400px] space-y-1", state.loading && "opacity-50")}>
+      <div className={clsx("min-h-[400px] space-y-1 transition-opacity duration-200", state.loading && "opacity-50")}>
         {blocksToRender.map((block, index) => (
           <Block
             key={block.id}

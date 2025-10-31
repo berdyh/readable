@@ -111,7 +111,7 @@ async function executeSummaryCommand(
 }
 
 // TODO: Implement these commands in Phase 6
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+ 
 async function executeFigureCommand(
   _paperId: string,
   _blockId: string,
@@ -123,7 +123,7 @@ async function executeFigureCommand(
   console.log("Figure command not yet implemented");
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+ 
 async function executeCitationCommand(
   _paperId: string,
   _blockId: string,
@@ -135,7 +135,7 @@ async function executeCitationCommand(
   console.log("Citation command not yet implemented");
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+ 
 async function executeArxivCommand(
   _paperId: string,
   _blockId: string,

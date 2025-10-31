@@ -88,10 +88,13 @@ export function EditorProvider({
 
   const addBlock = useCallback(
     (type: Block["type"], index: number, content = ""): Block => {
+      // Initialize todo blocks with markdown [ ] syntax
+      const initialContent = type === "to_do_list" && !content ? "[ ] " : content;
+      
       const newBlock: Block = {
         id: uuidv4(),
         type,
-        content,
+        content: initialContent,
         metadata:
           type === "to_do_list"
             ? { checked: false }
@@ -175,7 +178,24 @@ export function EditorProvider({
             const metadata = newType === "to_do_list" 
               ? { ...block.metadata, checked: false }
               : undefined;
-            return { ...block, type: newType, metadata };
+            
+            // Preserve content - convert inline if needed
+            let content = block.content || "";
+            
+            // When converting to list blocks, remove any existing list markers from content
+            if (newType === "bullet_list" || newType === "number_list") {
+              // Remove markdown list markers if present
+              content = content.replace(/^[\*\-\+]\s+/, "").replace(/^\d+\.\s+/, "").trim();
+            }
+            
+            // When converting from list to paragraph, ensure clean text
+            if (newType === "paragraph" && (block.type === "bullet_list" || block.type === "number_list")) {
+              // Content should already be clean (no markers) from our markdown conversion
+              // Just ensure it's trimmed
+              content = content.trim();
+            }
+            
+            return { ...block, type: newType, content, metadata };
           }
           return block;
         });

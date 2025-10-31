@@ -1,3 +1,14 @@
+/**
+ * @deprecated This component has been replaced by BlockEditor.
+ * The new BlockEditor provides a block-based editing experience.
+ * This file is kept for reference and may be removed in a future version.
+ * 
+ * Migration path:
+ * - Replace `ResearchEditor` imports with `BlockEditor` from `../block-editor/BlockEditor`
+ * - Use `parseSummaryToBlocks` from `../block-editor/parsers` to convert SummaryResult to Block[]
+ * - Use BlockEditor's built-in chat functionality instead of ChatPanel
+ * - See ReaderWorkspace.tsx for an example migration
+ */
 "use client";
 
 import {

@@ -334,8 +334,10 @@ export async function summarizeSelection(
     },
   );
 
+  // Use 'selection_summary' consistently across all function calls for task identification
+  // This ensures model selection and Kontext prompt fetching use the same task identifier
   const personaPrompt = await fetchKontextSystemPrompt({
-    taskId: 'inline_research_summary',
+    taskId: 'selection_summary',
     paperId,
     userId: options.userId,
     personaId: options.personaId,
@@ -345,8 +347,6 @@ export async function summarizeSelection(
 
   const userPrompt = buildSelectionUserPrompt(paperId, selection, evidence);
 
-  // Use 'selection_summary' consistently - 'inline_summary' is an alias that maps to 'selection_summary'
-  // but we should use the canonical task name for consistency
   const raw = await generateJson({
     systemPrompt,
     userPrompt,

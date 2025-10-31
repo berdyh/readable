@@ -136,7 +136,7 @@ const SlashCommandList = forwardRef<
   );
 
   return (
-    <div className="min-w-[280px] max-w-[320px] rounded-xl border border-neutral-200 bg-white p-2 shadow-xl ring-1 ring-neutral-950/5 dark:border-neutral-700 dark:bg-neutral-900 dark:ring-white/10">
+    <div className="min-w-[280px] max-w-[320px] rounded-xl border border-neutral-200 bg-white p-2 shadow-xl ring-1 ring-neutral-950/5 dark:border-neutral-700 dark:bg-neutral-900 dark:ring-white/10 backdrop-blur-sm">
       <ul className="flex flex-col gap-1">
         {Object.entries(groupedItems).map(([category, categoryItems]) => (
           <li key={category}>
@@ -158,13 +158,18 @@ const SlashCommandList = forwardRef<
                     selectItem(globalIndex);
                   }}
                   className={clsx(
-                    "flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition",
+                    "flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-all duration-150",
                     selectedIndex === globalIndex
-                      ? "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-200"
-                      : "text-neutral-700 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-neutral-800",
+                      ? "bg-blue-100 text-blue-700 shadow-sm dark:bg-blue-500/20 dark:text-blue-200 dark:shadow-blue-500/10"
+                      : "text-neutral-700 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-neutral-800 active:scale-[0.98]",
                   )}
                 >
-                  <span className="flex h-8 w-8 items-center justify-center rounded-md bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
+                  <span className={clsx(
+                    "flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-150",
+                    selectedIndex === globalIndex
+                      ? "bg-blue-200 text-blue-700 dark:bg-blue-500/30 dark:text-blue-200"
+                      : "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300",
+                  )}>
                     <Icon className="h-4 w-4" />
                   </span>
                   <span className="flex flex-1 flex-col">
@@ -240,6 +245,8 @@ export const SlashCommandExtension = Extension.create<SlashCommandOptions>({
                 props: {
                   items: props.items,
                   command: (item: SlashCommandItem) => {
+                    // TipTap Suggestion plugin's command expects the item directly
+                    // It will pass it to our command callback as props
                     props.command(item);
                   },
                 },
@@ -254,6 +261,8 @@ export const SlashCommandExtension = Extension.create<SlashCommandOptions>({
                 placement: "bottom-start",
                 arrow: false,
                 theme: "light",
+                // Disable default click outside behavior to avoid className.split errors
+                hideOnClick: false,
               });
 
               popup[0]?.show();
@@ -261,7 +270,10 @@ export const SlashCommandExtension = Extension.create<SlashCommandOptions>({
             onUpdate: (props: SuggestionProps<SlashCommandItem>) => {
               component?.updateProps({
                 items: props.items,
-                command: (item: SlashCommandItem) => props.command(item),
+                command: (item: SlashCommandItem) => {
+                  // TipTap Suggestion plugin's command expects the item directly
+                  props.command(item);
+                },
               });
 
               popup[0]?.setProps({
@@ -291,7 +303,17 @@ export const SlashCommandExtension = Extension.create<SlashCommandOptions>({
             .deleteRange(range)
             .run();
 
-          props.item.run();
+          // The item is passed directly via props (TipTap Suggestion plugin structure)
+          // props contains the selected item
+          const item = props as unknown as SlashCommandItem;
+          if (item && typeof item.run === 'function') {
+            // The run function from buildSlashCommandItems is already bound to context
+            // It's a closure that takes no parameters: () => cmd.run(context)
+            // TypeScript may see the original type, but at runtime it's a no-arg function
+            (item.run as () => void)();
+          } else {
+            console.error('SlashCommand: item.run is not a function', { item, props });
+          }
         },
       }),
     ];

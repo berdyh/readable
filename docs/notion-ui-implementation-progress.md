@@ -1,37 +1,44 @@
-# Notion UI Implementation Progress
+# Block-Based Editor Implementation Progress
 
 ## Overview
-This document tracks the progress of implementing a Notion-style block editor for the research paper analysis interface.
+
+This document tracks the progress of implementing a block-based editor for the research paper analysis interface.
 
 ## Completed Phases
 
 ### Phase 1: Block Type Definitions and State Management ✅
+
 **Status:** Complete
 
 **Files Created:**
-- `src/app/components/notion-editor/types.ts` - Block type definitions, metadata interfaces, and editor state types
-- `src/app/components/notion-editor/store.tsx` - React Context-based state management with CRUD operations
+
+- `src/app/components/block-editor/types.ts` - Block type definitions, metadata interfaces, and editor state types
+- `src/app/components/block-editor/store.tsx` - React Context-based state management with CRUD operations
 
 **Key Features:**
+
 - Block type system supporting paragraphs, headings, lists, to-do items, code, figures, citations, and more
 - Centralized state management via React Context API
 - Block persistence with debounced backend saving
 - Functions for adding, updating, deleting, moving, and changing block types
 
 ### Phase 2: Block Components and Editing ✅
+
 **Status:** Complete
 
 **Files Created:**
-- `src/app/components/notion-editor/Block.tsx` - Base block wrapper component
-- `src/app/components/notion-editor/blocks/TipTapBlock.tsx` - TipTap editor integration component
-- `src/app/components/notion-editor/blocks/TextBlock.tsx` - Paragraph block renderer
-- `src/app/components/notion-editor/blocks/HeadingBlock.tsx` - Heading blocks (h1, h2, h3)
-- `src/app/components/notion-editor/blocks/ListBlock.tsx` - Bullet and numbered list blocks
-- `src/app/components/notion-editor/blocks/TodoBlock.tsx` - To-do list items with checkboxes
-- `src/app/components/notion-editor/NotionEditor.tsx` - Main editor component
-- `src/app/test-notion/page.tsx` - Test page for development
+
+- `src/app/components/block-editor/Block.tsx` - Base block wrapper component
+- `src/app/components/block-editor/blocks/TipTapBlock.tsx` - TipTap editor integration component
+- `src/app/components/block-editor/blocks/TextBlock.tsx` - Paragraph block renderer
+- `src/app/components/block-editor/blocks/HeadingBlock.tsx` - Heading blocks (h1, h2, h3)
+- `src/app/components/block-editor/blocks/ListBlock.tsx` - Bullet and numbered list blocks
+- `src/app/components/block-editor/blocks/TodoBlock.tsx` - To-do list items with checkboxes
+- `src/app/components/block-editor/BlockEditor.tsx` - Main editor component
+- `src/app/test-block-editor/page.tsx` - Test page for development
 
 **Key Features:**
+
 - TipTap integration for rich text editing with proper cursor management
 - Block-specific Enter key behavior:
   - List blocks (to-do, bullet, numbered): Enter creates new block of same type
@@ -41,14 +48,17 @@ This document tracks the progress of implementing a Notion-style block editor fo
 - Proper cursor positioning and text selection
 
 ### Phase 3: Slash Command System ✅
+
 **Status:** Complete
 
 **Files Created:**
-- `src/app/components/notion-editor/SlashCommand.tsx` - TipTap extension for slash command menu
-- `src/app/components/notion-editor/commands.ts` - Command registry with text, research, and content commands
-- `src/app/components/notion-editor/commandHandlers.ts` - Command execution handlers (skeleton)
+
+- `src/app/components/block-editor/SlashCommand.tsx` - TipTap extension for slash command menu
+- `src/app/components/block-editor/commands.ts` - Command registry with text, research, and content commands
+- `src/app/components/block-editor/commandHandlers.ts` - Command execution handlers (skeleton)
 
 **Key Features:**
+
 - "/" trigger shows command menu with categories (Text, Research, Content)
 - Keyboard navigation (Arrow keys, Enter, Escape)
 - Command filtering by search query
@@ -60,6 +70,7 @@ This document tracks the progress of implementing a Notion-style block editor fo
 - Integrated with TipTap's suggestion system for smooth UX
 
 **Integration:**
+
 - All block renderers now pass slash command props (paperId, onChangeBlockType, onInsertBlock)
 - Slash commands can change block types dynamically
 - Ready for API execution handlers (Phase 6)
@@ -67,9 +78,9 @@ This document tracks the progress of implementing a Notion-style block editor fo
 ## Current Architecture
 
 ```
-NotionEditor
+BlockEditor
   └─ EditorProvider (Context)
-      └─ NotionEditorContent
+      └─ BlockEditorContent
           └─ Block[] (map)
               └─ Block (wrapper)
                   ├─ TextBlock / HeadingBlock / ListBlock / TodoBlock
@@ -86,29 +97,33 @@ NotionEditor
 
 ## Testing
 
-- Test page available at `/test-notion`
+- Test page available at `/test-block-editor`
 - All block types render correctly
 - Enter key behavior works per block type
 - Slash command menu appears and functions
 - Block type changing via commands works
 
 ### Phase 4: Main Editor Component ✅
+
 **Status:** Complete
 
 **Files Created:**
-- `src/app/components/notion-editor/blocks/CodeBlock.tsx` - Code block renderer
-- `src/app/components/notion-editor/blocks/QuoteBlock.tsx` - Quote block renderer
-- `src/app/components/notion-editor/blocks/DividerBlock.tsx` - Horizontal divider block
-- `src/app/components/notion-editor/blocks/CalloutBlock.tsx` - Callout block with icon and colors
-- `src/app/components/notion-editor/parsers.ts` - Utilities to parse API responses into blocks
+
+- `src/app/components/block-editor/blocks/CodeBlock.tsx` - Code block renderer
+- `src/app/components/block-editor/blocks/QuoteBlock.tsx` - Quote block renderer
+- `src/app/components/block-editor/blocks/DividerBlock.tsx` - Horizontal divider block
+- `src/app/components/block-editor/blocks/CalloutBlock.tsx` - Callout block with icon and colors
+- `src/app/components/block-editor/parsers.ts` - Utilities to parse API responses into blocks
 
 **Files Updated:**
-- `src/app/components/notion-editor/NotionEditor.tsx` - Added loading/error states and status messages
-- `src/app/components/notion-editor/Block.tsx` - Added support for code, quote, divider, and callout blocks
-- `src/app/components/notion-editor/blocks/TipTapBlock.tsx` - Enhanced Enter key handling for code/quote/callout blocks
-- `src/app/components/notion-editor/commands.ts` - Added quote and callout commands
+
+- `src/app/components/block-editor/BlockEditor.tsx` - Added loading/error states and status messages
+- `src/app/components/block-editor/Block.tsx` - Added support for code, quote, divider, and callout blocks
+- `src/app/components/block-editor/blocks/TipTapBlock.tsx` - Enhanced Enter key handling for code/quote/callout blocks
+- `src/app/components/block-editor/commands.ts` - Added quote and callout commands
 
 **Key Features:**
+
 - All block types now have renderers (text, headings, lists, to-do, code, quote, divider, callout)
 - Loading states with spinner
 - Error messages with dismiss functionality
@@ -123,26 +138,30 @@ NotionEditor
 - Callout blocks with type-based colors (info, warning, error, success)
 
 ### Phase 5: Chat Integration ✅
-**Status:** Complete (Redesigned with Notion-style UI)
+
+**Status:** Complete (Redesigned with block-based editor UI)
 
 **Reference Implementation:** [shreyasmanolkar/notion-browser-client](https://github.com/shreyasmanolkar/notion-browser-client)
 
 **Files Created:**
-- `src/app/components/notion-editor/ChatIntegration.tsx` - Notion-style chat button and side panel
-- `src/app/components/notion-editor/blocks/ChatMessageBlock.tsx` - Inline chat message block
+
+- `src/app/components/block-editor/ChatIntegration.tsx` - Chat button and side panel
+- `src/app/components/block-editor/blocks/ChatMessageBlock.tsx` - Inline chat message block
 
 **Files Updated:**
-- `src/app/components/notion-editor/NotionEditor.tsx` - Added chat button, side panel, and chat state management
-- `src/app/components/notion-editor/Block.tsx` - Added chat_message block rendering
-- `src/app/components/notion-editor/commands.ts` - Updated /chat command to insert inline chat block
-- `PLAN-notion-ui.md` - Updated reference to new Notion clone repository
+
+- `src/app/components/block-editor/BlockEditor.tsx` - Added chat button, side panel, and chat state management
+- `src/app/components/block-editor/Block.tsx` - Added chat_message block rendering
+- `src/app/components/block-editor/commands.ts` - Updated /chat command to insert inline chat block
+- `PLAN-notion-ui.md` - Updated reference to new block-based editor repository
 
 **Key Features:**
+
 - **Floating Chat Button**: Circular AI icon button in bottom-right corner that opens side panel
-- **Notion-Style Chat Panel**: Dark theme (#191919) with authentic Notion design:
-  - Welcome screen with AI sparkle icon, title "Your improved Notion AI"
+- **Chat Panel**: Dark theme (#191919) with block-based editor design:
+  - Welcome screen with AI sparkle icon, title "Your improved AI"
   - Quick action buttons (Summarize, Translate, Analyze, Task tracker) with hover effects
-  - Notion-style input box with blue border (#2E7DD6), @ and "New page" buttons
+  - Input box with blue border (#2E7DD6), @ and context buttons
   - Header with Edit, Minimize/Maximize, and Close buttons
   - Message display area with user/assistant message styling
   - Direct API integration for Q&A functionality
@@ -160,12 +179,11 @@ NotionEditor
 - **Phase 6**: Connect backend APIs (summarize, qa, figures, citations)
 - **Phase 7**: Implement figure/graph rendering in blocks
 - **Phase 8**: Add block state persistence to backend
-- **Phase 9**: Replace ResearchEditor with NotionEditor in ReaderWorkspace
-- **Phase 10**: Styling and polish (dark mode, Notion-like design)
+- **Phase 9**: Replace ResearchEditor with BlockEditor in ReaderWorkspace
+- **Phase 10**: Styling and polish (dark mode, block-based design)
 
 ## Known Issues
 
 - API execution handlers (Phase 6) need implementation
 - Block drag-and-drop reordering UI exists but functionality not wired
 - Figure/graph rendering (Phase 7) pending
-

@@ -34,12 +34,21 @@ export function TodoBlock({
       onExecuteApi,
       isLocked = false,
 }: TodoBlockProps) {
-  const checked = block.metadata?.checked ?? false;
+  // Extract checked state from markdown [ ] or [x] syntax or metadata
+  const content = block.content || "";
+  const markdownChecked = content.match(/^(\[[ xX]\])/)?.[1]?.toLowerCase().includes("x") ?? false;
+  const checked = block.metadata?.checked ?? markdownChecked;
 
   const handleCheckboxChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const newChecked = e.target.checked;
     updateBlock(block.id, {
-      metadata: { ...block.metadata, checked: e.target.checked },
+      metadata: { ...block.metadata, checked: newChecked },
     });
+    
+    // Also update markdown content to reflect checkbox state
+    const contentWithoutCheckbox = content.replace(/^\[[ xX]\]\s*/, "");
+    const newContent = newChecked ? `[x] ${contentWithoutCheckbox}` : `[ ] ${contentWithoutCheckbox}`;
+    onUpdate(newContent);
   };
 
   return (

@@ -1,5 +1,5 @@
 /**
- * Block type definitions for Notion-style editor
+ * Block type definitions for block-based editor
  */
 
 export type BlockType =

@@ -20,16 +20,18 @@ interface ChatIntegrationProps {
 
 /**
  * Floating AI chat button that opens chat panel
+ * Inspired by Notion's circular AI assistant button
  */
 export function ChatButton({ onClick }: { onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="fixed bottom-8 right-8 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg transition-all hover:bg-blue-700 hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:bg-blue-500 dark:hover:bg-blue-600"
+      className="fixed bottom-6 right-6 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-black text-white shadow-2xl transition-all hover:scale-110 hover:shadow-3xl focus:outline-none focus:ring-2 focus:ring-neutral-400 focus:ring-offset-2 dark:bg-neutral-800 dark:hover:bg-neutral-700"
       aria-label="Open AI chat"
+      title="AI Chat"
     >
-      <MessageSquare className="h-6 w-6" />
+      <MessageSquare className="h-5 w-5" />
     </button>
   );
 }
@@ -85,25 +87,25 @@ export function ChatSidePanel({
   }
 
   return (
-    <div className="fixed right-0 top-0 z-50 h-full w-96 border-l border-neutral-200 bg-white shadow-xl dark:border-neutral-700 dark:bg-neutral-900">
+    <div className="fixed right-0 top-0 z-50 h-full w-[380px] border-l border-neutral-200/80 bg-white shadow-2xl dark:border-neutral-800 dark:bg-neutral-950">
       <div className="flex h-full flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3 dark:border-neutral-700">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-700 dark:text-neutral-300">
-            AI Chat
+        {/* Header - Notion-style clean header */}
+        <div className="flex items-center justify-between border-b border-neutral-200/60 px-5 py-3.5 dark:border-neutral-800">
+          <h2 className="text-sm font-medium text-neutral-900 dark:text-neutral-100">
+            AI Assistant
           </h2>
           <button
             type="button"
             onClick={() => onToggle(false)}
-            className="rounded p-1 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+            className="flex h-7 w-7 items-center justify-center rounded text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
             aria-label="Close chat"
           >
-            <X className="h-5 w-5" />
+            <X className="h-4 w-4" />
           </button>
         </div>
 
         {/* Chat Panel */}
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-hidden bg-neutral-50/30 dark:bg-neutral-900/50">
           <ChatPanel
             paperId={paperId}
             draft={chatDraft}

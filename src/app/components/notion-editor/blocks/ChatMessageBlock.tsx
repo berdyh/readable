@@ -73,33 +73,35 @@ export function ChatMessageBlock({
     // Could append error to content as well
   }, []);
 
-  // If collapsed, show summary
+  // If collapsed, show summary - Notion-style compact view
   if (!isExpanded) {
     return (
-      <div className="my-2 rounded-lg border border-neutral-200 bg-neutral-50 p-3 dark:border-neutral-700 dark:bg-neutral-800">
+      <div className="group relative my-1.5 rounded-md border border-neutral-200/60 bg-neutral-50/50 px-3 py-2.5 transition-colors hover:bg-neutral-100/80 dark:border-neutral-800 dark:bg-neutral-900/40 dark:hover:bg-neutral-800/60">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <MessageSquare className="h-4 w-4 text-neutral-500" />
-            <span className="text-sm text-neutral-600 dark:text-neutral-400">
-              Chat Assistant {messages.length > 0 && `(${messages.length} messages)`}
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-6 w-6 items-center justify-center rounded bg-neutral-200 dark:bg-neutral-700">
+              <MessageSquare className="h-3.5 w-3.5 text-neutral-600 dark:text-neutral-300" />
+            </div>
+            <span className="text-sm font-medium text-neutral-700 dark:text-neutral-200">
+              AI Chat {messages.length > 0 && <span className="text-xs text-neutral-500 dark:text-neutral-400">({messages.length})</span>}
             </span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
             <button
               type="button"
               onClick={() => setIsExpanded(true)}
-              className="rounded px-2 py-1 text-xs text-neutral-600 hover:bg-neutral-200 dark:text-neutral-400 dark:hover:bg-neutral-700"
+              className="rounded px-2 py-1 text-xs font-medium text-neutral-600 transition-colors hover:bg-neutral-200 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
             >
-              Expand
+              Open
             </button>
             {onDelete && (
               <button
                 type="button"
                 onClick={onDelete}
-                className="rounded p-1 text-neutral-400 hover:text-red-600 dark:hover:text-red-400"
+                className="flex h-6 w-6 items-center justify-center rounded text-neutral-400 transition-colors hover:bg-neutral-200 hover:text-red-600 dark:hover:bg-neutral-700 dark:hover:text-red-400"
                 aria-label="Delete chat block"
               >
-                <X className="h-4 w-4" />
+                <X className="h-3.5 w-3.5" />
               </button>
             )}
           </div>
@@ -108,45 +110,47 @@ export function ChatMessageBlock({
     );
   }
 
-  // Expanded view with full chat interface
+  // Expanded view with full chat interface - Notion-style design
   return (
-    <div className="my-4 rounded-lg border border-neutral-200 bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-800">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-2 dark:border-neutral-600">
-        <div className="flex items-center gap-2">
-          <MessageSquare className="h-4 w-4 text-neutral-500" />
-          <span className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
-            Inline Chat
+    <div className="my-3 rounded-lg border border-neutral-200/80 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+      {/* Header - Notion-style clean header */}
+      <div className="flex items-center justify-between border-b border-neutral-200/60 px-4 py-3 dark:border-neutral-800">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-7 w-7 items-center justify-center rounded bg-neutral-100 dark:bg-neutral-800">
+            <MessageSquare className="h-4 w-4 text-neutral-600 dark:text-neutral-300" />
+          </div>
+          <span className="text-sm font-medium text-neutral-900 dark:text-neutral-100">
+            AI Assistant
           </span>
         </div>
         <button
           type="button"
           onClick={() => setIsExpanded(false)}
-          className="rounded p-1 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
+          className="flex h-7 w-7 items-center justify-center rounded text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
           aria-label="Collapse chat"
         >
           <X className="h-4 w-4" />
         </button>
       </div>
 
-      {/* Chat Messages (existing content) */}
+      {/* Chat Messages (existing content) - Notion-style message display */}
       {messages.length > 0 && (
-        <div className="border-b border-neutral-200 dark:border-neutral-600">
-          <div className="max-h-[300px] space-y-0 overflow-y-auto px-4 py-3">
+        <div className="border-b border-neutral-200/60 dark:border-neutral-800">
+          <div className="max-h-[320px] space-y-0 overflow-y-auto px-4 py-3">
             {messages.map((message, index) => (
               <div key={index}>
                 <div
                   className={clsx(
-                    "whitespace-pre-wrap rounded p-2 text-sm",
+                    "whitespace-pre-wrap rounded-md p-3 text-sm leading-relaxed",
                     message.trim().startsWith("Q:")
-                      ? "bg-blue-50 text-blue-900 dark:bg-blue-950/20 dark:text-blue-200"
-                      : "bg-white text-neutral-900 dark:bg-neutral-900 dark:text-neutral-100",
+                      ? "bg-blue-50/80 text-blue-900 dark:bg-blue-950/30 dark:text-blue-100"
+                      : "bg-neutral-50/50 text-neutral-900 dark:bg-neutral-900/50 dark:text-neutral-100",
                   )}
                 >
                   {message.trim()}
                 </div>
                 {index < messages.length - 1 && (
-                  <div className="my-2 border-t border-neutral-200 dark:border-neutral-600" />
+                  <div className="my-2 h-px bg-neutral-200/60 dark:bg-neutral-800" />
                 )}
               </div>
             ))}

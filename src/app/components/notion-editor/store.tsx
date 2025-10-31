@@ -46,6 +46,7 @@ export function EditorProvider({
   initialBlocks = [],
 }: EditorProviderProps) {
   const [blocks, setBlocks] = useState<Block[]>(initialBlocks);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -64,18 +65,21 @@ export function EditorProvider({
       }
 
       saveTimeoutRef.current = setTimeout(async () => {
+        setLoading(true);
         try {
           // TODO: Implement API call to save blocks
           // await fetch(`/api/editor/blocks/${paperId}`, {
           //   method: "PUT",
           //   headers: { "Content-Type": "application/json" },
-          //   body: JSON.stringify({ blocks: blocksToSave }),
+          //   body: JSON.stringify({ blocks: _blocksToSave }),
           // });
         } catch (err) {
           console.error("Failed to save blocks:", err);
           setError(
             err instanceof Error ? err.message : "Failed to save blocks",
           );
+        } finally {
+          setLoading(false);
         }
       }, 1000);
     },

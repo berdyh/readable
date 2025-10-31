@@ -66,16 +66,32 @@ export function TipTapBlock({
           },
         },
         // Allow hard breaks (Shift+Enter) for multi-line text within a block
-        hardBreak: true,
-        // Keep text formatting
-        bold: true,
-        italic: true,
-        strike: true,
-        code: true,
+        hardBreak: {
+          keepMarks: true,
+        },
+        // Keep text formatting - use default configs
+        bold: {},
+        italic: {},
+        strike: {},
+        code: {},
         // Enable lists for list block types - allows inline list editing with Enter
-        bulletList: blockType === "bullet_list" ? true : false,
-        orderedList: blockType === "number_list" ? true : false,
-        listItem: blockType === "bullet_list" || blockType === "number_list" ? true : false,
+        bulletList:
+          blockType === "bullet_list"
+            ? {
+                keepAttributes: false,
+                keepMarks: true,
+              }
+            : false,
+        orderedList:
+          blockType === "number_list"
+            ? {
+                keepMarks: true,
+              }
+            : false,
+        listItem:
+          blockType === "bullet_list" || blockType === "number_list"
+            ? {}
+            : false,
       }),
       Placeholder.configure({
         placeholder,

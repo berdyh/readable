@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback } from "react";
 import {
   MessageSquare,
   X,
@@ -17,7 +17,6 @@ import {
   Minimize2,
   Sparkles,
 } from "lucide-react";
-import ChatPanel from "../chat/ChatPanel";
 import type { Block } from "./types";
 import type { QuestionSelection } from "@/server/qa/types";
 

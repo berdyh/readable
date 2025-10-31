@@ -90,14 +90,22 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
     // Check if block is empty
     // TipTap might return empty HTML like "<p></p>" or just empty string
     const blockContent = block.content?.trim() || "";
+    
+    // Strip all HTML tags and check if there's any actual text content
+    const textContent = blockContent
+      .replace(/<[^>]*>/g, "") // Remove all HTML tags
+      .replace(/&nbsp;/g, " ") // Replace non-breaking spaces
+      .replace(/&[a-zA-Z]+;/g, "") // Remove HTML entities
+      .trim();
+    
     const isEmpty = 
       blockContent.length === 0 || 
       blockContent === "<p></p>" || 
       blockContent === "" ||
       blockContent === "<p><br></p>" ||
       blockContent === "<br>" ||
-      // Check if it's just HTML tags with no text
-      (blockContent.startsWith("<p") && blockContent.endsWith("</p>") && !blockContent.match(/[^<>]/));
+      // Check if there's no actual text content after stripping HTML
+      textContent.length === 0;
     
     if (isEmpty) {
       // If there's a previous block, focus it

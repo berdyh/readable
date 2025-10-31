@@ -114,9 +114,15 @@ export function parseSummaryToBlocks(summary: SummaryResult): Block[] {
 
     for (const finding of summary.key_findings) {
       const findingText = `${finding.statement}\n\nEvidence: ${finding.evidence}`;
-      // Parse page anchor if available (format: "p.5" -> 5)
+      // Parse page anchor if available (format: "(page 4)" -> 4)
       const pageAnchor = finding.page_anchors?.[0];
-      const pageNumber = pageAnchor ? parseInt(pageAnchor.replace("p.", "")) : undefined;
+      let pageNumber: number | undefined;
+      if (pageAnchor) {
+        const match = pageAnchor.match(/\(page\s+(\d+)\)/);
+        if (match) {
+          pageNumber = parseInt(match[1], 10);
+        }
+      }
       blocks.push({
         id: uuidv4(),
         type: "callout",
@@ -142,13 +148,22 @@ export function parseSummaryToBlocks(summary: SummaryResult): Block[] {
       });
 
     for (const figure of summary.figures) {
+      // Parse page number from page_anchor format: "(page 4)" -> 4
+      let pageNumber: number | undefined;
+      if (figure.page_anchor) {
+        const match = figure.page_anchor.match(/\(page\s+(\d+)\)/);
+        if (match) {
+          pageNumber = parseInt(match[1], 10);
+        }
+      }
+      
       blocks.push({
         id: uuidv4(),
         type: "figure",
         content: figure.caption || figure.insight || "",
         metadata: {
           figureId: figure.figure_id,
-          page: figure.page_anchor ? parseInt(figure.page_anchor) : undefined,
+          page: pageNumber,
           caption: figure.caption,
           insight: figure.insight,
           locked: true, // Generated blocks are locked by default

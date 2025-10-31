@@ -51,16 +51,19 @@ export function getModel(
     taskKey = 'default';
   } else {
     // Handle aliases and map to correct task keys
-    const normalized = taskType.toLowerCase();
-    if (normalized === 'summary' || normalized === 'summarize' || normalized === 'paper_summary') {
+    const normalized = taskType.toLowerCase().replace(/-/g, '_');
+    
+    // Check exact matches first (including the actual config keys)
+    if (normalized === 'paper_summary' || normalized === 'summary' || normalized === 'summarize') {
       taskKey = 'paper_summary';
-    } else if (normalized === 'inline_summary' || normalized === 'selection_summary') {
+    } else if (normalized === 'selection_summary' || normalized === 'inline_summary') {
       taskKey = 'selection_summary';
-    } else if (normalized === 'question' || normalized === 'qa') {
+    } else if (normalized === 'qa' || normalized === 'question') {
       taskKey = 'qa';
     } else if (normalized === 'default') {
       taskKey = 'default';
     }
+    // If no match found, taskKey remains 'default' as initialized
   }
   
   // Get task-specific model or fall back to default
@@ -69,9 +72,10 @@ export function getModel(
     return config.default.model;
   }
   
-  // Check for environment variable override (e.g., OPENAI_QA_MODEL, ANTHROPIC_SUMMARY_MODEL)
+  // Check for environment variable override (e.g., OPENAI_QA_MODEL, ANTHROPIC_PAPER_SUMMARY_MODEL)
   const providerUpper = provider.toUpperCase();
-  const taskUpper = taskKey.toUpperCase().replace('_', '');
+  // Keep underscores in task key for env var names (e.g., PAPER_SUMMARY, not PAPERSUMMARY)
+  const taskUpper = taskKey.toUpperCase();
   const envKey = `${providerUpper}_${taskUpper}_MODEL`;
   const envOverride = process.env[envKey];
   
@@ -98,16 +102,19 @@ export function getModelConfig(
     taskKey = 'default';
   } else {
     // Handle aliases and map to correct task keys (matching getModel logic)
-    const normalized = taskType.toLowerCase();
-    if (normalized === 'summary' || normalized === 'summarize' || normalized === 'paper_summary') {
+    const normalized = taskType.toLowerCase().replace(/-/g, '_');
+    
+    // Check exact matches first (including the actual config keys)
+    if (normalized === 'paper_summary' || normalized === 'summary' || normalized === 'summarize') {
       taskKey = 'paper_summary';
-    } else if (normalized === 'inline_summary' || normalized === 'selection_summary') {
+    } else if (normalized === 'selection_summary' || normalized === 'inline_summary') {
       taskKey = 'selection_summary';
-    } else if (normalized === 'question' || normalized === 'qa') {
+    } else if (normalized === 'qa' || normalized === 'question') {
       taskKey = 'qa';
     } else if (normalized === 'default') {
       taskKey = 'default';
     }
+    // If no match found, taskKey remains 'default' as initialized
   }
   
   return config[taskKey] ?? config.default;

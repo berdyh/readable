@@ -7,6 +7,9 @@ Completely recreate the UI for inputting analysis/summary and displaying researc
 - Parsing text and graphs into "pages" in the Notion UI
 - Connecting all backend tools to the UI
 
+## Reference Implementation
+**Updated**: Using [shreyasmanolkar/notion-browser-client](https://github.com/shreyasmanolkar/notion-browser-client) as the reference implementation for Notion-style UI components and design patterns.
+
 ## Current State Analysis
 
 ### Existing Components
@@ -40,15 +43,6 @@ Completely recreate the UI for inputting analysis/summary and displaying researc
 6. **`/api/editor/ingest/arxiv`** - Ingests arXiv papers
 
 ### Notion Clone Architecture (from reference)
-**Reference Repository**: [shreyasmanolkar/notion-browser-client](https://github.com/shreyasmanolkar/notion-browser-client)
-
-This is a well-architected Notion clone built with:
-- React + TypeScript
-- ProseMirror + Tiptap for rich text editing
-- Redux Toolkit for state management
-- Modern design patterns and component structure
-
-**Key Components**:
 1. **Editor Component** - Main container managing blocks state
 2. **Blocks Component** - Individual block renderer with:
    - Content-editable divs
@@ -56,7 +50,6 @@ This is a well-architected Notion clone built with:
    - "/" slash command detection
    - Drag and drop reordering
    - Block options menu
-3. **Chat/Sidebar Components** - Reference for panel design patterns
 
 ## Implementation Plan
 

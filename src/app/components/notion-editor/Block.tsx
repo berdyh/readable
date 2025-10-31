@@ -43,10 +43,12 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
       await executeApiCommand(command, {
         paperId: state.paperId,
         blockIndex: index + 1,
-        onInsertBlocks: (blocks: Block[]) => {
-          // Insert all blocks after current block
+        onInsertBlocks: (blocks: Block[], insertIndex?: number) => {
+          // Use provided insertIndex if available, otherwise use index + 1 (after current block)
+          const startIndex = insertIndex !== undefined ? insertIndex : index + 1;
+          // Insert all blocks at the specified index
           blocks.forEach((newBlock, offset) => {
-            insertBlock(newBlock, index + 1 + offset);
+            insertBlock(newBlock, startIndex + offset);
           });
         },
         selection: params?.selection as QuestionSelection | undefined,

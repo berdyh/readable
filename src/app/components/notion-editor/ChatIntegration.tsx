@@ -23,7 +23,7 @@ interface ChatIntegrationProps {
   paperId: string;
   isOpen: boolean;
   onToggle: (open: boolean) => void;
-  onInsertBlocks?: (blocks: Block[]) => void;
+  onInsertBlocks?: (blocks: Block[], insertIndex?: number) => void;
   selection?: QuestionSelection;
   onSelectionClear?: () => void;
   personaEnabled?: boolean;

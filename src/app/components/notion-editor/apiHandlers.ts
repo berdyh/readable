@@ -17,7 +17,7 @@ import type { QuestionSelection } from "@/server/qa/types";
 export interface ApiHandlerContext {
   paperId: string;
   blockIndex: number;
-  onInsertBlocks: (blocks: Block[]) => void;
+  onInsertBlocks: (blocks: Block[], insertIndex?: number) => void;
   selection?: QuestionSelection;
   userId?: string;
   personaId?: string;
@@ -67,7 +67,7 @@ export async function executeApiCommand(
 async function executeSummary(
   paperId: string,
   blockIndex: number,
-  onInsertBlocks: (blocks: Block[]) => void,
+  onInsertBlocks: (blocks: Block[], insertIndex?: number) => void,
   userId?: string,
   personaId?: string,
 ): Promise<void> {
@@ -86,7 +86,8 @@ async function executeSummary(
   const blocks = parseSummaryToBlocks(result);
   
   if (blocks.length > 0) {
-    onInsertBlocks(blocks);
+    // Use blockIndex to ensure blocks are inserted at the correct position
+    onInsertBlocks(blocks, blockIndex);
   }
 }
 
@@ -96,7 +97,7 @@ async function executeSummary(
 async function executeFigures(
   paperId: string,
   blockIndex: number,
-  onInsertBlocks: (blocks: Block[]) => void,
+  onInsertBlocks: (blocks: Block[], insertIndex?: number) => void,
   selection?: QuestionSelection,
 ): Promise<void> {
   if (!selection?.text) {
@@ -118,14 +119,14 @@ async function executeFigures(
   const blocks = parseFiguresToBlocks(result);
   
   if (blocks.length > 0) {
-    onInsertBlocks(blocks);
+    onInsertBlocks(blocks, blockIndex);
   } else {
     // Insert a placeholder if no figures found
     onInsertBlocks([{
       id: `placeholder-${Date.now()}`,
       type: "paragraph",
       content: "No figures found for this selection.",
-    }]);
+    }], blockIndex);
   }
 }
 
@@ -135,7 +136,7 @@ async function executeFigures(
 async function executeCitations(
   paperId: string,
   blockIndex: number,
-  onInsertBlocks: (blocks: Block[]) => void,
+  onInsertBlocks: (blocks: Block[], insertIndex?: number) => void,
   selection?: QuestionSelection,
 ): Promise<void> {
   if (!selection?.text) {
@@ -157,14 +158,14 @@ async function executeCitations(
   const blocks = parseCitationsToBlocks(result);
   
   if (blocks.length > 0) {
-    onInsertBlocks(blocks);
+    onInsertBlocks(blocks, blockIndex);
   } else {
     // Insert a placeholder if no citations found
     onInsertBlocks([{
       id: `placeholder-${Date.now()}`,
       type: "paragraph",
       content: "No citations found for this selection.",
-    }]);
+    }], blockIndex);
   }
 }
 
@@ -174,7 +175,7 @@ async function executeCitations(
 async function executeSelectionSummary(
   paperId: string,
   blockIndex: number,
-  onInsertBlocks: (blocks: Block[]) => void,
+  onInsertBlocks: (blocks: Block[], insertIndex?: number) => void,
   selection?: QuestionSelection,
   userId?: string,
   personaId?: string,
@@ -198,7 +199,7 @@ async function executeSelectionSummary(
   const blocks = parseSelectionSummaryToBlocks(result);
   
   if (blocks.length > 0) {
-    onInsertBlocks(blocks);
+    onInsertBlocks(blocks, blockIndex);
   }
 }
 

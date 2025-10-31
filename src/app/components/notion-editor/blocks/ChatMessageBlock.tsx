@@ -12,7 +12,7 @@ interface ChatMessageBlockProps {
   onEnter?: () => void;
   onBackspace?: () => void;
   paperId?: string;
-  onInsertBlocks?: (blocks: Block[]) => void;
+  onInsertBlocks?: (blocks: Block[], insertIndex?: number) => void;
   onDelete?: () => void;
 }
 
@@ -57,9 +57,12 @@ export function ChatMessageBlock({
   );
 
   const handleQuestionSent = useCallback((question: string) => {
-    // Prepend question to block content
-    const currentContent = block.content || "";
+    // Use question parameter directly - it's the fresh value passed to this callback
+    // Note: block.content might be stale in the closure, but the question parameter is always fresh
     const questionLine = `Q: ${question}`;
+    
+    // Read current content from block prop (will be fresh on each render due to dependency)
+    const currentContent = block.content || "";
     const newContent = currentContent
       ? `${currentContent}\n${questionLine}\n---\n`
       : `${questionLine}\n---\n`;

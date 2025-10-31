@@ -13,6 +13,10 @@ import { TextBlock } from "./blocks/TextBlock";
 import { HeadingBlock } from "./blocks/HeadingBlock";
 import { ListBlock } from "./blocks/ListBlock";
 import { TodoBlock } from "./blocks/TodoBlock";
+import { CodeBlock } from "./blocks/CodeBlock";
+import { QuoteBlock } from "./blocks/QuoteBlock";
+import { DividerBlock } from "./blocks/DividerBlock";
+import { CalloutBlock } from "./blocks/CalloutBlock";
 
 interface BlockProps {
   block: BlockType;
@@ -156,6 +160,59 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
             onBackspace={handleBackspace}
             onSlashCommand={handleSlashCommand}
             updateBlock={updateBlock}
+            paperId={state.paperId}
+            blockIndex={index}
+            onChangeBlockType={changeBlockType}
+            onInsertBlock={(type, idx, content) => {
+              const newBlock = addBlock(type, idx, content);
+              insertBlock(newBlock, idx);
+            }}
+          />
+        );
+      case "code":
+        return (
+          <CodeBlock
+            block={block}
+            onUpdate={handleUpdate}
+            onEnter={handleEnter}
+            onBackspace={handleBackspace}
+            onSlashCommand={handleSlashCommand}
+            paperId={state.paperId}
+            blockIndex={index}
+            onChangeBlockType={changeBlockType}
+            onInsertBlock={(type, idx, content) => {
+              const newBlock = addBlock(type, idx, content);
+              insertBlock(newBlock, idx);
+            }}
+          />
+        );
+      case "quote":
+        return (
+          <QuoteBlock
+            block={block}
+            onUpdate={handleUpdate}
+            onEnter={handleEnter}
+            onBackspace={handleBackspace}
+            onSlashCommand={handleSlashCommand}
+            paperId={state.paperId}
+            blockIndex={index}
+            onChangeBlockType={changeBlockType}
+            onInsertBlock={(type, idx, content) => {
+              const newBlock = addBlock(type, idx, content);
+              insertBlock(newBlock, idx);
+            }}
+          />
+        );
+      case "divider":
+        return <DividerBlock block={block} />;
+      case "callout":
+        return (
+          <CalloutBlock
+            block={block}
+            onUpdate={handleUpdate}
+            onEnter={handleEnter}
+            onBackspace={handleBackspace}
+            onSlashCommand={handleSlashCommand}
             paperId={state.paperId}
             blockIndex={index}
             onChangeBlockType={changeBlockType}

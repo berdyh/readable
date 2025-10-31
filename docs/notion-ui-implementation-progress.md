@@ -94,7 +94,39 @@ NotionEditor
 
 ## Next Phases
 
-- **Phase 4**: Create main NotionEditor component integrating all blocks (in progress)
+- **Phase 4**: Create main NotionEditor component integrating all blocks ✅ (Complete)
+### Phase 4: Main Editor Component ✅
+**Status:** Complete
+
+**Files Created:**
+- `src/app/components/notion-editor/blocks/CodeBlock.tsx` - Code block renderer
+- `src/app/components/notion-editor/blocks/QuoteBlock.tsx` - Quote block renderer
+- `src/app/components/notion-editor/blocks/DividerBlock.tsx` - Horizontal divider block
+- `src/app/components/notion-editor/blocks/CalloutBlock.tsx` - Callout block with icon and colors
+- `src/app/components/notion-editor/parsers.ts` - Utilities to parse API responses into blocks
+
+**Files Updated:**
+- `src/app/components/notion-editor/NotionEditor.tsx` - Added loading/error states and status messages
+- `src/app/components/notion-editor/Block.tsx` - Added support for code, quote, divider, and callout blocks
+- `src/app/components/notion-editor/blocks/TipTapBlock.tsx` - Enhanced Enter key handling for code/quote/callout blocks
+- `src/app/components/notion-editor/commands.ts` - Added quote and callout commands
+
+**Key Features:**
+- All block types now have renderers (text, headings, lists, to-do, code, quote, divider, callout)
+- Loading states with spinner
+- Error messages with dismiss functionality
+- Status messages for async operations
+- Parser utilities for converting API responses to blocks:
+  - `parseSummaryToBlocks()` - Converts SummaryResult to blocks
+  - `parseFigureToBlock()` - Converts figure data to FigureBlock
+  - `parseCitationToBlock()` - Converts citation data to CitationBlock
+  - `parseSelectionSummaryToBlocks()` - Converts selection summaries to callout blocks
+- Code blocks allow multi-line editing (Enter creates new lines)
+- Quote blocks with italic styling
+- Callout blocks with type-based colors (info, warning, error, success)
+
+## Next Phases
+
 - **Phase 5**: Implement chat integration (right panel + inline /chat command)
 - **Phase 6**: Connect backend APIs (summarize, qa, figures, citations)
 - **Phase 7**: Implement figure/graph rendering in blocks

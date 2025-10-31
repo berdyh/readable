@@ -100,6 +100,28 @@ export const TEXT_COMMANDS: SlashCommandItem[] = [
       context.onChangeBlockType?.(context.blockId, "code");
     },
   },
+  {
+    id: "quote",
+    title: "Quote",
+    description: "Insert a quote block",
+    icon: "Quote",
+    category: "text",
+    keywords: ["quote", "citation"],
+    run: (context) => {
+      context.onChangeBlockType?.(context.blockId, "quote");
+    },
+  },
+  {
+    id: "callout",
+    title: "Callout",
+    description: "Insert a callout block",
+    icon: "Sparkles",
+    category: "text",
+    keywords: ["callout", "note", "info"],
+    run: (context) => {
+      context.onChangeBlockType?.(context.blockId, "callout");
+    },
+  },
 ];
 
 // Research-specific commands

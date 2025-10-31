@@ -93,6 +93,8 @@ export function TipTapBlock({
           blockType === "heading_2" && "text-2xl font-bold mt-5 mb-3",
           blockType === "heading_3" && "text-xl font-semibold mt-4 mb-2",
           blockType === "paragraph" && "text-[15px] leading-relaxed",
+          blockType === "code" && "font-mono text-sm",
+          blockType === "quote" && "italic text-neutral-600 dark:text-neutral-400",
           className,
         ),
       },
@@ -111,9 +113,22 @@ export function TipTapBlock({
             return true;
           }
           
-          // For paragraph/heading blocks, allow inline editing with Enter (line breaks)
+          // For code blocks, always allow Enter to create new lines within the block
+          if (blockType === "code") {
+            // Let TipTap handle Enter normally (creates line breaks)
+            return false;
+          }
+          
+          // For paragraph/heading/quote/callout blocks, allow inline editing with Enter (line breaks)
           // Only create new block when at the very end of content
-          if (blockType === "paragraph" || blockType === "heading_1" || blockType === "heading_2" || blockType === "heading_3") {
+          if (
+            blockType === "paragraph" ||
+            blockType === "heading_1" ||
+            blockType === "heading_2" ||
+            blockType === "heading_3" ||
+            blockType === "quote" ||
+            blockType === "callout"
+          ) {
             // At end of content - create new block for new paragraph/heading
             if (isAtEnd && doc.textContent.trim().length > 0) {
               event.preventDefault();

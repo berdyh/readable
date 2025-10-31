@@ -27,9 +27,11 @@ interface BlockProps {
 }
 
 export function Block({ block, index, onSlashCommand }: BlockProps) {
-  const { state, updateBlock, deleteBlock, addBlock, changeBlockType, insertBlock } = useEditorStore();
+  const { state, updateBlock, deleteBlock, addBlock, changeBlockType, insertBlock, moveBlock } = useEditorStore();
   const [isFocused, setIsFocused] = useState(false);
   const [showOptions, setShowOptions] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const isLocked = block.metadata?.locked === true;
 
   // Handler for API execution from slash commands
@@ -175,6 +177,70 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
       },
     });
   }, [block.id, block.metadata, isLocked, updateBlock]);
+
+  // Drag and drop handlers
+  const handleDragStart = useCallback((e: React.DragEvent) => {
+    setIsDragging(true);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", block.id);
+    e.dataTransfer.setData("application/block-index", index.toString());
+    // Add visual feedback
+    if (e.dataTransfer.setDragImage) {
+      const dragImage = e.currentTarget.cloneNode(true) as HTMLElement;
+      dragImage.style.opacity = "0.5";
+      dragImage.style.transform = "rotate(2deg)";
+      document.body.appendChild(dragImage);
+      e.dataTransfer.setDragImage(dragImage, 0, 0);
+      setTimeout(() => document.body.removeChild(dragImage), 0);
+    }
+  }, [block.id, index]);
+
+  const handleDragEnd = useCallback(() => {
+    setIsDragging(false);
+    setDragOver(false);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "move";
+    setDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Only set dragOver to false if we're leaving the block itself, not a child
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX;
+    const y = e.clientY;
+    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+      setDragOver(false);
+    }
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+    setIsDragging(false);
+
+    const draggedBlockId = e.dataTransfer.getData("text/plain");
+    const draggedIndex = parseInt(e.dataTransfer.getData("application/block-index"), 10);
+
+    if (draggedBlockId && draggedBlockId !== block.id && draggedIndex !== index) {
+      // Calculate the target index based on mouse position
+      const rect = e.currentTarget.getBoundingClientRect();
+      const y = e.clientY;
+      const midPoint = rect.top + rect.height / 2;
+      const targetIndex = y < midPoint ? index : index + 1;
+
+      // Adjust target index if dragging from above
+      const finalTargetIndex = draggedIndex < targetIndex ? targetIndex - 1 : targetIndex;
+
+      moveBlock(draggedBlockId, draggedIndex, finalTargetIndex);
+    }
+  }, [block.id, index, moveBlock]);
 
   const handleFocus = useCallback(() => {
     setIsFocused(true);
@@ -355,10 +421,16 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
       className={clsx(
         "group relative flex items-start gap-2 rounded-md px-2 py-1 transition",
         isFocused && "bg-neutral-50 dark:bg-neutral-900",
+        isDragging && "opacity-50",
+        dragOver && "ring-2 ring-blue-500 dark:ring-blue-400",
       )}
       data-block-id={block.id}
       onFocus={handleFocus}
       onBlur={handleBlur}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      draggable={false}
     >
       {/* Lock/Edit toggle button - always in top-right corner */}
       <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity z-10">
@@ -392,6 +464,9 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
           </button>
           <button
             type="button"
+            draggable
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
             className="flex h-6 w-6 items-center justify-center rounded hover:bg-neutral-200 dark:hover:bg-neutral-700 cursor-move"
             title="Drag to reorder"
           >

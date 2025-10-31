@@ -130,7 +130,7 @@ export function TipTapBlock({
           return true; // Prevent default behavior
         }
 
-        // Handle Enter key based on block type
+        // Handle Enter key (without Shift) - creates new block at end, allows inline editing otherwise
         if (event.key === "Enter" && !event.shiftKey) {
           const { from } = view.state.selection;
           const doc = view.state.doc;
@@ -169,6 +169,19 @@ export function TipTapBlock({
             // Otherwise let TipTap handle Enter normally (creates line breaks for inline editing)
             return false;
           }
+        }
+
+        // Handle Shift+Enter - always create new block of same type (like plus button)
+        if (event.key === "Enter" && event.shiftKey) {
+          // For code blocks, Shift+Enter should still create line breaks
+          if (blockType === "code") {
+            return false; // Let TipTap handle it (creates line break)
+          }
+          
+          // For all other blocks, Shift+Enter creates a new block of the same type
+          event.preventDefault();
+          onEnter?.();
+          return true;
         }
 
         // Handle Backspace - delete block if empty

@@ -63,13 +63,9 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
   );
 
   const handleEnter = useCallback(() => {
-    // Create new block based on current block type (like Notion)
-    let newBlockType: BlockType["type"] = "paragraph";
-    
-    // For list blocks, create new block of same type
-    if (block.type === "to_do_list" || block.type === "bullet_list" || block.type === "number_list") {
-      newBlockType = block.type;
-    }
+    // Create new block of the same type (like Notion's plus button)
+    // Always preserve the current block type
+    const newBlockType = block.type;
     
     // Create new block after current block
     const newBlock = addBlock(newBlockType, index);

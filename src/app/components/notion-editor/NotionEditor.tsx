@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { clsx } from "clsx";
 import { Loader2, AlertCircle } from "lucide-react";
 import { EditorProvider, useEditorStore } from "./store";
 import { Block } from "./Block";
 import type { Block as BlockType } from "./types";
+import { ChatButton, ChatSidePanel } from "./ChatIntegration";
+import type { QuestionSelection } from "@/server/qa/types";
 
 interface NotionEditorProps {
   paperId: string;
@@ -14,6 +16,10 @@ interface NotionEditorProps {
   statusMessage?: string | null;
   errorMessage?: string | null;
   onStatusClear?: () => void;
+  showChatButton?: boolean;
+  personaEnabled?: boolean;
+  onPersonaToggle?: (enabled: boolean) => void;
+  userId?: string;
 }
 
 export function NotionEditor({
@@ -23,7 +29,14 @@ export function NotionEditor({
   statusMessage,
   errorMessage,
   onStatusClear,
+  showChatButton = true,
+  personaEnabled = false,
+  onPersonaToggle,
+  userId,
 }: NotionEditorProps) {
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [chatSelection, setChatSelection] = useState<QuestionSelection | undefined>(undefined);
+
   return (
     <EditorProvider paperId={paperId} initialBlocks={initialBlocks}>
       <NotionEditorContent
@@ -31,6 +44,15 @@ export function NotionEditor({
         statusMessage={statusMessage}
         errorMessage={errorMessage}
         onStatusClear={onStatusClear}
+        isChatOpen={isChatOpen}
+        onChatToggle={setIsChatOpen}
+        chatSelection={chatSelection}
+        onChatSelectionClear={() => setChatSelection(undefined)}
+        showChatButton={showChatButton}
+        paperId={paperId}
+        personaEnabled={personaEnabled}
+        onPersonaToggle={onPersonaToggle}
+        userId={userId}
       />
     </EditorProvider>
   );
@@ -41,13 +63,31 @@ function NotionEditorContent({
   statusMessage,
   errorMessage,
   onStatusClear,
+  isChatOpen,
+  onChatToggle,
+  chatSelection,
+  onChatSelectionClear,
+  showChatButton,
+  paperId,
+  personaEnabled,
+  onPersonaToggle,
+  userId,
 }: {
   onSlashCommand?: (query: string, blockIndex: number) => void;
   statusMessage?: string | null;
   errorMessage?: string | null;
   onStatusClear?: () => void;
+  isChatOpen: boolean;
+  onChatToggle: (open: boolean) => void;
+  chatSelection?: QuestionSelection;
+  onChatSelectionClear?: () => void;
+  showChatButton: boolean;
+  paperId: string;
+  personaEnabled?: boolean;
+  onPersonaToggle?: (enabled: boolean) => void;
+  userId?: string;
 }) {
-  const { state } = useEditorStore();
+  const { state, insertBlock } = useEditorStore();
 
   // Auto-clear status messages after 3 seconds
   useEffect(() => {
@@ -126,6 +166,29 @@ function NotionEditorContent({
           />
         ))}
       </div>
+
+      {/* Floating Chat Button */}
+      {showChatButton && !isChatOpen && (
+        <ChatButton onClick={() => onChatToggle(true)} />
+      )}
+
+      {/* Side Chat Panel */}
+      <ChatSidePanel
+        paperId={paperId}
+        isOpen={isChatOpen}
+        onToggle={onChatToggle}
+        selection={chatSelection}
+        onSelectionClear={onChatSelectionClear}
+        personaEnabled={personaEnabled}
+        onPersonaToggle={onPersonaToggle}
+        userId={userId}
+        onInsertBlocks={(blocks) => {
+          // Insert blocks after the last block
+          blocks.forEach((block, i) => {
+            insertBlock(block, state.blocks.length + i);
+          });
+        }}
+      />
     </div>
   );
 }

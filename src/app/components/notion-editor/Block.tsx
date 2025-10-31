@@ -17,6 +17,7 @@ import { CodeBlock } from "./blocks/CodeBlock";
 import { QuoteBlock } from "./blocks/QuoteBlock";
 import { DividerBlock } from "./blocks/DividerBlock";
 import { CalloutBlock } from "./blocks/CalloutBlock";
+import { ChatMessageBlock } from "./blocks/ChatMessageBlock";
 
 interface BlockProps {
   block: BlockType;
@@ -220,6 +221,21 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
               const newBlock = addBlock(type, idx, content);
               insertBlock(newBlock, idx);
             }}
+          />
+        );
+      case "chat_message":
+        return (
+          <ChatMessageBlock
+            block={block}
+            onUpdate={handleUpdate}
+            onBackspace={handleBackspace}
+            paperId={state.paperId}
+            onInsertBlocks={(blocks) => {
+              blocks.forEach((b, i) => {
+                insertBlock(b, index + 1 + i);
+              });
+            }}
+            onDelete={() => deleteBlock(block.id)}
           />
         );
       default:

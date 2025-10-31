@@ -122,9 +122,34 @@ NotionEditor
 - Quote blocks with italic styling
 - Callout blocks with type-based colors (info, warning, error, success)
 
+### Phase 5: Chat Integration ✅
+**Status:** Complete
+
+**Files Created:**
+- `src/app/components/notion-editor/ChatIntegration.tsx` - Chat button and side panel components
+- `src/app/components/notion-editor/blocks/ChatMessageBlock.tsx` - Inline chat message block
+
+**Files Updated:**
+- `src/app/components/notion-editor/NotionEditor.tsx` - Added chat button, side panel, and chat state management
+- `src/app/components/notion-editor/Block.tsx` - Added chat_message block rendering
+- `src/app/components/notion-editor/commands.ts` - Updated /chat command to insert inline chat block
+
+**Key Features:**
+- **Floating Chat Button**: Circular AI icon button in bottom-right corner that opens side panel
+- **Right-Side Chat Panel**: Fixed position panel (384px wide) with ChatPanel embedded
+- **Inline Chat Block**: Type "/chat" to insert a chat_message block within the editor
+  - Collapsible interface (expanded/collapsed views)
+  - Stores conversation history in block content (separated by "---" lines)
+  - Questions prefixed with "Q:" and displayed in blue callout style
+  - Answers displayed in white/default background
+  - Embedded ChatPanel for interaction
+- **Block Insertion**: Chat responses can be inserted as blocks automatically
+- **Selection Support**: Chat panel can receive text selections from editor
+- **Persona Toggle**: Support for persona-enabled chat (optional)
+
 ## Next Phases
 
-- **Phase 5**: Implement chat integration (right panel + inline /chat command)
+- **Phase 6**: Connect backend APIs (summarize, qa, figures, citations)
 - **Phase 6**: Connect backend APIs (summarize, qa, figures, citations)
 - **Phase 7**: Implement figure/graph rendering in blocks
 - **Phase 8**: Add block state persistence to backend

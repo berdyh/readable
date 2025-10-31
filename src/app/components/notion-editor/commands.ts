@@ -209,14 +209,13 @@ export const RESEARCH_COMMANDS: SlashCommandItem[] = [
   {
     id: "chat",
     title: "AI Chat",
-    description: "Open inline chat assistant",
+    description: "Insert inline chat assistant",
     icon: "MessageSquare",
     category: "research",
     keywords: ["chat", "ai", "assistant", "help"],
-    run: async (context) => {
-      await context.onExecuteApi?.("chat", {
-        paperId: context.paperId,
-      });
+    run: (context) => {
+      // Insert a chat_message block at the current position
+      context.onInsertBlock?.("chat_message", context.blockIndex + 1, "");
     },
   },
 ];

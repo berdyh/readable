@@ -345,13 +345,15 @@ export async function summarizeSelection(
 
   const userPrompt = buildSelectionUserPrompt(paperId, selection, evidence);
 
+  // Use 'selection_summary' consistently - 'inline_summary' is an alias that maps to 'selection_summary'
+  // but we should use the canonical task name for consistency
   const raw = await generateJson({
     systemPrompt,
     userPrompt,
     schema: SELECTION_SUMMARY_SCHEMA,
     temperature: 0.25,
   }, {
-    taskName: 'inline_summary',
+    taskName: 'selection_summary',
   });
 
   const payload = parseLlmPayload(raw);

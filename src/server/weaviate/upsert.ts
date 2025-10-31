@@ -274,19 +274,23 @@ export async function upsertInteractions(
 
 const buildKontextPromptObject = (
   prompt: KontextPrompt,
-): WeaviateObject => {
-  const id =
-    prompt.id ??
-    buildKontextPromptUuid(
-      prompt.userId,
-      prompt.personaId,
-      prompt.taskId,
-      prompt.paperId,
-    );
+): WeaviateObject | null => {
+  // Generate UUID if not provided - skip if userId/paperId missing (prevents cache collisions)
+  const generatedId = prompt.id ?? buildKontextPromptUuid(
+    prompt.userId,
+    prompt.personaId,
+    prompt.taskId,
+    prompt.paperId,
+  );
+  
+  // If UUID generation failed (null), skip saving to prevent cache collisions
+  if (!generatedId) {
+    return null;
+  }
 
   return {
     class: 'KontextPrompt',
-    id,
+    id: generatedId,
     properties: removeUndefined({
       userId: prompt.userId,
       personaId: prompt.personaId,
@@ -306,8 +310,15 @@ const buildKontextPromptObject = (
 export async function upsertKontextPrompt(
   prompt: KontextPrompt,
   client: WeaviateClient = getWeaviateClient(),
-): Promise<string> {
-  const result = await batchUpsert(client, [buildKontextPromptObject(prompt)]);
+): Promise<string | null> {
+  // Skip upsert if we can't generate a safe UUID (missing userId or paperId)
+  // This prevents cache collisions while allowing the system to work without caching
+  const object = buildKontextPromptObject(prompt);
+  if (!object) {
+    return null;
+  }
+  
+  const result = await batchUpsert(client, [object]);
   ensureNoFailures(result, 'KontextPrompt');
-  return result[0]?.id ?? '';
+  return result[0]?.id ?? null;
 }

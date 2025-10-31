@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { MessageSquare, Send, X } from "lucide-react";
 import { clsx } from "clsx";
 import type { Block } from "../types";
@@ -29,6 +29,13 @@ export function ChatMessageBlock({
 }: ChatMessageBlockProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [chatDraft, setChatDraft] = useState("");
+  // Use ref to track latest content to avoid stale closures
+  const contentRef = useRef(block.content);
+
+  // Update ref whenever block.content changes
+  useEffect(() => {
+    contentRef.current = block.content;
+  }, [block.content]);
 
   // Parse chat history from block content
   // Format: messages separated by "---" lines
@@ -38,13 +45,15 @@ export function ChatMessageBlock({
 
   const handleAnswerReceived = useCallback(
     (answer: string) => {
-      // Append answer to block content, separated by a line
-      const currentContent = block.content || "";
+      // Use ref to get the latest content, avoiding stale closure issues
+      const currentContent = contentRef.current || "";
       const newContent =
         currentContent && !currentContent.endsWith("\n")
           ? `${currentContent}\n---\n${answer}`
           : `${currentContent}---\n${answer}`;
 
+      // Update both the ref immediately and trigger state update
+      contentRef.current = newContent;
       onUpdate(newContent);
 
       // Optionally create separate blocks for the answer
@@ -53,23 +62,23 @@ export function ChatMessageBlock({
         // Could also parse and create structured blocks if needed
       }
     },
-    [block.content, onUpdate, onInsertBlocks],
+    [onUpdate, onInsertBlocks],
   );
 
   const handleQuestionSent = useCallback((question: string) => {
-    // Use question parameter directly - it's the fresh value passed to this callback
-    // Note: block.content might be stale in the closure, but the question parameter is always fresh
+    // Use ref to get the latest content, avoiding stale closure issues
+    // This ensures rapid sequential questions don't overwrite each other
+    const currentContent = contentRef.current || "";
     const questionLine = `Q: ${question}`;
-    
-    // Read current content from block prop (will be fresh on each render due to dependency)
-    const currentContent = block.content || "";
     const newContent = currentContent
       ? `${currentContent}\n${questionLine}\n---\n`
       : `${questionLine}\n---\n`;
 
+    // Update both the ref immediately (for next question) and trigger state update
+    contentRef.current = newContent;
     onUpdate(newContent);
     setChatDraft(""); // Clear draft after sending
-  }, [block.content, onUpdate]);
+  }, [onUpdate]);
 
   const handleError = useCallback((error: string) => {
     console.error("Chat error:", error);

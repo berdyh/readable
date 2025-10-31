@@ -38,17 +38,23 @@ export const buildKontextPromptUuid = (
   personaId: string | undefined,
   taskId: string,
   paperId: string | undefined,
-): string => {
-  // Maintain deterministic UUIDs for cache lookups
-  // Use consistent fallback values instead of random UUIDs
-  // Note: This means missing userId/paperId will generate the same UUID,
-  // which may cause cache collisions. However, determinism is required for
-  // proper cache behavior. Callers should ensure userId and paperId are provided.
+): string | null => {
+  // Require userId and paperId to prevent cache collisions and ensure proper isolation
+  // Missing parameters would cause all anonymous users to share the same UUID,
+  // breaking cache isolation and potentially serving one user's prompt to another
+  // Return null to signal that caching should be skipped (callers should check for null)
+  if (!userId || !paperId) {
+    // Cannot generate a safe UUID without both userId and paperId
+    // This prevents cache collisions while maintaining determinism for valid inputs
+    return null;
+  }
+  
+  // All required parameters present - generate deterministic UUID
   const parts = [
-    userId ?? 'anonymous',
+    userId,
     personaId ?? 'default',
     taskId,
-    paperId ?? 'global',
+    paperId,
   ];
   return buildNamespacedId(parts.join(':'));
 };

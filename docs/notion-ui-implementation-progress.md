@@ -123,26 +123,34 @@ NotionEditor
 - Callout blocks with type-based colors (info, warning, error, success)
 
 ### Phase 5: Chat Integration ✅
-**Status:** Complete
+**Status:** Complete (Redesigned with Notion-style UI)
+
+**Reference Implementation:** [shreyasmanolkar/notion-browser-client](https://github.com/shreyasmanolkar/notion-browser-client)
 
 **Files Created:**
-- `src/app/components/notion-editor/ChatIntegration.tsx` - Chat button and side panel components
+- `src/app/components/notion-editor/ChatIntegration.tsx` - Notion-style chat button and side panel
 - `src/app/components/notion-editor/blocks/ChatMessageBlock.tsx` - Inline chat message block
 
 **Files Updated:**
 - `src/app/components/notion-editor/NotionEditor.tsx` - Added chat button, side panel, and chat state management
 - `src/app/components/notion-editor/Block.tsx` - Added chat_message block rendering
 - `src/app/components/notion-editor/commands.ts` - Updated /chat command to insert inline chat block
+- `PLAN-notion-ui.md` - Updated reference to new Notion clone repository
 
 **Key Features:**
 - **Floating Chat Button**: Circular AI icon button in bottom-right corner that opens side panel
-- **Right-Side Chat Panel**: Fixed position panel (384px wide) with ChatPanel embedded
+- **Notion-Style Chat Panel**: Dark theme (#191919) with authentic Notion design:
+  - Welcome screen with AI sparkle icon, title "Your improved Notion AI"
+  - Quick action buttons (Summarize, Translate, Analyze, Task tracker) with hover effects
+  - Notion-style input box with blue border (#2E7DD6), @ and "New page" buttons
+  - Header with Edit, Minimize/Maximize, and Close buttons
+  - Message display area with user/assistant message styling
+  - Direct API integration for Q&A functionality
 - **Inline Chat Block**: Type "/chat" to insert a chat_message block within the editor
   - Collapsible interface (expanded/collapsed views)
   - Stores conversation history in block content (separated by "---" lines)
   - Questions prefixed with "Q:" and displayed in blue callout style
   - Answers displayed in white/default background
-  - Embedded ChatPanel for interaction
 - **Block Insertion**: Chat responses can be inserted as blocks automatically
 - **Selection Support**: Chat panel can receive text selections from editor
 - **Persona Toggle**: Support for persona-enabled chat (optional)

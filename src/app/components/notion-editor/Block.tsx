@@ -8,7 +8,8 @@ import { clsx } from "clsx";
 import { GripVertical, Plus } from "lucide-react";
 
 import { useEditorStore } from "./store";
-import type { Block as BlockType } from "./types";
+import type { Block as BlockType, Block } from "./types";
+import type { QuestionSelection } from "@/server/qa/types";
 import { TextBlock } from "./blocks/TextBlock";
 import { HeadingBlock } from "./blocks/HeadingBlock";
 import { ListBlock } from "./blocks/ListBlock";
@@ -29,6 +30,29 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
   const { state, updateBlock, deleteBlock, addBlock, changeBlockType, insertBlock } = useEditorStore();
   const [isFocused, setIsFocused] = useState(false);
   const [showOptions, setShowOptions] = useState(false);
+
+  // Handler for API execution from slash commands
+  const handleExecuteApi = useCallback(
+    async (command: string, params?: Record<string, unknown>) => {
+      const { executeApiCommand } = await import("./apiHandlers");
+      
+      // Insert blocks after the current block index
+      await executeApiCommand(command, {
+        paperId: state.paperId,
+        blockIndex: index + 1,
+        onInsertBlocks: (blocks: Block[]) => {
+          // Insert all blocks after current block
+          blocks.forEach((newBlock, offset) => {
+            insertBlock(newBlock, index + 1 + offset);
+          });
+        },
+        selection: params?.selection as QuestionSelection | undefined,
+        userId: params?.userId as string | undefined,
+        personaId: params?.personaId as string | undefined,
+      });
+    },
+    [state.paperId, index, insertBlock],
+  );
 
   const handleUpdate = useCallback(
     (content: string) => {
@@ -131,6 +155,7 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
               const newBlock = addBlock(type, idx, content);
               insertBlock(newBlock, idx);
             }}
+            onExecuteApi={handleExecuteApi}
           />
         );
       case "bullet_list":
@@ -150,6 +175,7 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
               const newBlock = addBlock(type, idx, content);
               insertBlock(newBlock, idx);
             }}
+            onExecuteApi={handleExecuteApi}
           />
         );
       case "to_do_list":
@@ -168,6 +194,7 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
               const newBlock = addBlock(type, idx, content);
               insertBlock(newBlock, idx);
             }}
+            onExecuteApi={handleExecuteApi}
           />
         );
       case "code":
@@ -185,6 +212,7 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
               const newBlock = addBlock(type, idx, content);
               insertBlock(newBlock, idx);
             }}
+            onExecuteApi={handleExecuteApi}
           />
         );
       case "quote":
@@ -202,6 +230,7 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
               const newBlock = addBlock(type, idx, content);
               insertBlock(newBlock, idx);
             }}
+            onExecuteApi={handleExecuteApi}
           />
         );
       case "divider":
@@ -221,6 +250,7 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
               const newBlock = addBlock(type, idx, content);
               insertBlock(newBlock, idx);
             }}
+            onExecuteApi={handleExecuteApi}
           />
         );
       case "chat_message":
@@ -253,6 +283,7 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
               const newBlock = addBlock(type, idx, content);
               insertBlock(newBlock, idx);
             }}
+            onExecuteApi={handleExecuteApi}
           />
         );
     }

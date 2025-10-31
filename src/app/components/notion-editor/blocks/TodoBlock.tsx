@@ -16,6 +16,7 @@ interface TodoBlockProps {
   blockIndex?: number;
   onChangeBlockType?: (blockId: string, newType: Block["type"]) => void;
   onInsertBlock?: (type: Block["type"], index: number, content?: string) => void;
+  onExecuteApi?: (command: string, params?: Record<string, unknown>) => Promise<void>;
 }
 
 export function TodoBlock({
@@ -29,6 +30,7 @@ export function TodoBlock({
   blockIndex = 0,
   onChangeBlockType,
   onInsertBlock,
+  onExecuteApi,
 }: TodoBlockProps) {
   const checked = block.metadata?.checked ?? false;
 
@@ -60,6 +62,7 @@ export function TodoBlock({
           blockIndex={blockIndex}
           onChangeBlockType={onChangeBlockType}
           onInsertBlock={onInsertBlock}
+          onExecuteApi={onExecuteApi}
         />
       </div>
     </div>

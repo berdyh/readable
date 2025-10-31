@@ -13,6 +13,7 @@ interface QuoteBlockProps {
   blockIndex?: number;
   onChangeBlockType?: (blockId: string, newType: Block["type"]) => void;
   onInsertBlock?: (type: Block["type"], index: number, content?: string) => void;
+  onExecuteApi?: (command: string, params?: Record<string, unknown>) => Promise<void>;
 }
 
 export function QuoteBlock({
@@ -25,6 +26,7 @@ export function QuoteBlock({
   blockIndex = 0,
   onChangeBlockType,
   onInsertBlock,
+  onExecuteApi,
 }: QuoteBlockProps) {
   return (
     <div className="my-2 border-l-4 border-neutral-300 dark:border-neutral-600 pl-4 italic text-neutral-600 dark:text-neutral-400">
@@ -40,6 +42,7 @@ export function QuoteBlock({
         blockIndex={blockIndex}
         onChangeBlockType={onChangeBlockType}
         onInsertBlock={onInsertBlock}
+        onExecuteApi={onExecuteApi}
       />
     </div>
   );

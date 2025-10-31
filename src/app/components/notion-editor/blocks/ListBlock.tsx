@@ -15,6 +15,7 @@ interface ListBlockProps {
   blockIndex?: number;
   onChangeBlockType?: (blockId: string, newType: Block["type"]) => void;
   onInsertBlock?: (type: Block["type"], index: number, content?: string) => void;
+  onExecuteApi?: (command: string, params?: Record<string, unknown>) => Promise<void>;
 }
 
 export function ListBlock({
@@ -28,6 +29,7 @@ export function ListBlock({
   blockIndex = 0,
   onChangeBlockType,
   onInsertBlock,
+  onExecuteApi,
 }: ListBlockProps) {
   const isBulletList = block.type === "bullet_list";
 
@@ -54,6 +56,7 @@ export function ListBlock({
           blockIndex={blockIndex}
           onChangeBlockType={onChangeBlockType}
           onInsertBlock={onInsertBlock}
+          onExecuteApi={onExecuteApi}
         />
       </div>
     </div>

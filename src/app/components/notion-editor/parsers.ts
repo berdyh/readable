@@ -4,26 +4,17 @@
 
 import { v4 as uuidv4 } from "uuid";
 import type { Block } from "./types";
-
-// Types matching backend API responses
-interface SummarySection {
-  id: string;
-  title: string;
-  paragraphs: string[];
-  pageSpan: [number, number];
-  referencedFigureIds?: string[];
-}
-
-interface SummaryResult {
-  sections?: SummarySection[];
-  key_findings?: string[];
-  figures?: Array<{
-    id: string;
-    caption?: string;
-    pageNumber?: number;
-    imageUrl?: string;
-  }>;
-}
+import type {
+  SummaryResult,
+  SummarySection,
+  SummaryKeyFinding,
+  SummaryFigure,
+} from "@/server/summarize/types";
+import type {
+  SelectionSummaryResult,
+  SelectionFiguresResult,
+  SelectionCitationsResult,
+} from "@/server/editor/types";
 
 interface FigureData {
   id: string;
@@ -51,7 +42,7 @@ export function parseSummaryToBlocks(summary: SummaryResult): Block[] {
     blocks.push({
       id: uuidv4(),
       type: "heading_1",
-      content: "Summary",
+      content: "Paper Summary",
     });
   }
 
@@ -64,18 +55,29 @@ export function parseSummaryToBlocks(summary: SummaryResult): Block[] {
         type: "heading_2",
         content: section.title,
         metadata: {
-          section: section.id,
-          page: section.pageSpan[0],
+          section: section.section_id,
+          page: section.page_span?.start,
         },
       });
 
-      // Section paragraphs
-      for (const paragraph of section.paragraphs) {
+      // Section summary paragraph
+      if (section.summary) {
         blocks.push({
           id: uuidv4(),
           type: "paragraph",
-          content: paragraph,
+          content: section.summary,
         });
+      }
+
+      // Key points as bullet list
+      if (section.key_points && section.key_points.length > 0) {
+        for (const point of section.key_points) {
+          blocks.push({
+            id: uuidv4(),
+            type: "bullet_list",
+            content: point,
+          });
+        }
       }
 
       // Add divider between sections
@@ -98,12 +100,40 @@ export function parseSummaryToBlocks(summary: SummaryResult): Block[] {
     });
 
     for (const finding of summary.key_findings) {
+      const findingText = `${finding.statement}\n\nEvidence: ${finding.evidence}`;
+      // Parse page anchor if available (format: "p.5" -> 5)
+      const pageAnchor = finding.page_anchors?.[0];
+      const pageNumber = pageAnchor ? parseInt(pageAnchor.replace("p.", "")) : undefined;
       blocks.push({
         id: uuidv4(),
         type: "callout",
-        content: finding,
+        content: findingText,
         metadata: {
           type: "info",
+          page: pageNumber,
+        },
+      });
+    }
+  }
+
+  // Parse figures
+  if (summary.figures && summary.figures.length > 0) {
+    blocks.push({
+      id: uuidv4(),
+      type: "heading_2",
+      content: "Figures",
+    });
+
+    for (const figure of summary.figures) {
+      blocks.push({
+        id: uuidv4(),
+        type: "figure",
+        content: figure.caption || figure.insight || "",
+        metadata: {
+          figureId: figure.figure_id,
+          page: figure.page_anchor ? parseInt(figure.page_anchor) : undefined,
+          caption: figure.caption,
+          insight: figure.insight,
         },
       });
     }
@@ -113,44 +143,99 @@ export function parseSummaryToBlocks(summary: SummaryResult): Block[] {
 }
 
 /**
- * Convert figure data to FigureBlock
+ * Parse SelectionFiguresResult from /api/editor/selection/figures into blocks
  */
-export function parseFigureToBlock(figure: FigureData): Block {
-  return {
-    id: uuidv4(),
-    type: "figure",
-    content: figure.caption || "",
-    metadata: {
-      figureId: figure.id,
-      imageUrl: figure.imageUrl,
-      page: figure.pageNumber,
-      caption: figure.caption,
-    },
-  };
+export function parseFiguresToBlocks(result: SelectionFiguresResult): Block[] {
+  const blocks: Block[] = [];
+
+  if (result.figures && result.figures.length > 0) {
+    for (const figure of result.figures) {
+      blocks.push({
+        id: uuidv4(),
+        type: "figure",
+        content: figure.caption || "",
+        metadata: {
+          figureId: figure.figureId,
+          imageUrl: figure.imageUrl,
+          page: figure.pageNumber,
+          caption: figure.caption,
+        },
+      });
+    }
+  }
+
+  return blocks;
 }
 
 /**
- * Convert citation data to CitationBlock
+ * Parse SelectionCitationsResult from /api/editor/selection/citations into blocks
  */
-export function parseCitationToBlock(citation: CitationData): Block {
-  return {
-    id: uuidv4(),
-    type: "citation",
-    content: citation.title || "",
-    metadata: {
-      citationId: citation.id,
-      author: citation.author,
-      title: citation.title,
-      url: citation.url,
-      page: citation.pageNumber,
-    },
-  };
+export function parseCitationsToBlocks(result: SelectionCitationsResult): Block[] {
+  const blocks: Block[] = [];
+
+  if (result.citations && result.citations.length > 0) {
+    for (const citation of result.citations) {
+      const citationText = citation.title 
+        ? `${citation.title}${citation.authors ? ` - ${citation.authors.join(", ")}` : ""}${citation.year ? ` (${citation.year})` : ""}`
+        : citation.citationId;
+      
+      blocks.push({
+        id: uuidv4(),
+        type: "paragraph",
+        content: citationText,
+        metadata: {
+          citationId: citation.citationId,
+          title: citation.title,
+          authors: citation.authors,
+          year: citation.year,
+          url: citation.url || citation.doi || citation.arxivId,
+          source: citation.source,
+        },
+      });
+    }
+  }
+
+  return blocks;
 }
 
 /**
- * Parse selection summary response into blocks
+ * Parse SelectionSummaryResult from /api/editor/selection/summary into blocks
  */
-export function parseSelectionSummaryToBlocks(
+export function parseSelectionSummaryToBlocks(result: SelectionSummaryResult): Block[] {
+  const blocks: Block[] = [];
+  const { callout } = result;
+
+  // Add callout with bullets
+  if (callout.bullets && callout.bullets.length > 0) {
+    const bulletsText = callout.bullets.map((b) => `• ${b.text}`).join("\n");
+    blocks.push({
+      id: uuidv4(),
+      type: "callout",
+      content: bulletsText,
+      metadata: {
+        type: "info",
+      },
+    });
+  }
+
+  // Add "deeper" insights as additional paragraphs
+  if (callout.deeper && callout.deeper.length > 0) {
+    for (const insight of callout.deeper) {
+      blocks.push({
+        id: uuidv4(),
+        type: "paragraph",
+        content: insight,
+      });
+    }
+  }
+
+  return blocks;
+}
+
+/**
+ * Parse plain text summary into blocks (for simple string responses)
+ */
+export function parseTextSummaryToBlocks(
   summaryText: string,
   metadata?: { page?: number; section?: string },
 ): Block[] {

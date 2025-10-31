@@ -13,6 +13,7 @@ interface TextBlockProps {
   blockIndex?: number;
   onChangeBlockType?: (blockId: string, newType: Block["type"]) => void;
   onInsertBlock?: (type: Block["type"], index: number, content?: string) => void;
+  onExecuteApi?: (command: string, params?: Record<string, unknown>) => Promise<void>;
 }
 
 export function TextBlock({
@@ -25,6 +26,7 @@ export function TextBlock({
   blockIndex = 0,
   onChangeBlockType,
   onInsertBlock,
+  onExecuteApi,
 }: TextBlockProps) {
   return (
     <TipTapBlock
@@ -39,6 +41,7 @@ export function TextBlock({
       blockIndex={blockIndex}
       onChangeBlockType={onChangeBlockType}
       onInsertBlock={onInsertBlock}
+      onExecuteApi={onExecuteApi}
     />
   );
 }

@@ -1,5 +1,4 @@
 import { generateUuid5 } from 'weaviate-ts-client';
-import { randomUUID } from 'crypto';
 
 export const WEAVIATE_NAMESPACE = 'readable';
 
@@ -40,27 +39,16 @@ export const buildKontextPromptUuid = (
   taskId: string,
   paperId: string | undefined,
 ): string => {
-  // If critical parameters are missing, use random UUID to prevent collisions
-  // instead of deterministic fallback values that would cause cache collisions
-  if (!userId || !paperId) {
-    // Use randomUUID() for missing parameters to ensure uniqueness
-    // This prevents different users (both undefined) from generating the same UUID
-    const randomSuffix = randomUUID();
-    const parts = [
-      userId ?? `anonymous-${randomSuffix}`,
-      personaId ?? `default-${randomSuffix}`,
-      taskId,
-      paperId ?? `global-${randomSuffix}`,
-    ];
-    return buildNamespacedId(parts.join(':'));
-  }
-  
-  // All required parameters present - use deterministic UUID
+  // Maintain deterministic UUIDs for cache lookups
+  // Use consistent fallback values instead of random UUIDs
+  // Note: This means missing userId/paperId will generate the same UUID,
+  // which may cause cache collisions. However, determinism is required for
+  // proper cache behavior. Callers should ensure userId and paperId are provided.
   const parts = [
-    userId,
+    userId ?? 'anonymous',
     personaId ?? 'default',
     taskId,
-    paperId,
+    paperId ?? 'global',
   ];
   return buildNamespacedId(parts.join(':'));
 };

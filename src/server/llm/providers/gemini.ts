@@ -28,11 +28,18 @@ function getDefaultModel(taskType?: string): string {
   const modelFromConfig = getModel('gemini', taskType);
   
   // Check for legacy env vars or new override
+  // Normalize taskType to check aliases (getModel already handles this, but we check env vars here)
+  const normalizedTaskType = taskType?.toLowerCase().replace(/-/g, '_');
+  const isSummaryTask = normalizedTaskType === 'paper_summary' || 
+                       normalizedTaskType === 'summary' || 
+                       normalizedTaskType === 'summarize';
+  const isQaTask = normalizedTaskType === 'qa' || normalizedTaskType === 'question';
+  
   const envModel = process.env.GEMINI_MODEL || 
-                   (taskType === 'summary' || taskType === 'summarize' 
-                     ? process.env.GEMINI_SUMMARY_MODEL 
+                   (isSummaryTask 
+                     ? process.env.GEMINI_SUMMARY_MODEL || process.env.GEMINI_PAPER_SUMMARY_MODEL
                      : undefined) ||
-                   (taskType === 'qa' || taskType === 'question' 
+                   (isQaTask 
                      ? process.env.GEMINI_QA_MODEL 
                      : undefined);
   

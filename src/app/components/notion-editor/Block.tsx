@@ -186,6 +186,10 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", block.id);
     e.dataTransfer.setData("application/block-index", index.toString());
+    // Set a custom data type to identify this as a block reordering drag
+    e.dataTransfer.setData("application/x-block-reorder", "true");
+    // Prevent TipTap editors from accepting this drop
+    e.stopPropagation();
     // Add visual feedback
     if (e.dataTransfer.setDragImage) {
       const dragImage = e.currentTarget.cloneNode(true) as HTMLElement;
@@ -227,10 +231,17 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
     setDragOver(false);
     setIsDragging(false);
 
+    // Check if this is a block reordering drag (not a file/text drop)
+    const isBlockReorder = e.dataTransfer.getData("application/x-block-reorder") === "true";
+    if (!isBlockReorder) {
+      // This is not a block reorder, let TipTap handle it (file drops, etc.)
+      return;
+    }
+
     const draggedBlockId = e.dataTransfer.getData("text/plain");
     const draggedIndex = parseInt(e.dataTransfer.getData("application/block-index"), 10);
 
-    if (draggedBlockId && draggedBlockId !== block.id && draggedIndex !== index) {
+    if (draggedBlockId && draggedBlockId !== block.id && !isNaN(draggedIndex) && draggedIndex !== index) {
       // Calculate the target index based on mouse position
       const rect = e.currentTarget.getBoundingClientRect();
       const y = e.clientY;

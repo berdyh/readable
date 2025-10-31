@@ -119,6 +119,23 @@ export function TipTapBlock({
           className,
         ),
       },
+      // Prevent TipTap from handling drops when we're dragging blocks for reordering
+      handleDrop: (view, event, _slice, moved) => {
+        // Check if this is a block reordering drag (has our custom data type)
+        const dragData = (event as DragEvent).dataTransfer;
+        if (dragData) {
+          const isBlockReorder = dragData.getData("application/x-block-reorder") === "true";
+          // If this is a block reordering drag, prevent TipTap from handling it
+          // The block-level handler will take care of reordering
+          if (isBlockReorder) {
+            event.preventDefault();
+            event.stopPropagation();
+            return true; // Signal that we handled this event, prevent TipTap from inserting text
+          }
+        }
+        // For other drops (e.g., files, text), let TipTap handle normally
+        return false;
+      },
       handleKeyDown: (view, event) => {
         // In locked blocks, only allow slash commands, no other editing
         if (isLocked) {

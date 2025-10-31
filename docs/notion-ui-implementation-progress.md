@@ -92,9 +92,6 @@ NotionEditor
 - Slash command menu appears and functions
 - Block type changing via commands works
 
-## Next Phases
-
-- **Phase 4**: Create main NotionEditor component integrating all blocks ✅ (Complete)
 ### Phase 4: Main Editor Component ✅
 **Status:** Complete
 

@@ -206,9 +206,12 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
     }
   }, [block.id, index]);
 
-  const handleDragEnd = useCallback(() => {
+  const handleDragEnd = useCallback((e: React.DragEvent) => {
     setIsDragging(false);
     setDragOver(false);
+    // Ensure any visual artifacts are cleared
+    e.preventDefault();
+    e.stopPropagation();
   }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -236,10 +239,8 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
     setDragOver(false);
     setIsDragging(false);
 
-    // Check if this is a block reordering drag (not a file/text drop)
     const isBlockReorder = e.dataTransfer.getData("application/x-block-reorder") === "true";
     if (!isBlockReorder) {
-      // This is not a block reorder, let TipTap handle it (file drops, etc.)
       return;
     }
 
@@ -247,16 +248,19 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
     const draggedIndex = parseInt(e.dataTransfer.getData("application/block-index"), 10);
 
     if (draggedBlockId && draggedBlockId !== block.id && !isNaN(draggedIndex) && draggedIndex !== index) {
-      // Calculate the target index based on mouse position
       const rect = e.currentTarget.getBoundingClientRect();
       const y = e.clientY;
       const midPoint = rect.top + rect.height / 2;
       const targetIndex = y < midPoint ? index : index + 1;
-
-      // Adjust target index if dragging from above
       const finalTargetIndex = draggedIndex < targetIndex ? targetIndex - 1 : targetIndex;
 
       moveBlock(draggedBlockId, draggedIndex, finalTargetIndex);
+      
+      // Clear dragging state for all blocks after move completes
+      setTimeout(() => {
+        setIsDragging(false);
+        setDragOver(false);
+      }, 0);
     }
   }, [block.id, index, moveBlock]);
 
@@ -437,9 +441,9 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
   return (
     <div
       className={clsx(
-        "group relative flex items-start gap-2 rounded-md px-2 py-1 transition",
-        isFocused && "bg-neutral-50 dark:bg-neutral-900",
-        isDragging && "opacity-50",
+        "group relative flex items-start gap-2 rounded-md px-2 py-1 transition-colors",
+        isFocused && !isDragging && "bg-neutral-50 dark:bg-neutral-900",
+        isDragging && "opacity-50 pointer-events-none",
         dragOver && "ring-2 ring-blue-500 dark:ring-blue-400",
       )}
       data-block-id={block.id}

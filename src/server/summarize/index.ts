@@ -1,6 +1,6 @@
 import { loadPaperSummaryContext } from './context';
 import { fetchKontextSystemPrompt } from './kontext';
-import { generateJsonSummary } from './openai';
+import { generateJson } from '@/server/llm';
 import type {
   PageSpan,
   SummaryFigure,
@@ -9,10 +9,12 @@ import type {
   SummarySection,
 } from './types';
 
-const PROMPT_SECTION_LIMIT = 10;
-const PROMPT_PARAGRAPH_LIMIT = 3;
-const PROMPT_FIGURE_LIMIT = 6;
-const BASE_SYSTEM_PROMPT = `You are Readable's persona-aware research assistant. Your job is to guide a reader through a technical paper by explaining the reasoning first and the results second. Always surface: what the authors are trying to achieve, why the approach makes sense, how evidence supports claims, and what limitations or open questions remain. Keep the tone professional, helpful, and grounded in the supplied material—never invent citations or facts.`;
+import { getSystemPrompt, getPaperSummaryRequirements, getPromptLimits } from '@/server/llm-config';
+
+const PROMPT_LIMITS = getPromptLimits();
+const PROMPT_SECTION_LIMIT = PROMPT_LIMITS.section;
+const PROMPT_PARAGRAPH_LIMIT = PROMPT_LIMITS.paragraph;
+const PROMPT_FIGURE_LIMIT = PROMPT_LIMITS.figure;
 
 const SUMMARY_SCHEMA: Record<string, unknown> = {
   type: 'object',
@@ -119,7 +121,7 @@ interface SummarizeOptions {
   personaId?: string;
 }
 
-function truncateText(text: string, maxLength = 420): string {
+function truncateText(text: string, maxLength = PROMPT_LIMITS.text_truncate): string {
   if (text.length <= maxLength) {
     return text;
   }
@@ -189,7 +191,7 @@ function buildSectionOutlinePrompt(
         .slice(0, PROMPT_PARAGRAPH_LIMIT)
         .map(
           (paragraph, index) =>
-            `    Key ${index + 1}: ${truncateText(paragraph, 360)}`,
+            `    Key ${index + 1}: ${truncateText(paragraph, PROMPT_LIMITS.paragraph_truncate)}`,
         );
 
       return [header, figuresLine, ...highlights]
@@ -217,7 +219,7 @@ function buildFigureContextPrompt(
     .map((figure) => {
       const header = `- [${figure.id}] ${truncateText(
         figure.caption ?? 'No caption available',
-        280,
+        PROMPT_LIMITS.figure_caption_truncate,
       )} (${formatPageAnchor(figure.pageNumber) ?? 'page ?'})`;
       const sectionsLine = figure.referencedSectionIds.length
         ? `    Sections: ${figure.referencedSectionIds.join(', ')}`
@@ -225,7 +227,7 @@ function buildFigureContextPrompt(
 
       const contextLines = figure.supportingParagraphs.map(
         (paragraph, index) =>
-          `    Context ${index + 1}: ${truncateText(paragraph, 320)}`,
+          `    Context ${index + 1}: ${truncateText(paragraph, PROMPT_LIMITS.figure_context_truncate)}`,
       );
 
       return [header, sectionsLine, ...contextLines]
@@ -265,7 +267,7 @@ function buildMetadataPrompt(metadata?: {
     parts.push(`Updated: ${metadata.updatedAt}`);
   }
   if (metadata.abstract) {
-    parts.push(`Abstract: ${truncateText(metadata.abstract, 1200)}`);
+    parts.push(`Abstract: ${truncateText(metadata.abstract, PROMPT_LIMITS.abstract_truncate)}`);
   }
 
   return parts.join('\n');
@@ -276,15 +278,7 @@ function buildUserPrompt(context: Awaited<ReturnType<typeof loadPaperSummaryCont
   const sectionOutline = buildSectionOutlinePrompt(context.sections);
   const figureOutline = buildFigureContextPrompt(context.figures);
 
-  const requirements = [
-    'Return JSON with keys: sections[], key_findings[], figures[].',
-    'Always produce at least three sections. If the paper has fewer explicit sections, construct conceptual sections (Overview, Method, Results/Discussion).',
-    'Lead each section summary with the authors’ reasoning or goal, then describe methods, then results or implications.',
-    'key_findings[] should capture the top insights; cite supporting_sections using the IDs provided (e.g., S1) and optionally related_figures (e.g., F2).',
-    'figures[] must explain why the figure matters. Use the provided figure IDs. Prefer figures explicitly referenced in the section outline.',
-    'Do not invent IDs or page numbers; rely on the supplied context.',
-    'Keep explanations concise but information-dense; avoid generic statements.',
-  ];
+  const requirements = getPaperSummaryRequirements();
 
   return [
     `Paper ID: ${context.paperId}`,
@@ -304,16 +298,7 @@ function buildUserPrompt(context: Awaited<ReturnType<typeof loadPaperSummaryCont
 }
 
 function mergeSystemPrompt(personaPrompt?: string): string {
-  if (!personaPrompt) {
-    return BASE_SYSTEM_PROMPT;
-  }
-
-  const trimmed = personaPrompt.trim();
-  if (!trimmed) {
-    return BASE_SYSTEM_PROMPT;
-  }
-
-  return `${trimmed}\n\n---\n${BASE_SYSTEM_PROMPT}`;
+  return getSystemPrompt('paper_summary', personaPrompt);
 }
 
 function extractJsonPayload(content: string): unknown {
@@ -634,10 +619,12 @@ export async function summarizePaper(
 
   const systemPrompt = mergeSystemPrompt(personaPrompt);
   const userPrompt = buildUserPrompt(context);
-  const rawContent = await generateJsonSummary({
+  const rawContent = await generateJson({
     systemPrompt,
     userPrompt,
     schema: SUMMARY_SCHEMA,
+  }, {
+    taskName: 'summary',
   });
 
   const llmSummary = parseModelSummary(rawContent);

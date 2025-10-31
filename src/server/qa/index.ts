@@ -1,7 +1,7 @@
 import { fetchKontextSystemPrompt } from '@/server/summarize/kontext';
 
 import { loadQuestionEvidence } from './context';
-import { generateQaResponse } from './openai';
+import { generateJson } from '@/server/llm';
 import type {
   AnswerCitation,
   AnswerResult,
@@ -10,12 +10,7 @@ import type {
   QuestionOptions,
 } from './types';
 
-const BASE_SYSTEM_PROMPT = `You are Readable's grounded research Q&A assistant. Use only the evidence provided from the paper to answer the user's question. 
-- Cite page numbers inline in the answer using the format "(page N)".
-- Prefer concise explanations that tie directly to the evidence.
-- Summarize relevant figures or citations when they clarify the answer.
-- If the evidence does not contain the answer, say so explicitly and suggest the closest related insight if available.
-- Obey the required JSON schema exactly; do not include any additional text.`;
+import { getSystemPrompt } from '@/server/llm-config';
 
 const QA_RESPONSE_SCHEMA: Record<string, unknown> = {
   type: 'object',
@@ -55,11 +50,7 @@ interface LlmQaPayload {
 }
 
 function mergeSystemPrompt(personaPrompt?: string): string {
-  if (!personaPrompt) {
-    return BASE_SYSTEM_PROMPT;
-  }
-
-  return `${BASE_SYSTEM_PROMPT}\n\nPersona guidance:\n${personaPrompt}`;
+  return getSystemPrompt('qa', personaPrompt);
 }
 
 function truncateText(text: string, maxLength = 600): string {
@@ -247,10 +238,13 @@ export async function answerPaperQuestion(
   const systemPrompt = mergeSystemPrompt(personaPrompt);
   const userPrompt = buildQaUserPrompt(question, evidence);
 
-  const raw = await generateQaResponse({
+  const raw = await generateJson({
     systemPrompt,
     userPrompt,
     schema: QA_RESPONSE_SCHEMA,
+  }, {
+    taskName: 'qa',
+    temperature: 0.2,
   });
 
   const payload = parseLlmPayload(raw);

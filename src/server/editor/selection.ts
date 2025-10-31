@@ -5,7 +5,7 @@ import type {
   QuestionSelection,
   QuestionEvidenceContext,
 } from '@/server/qa/types';
-import { generateQaResponse } from '@/server/qa/openai';
+import { generateJson } from '@/server/llm';
 import { fetchKontextSystemPrompt } from '@/server/summarize/kontext';
 
 import type {
@@ -16,10 +16,7 @@ import type {
   SelectionSummaryBullet,
 } from './types';
 
-const BASE_SUMMARY_SYSTEM_PROMPT = `You are Readable's inline summarizer. Given a reader's highlighted passage and the retrieved chunks from the paper, produce:
-- A tight list of 3-5 bullet insights grounded in the evidence.
-- A short "deeper dive" section (1-3 paragraphs) that expands on the nuance.
-Use only the supplied evidence chunks and cite them by chunk_id.`;
+import { getSystemPrompt } from '@/server/llm-config';
 
 const SELECTION_SUMMARY_SCHEMA: Record<string, unknown> = {
   type: 'object',
@@ -344,17 +341,17 @@ export async function summarizeSelection(
     personaId: options.personaId,
   }).catch(() => undefined);
 
-  const systemPrompt = personaPrompt
-    ? `${BASE_SUMMARY_SYSTEM_PROMPT}\n\nPersona guidance:\n${personaPrompt}`
-    : BASE_SUMMARY_SYSTEM_PROMPT;
+  const systemPrompt = getSystemPrompt('selection_summary', personaPrompt);
 
   const userPrompt = buildSelectionUserPrompt(paperId, selection, evidence);
 
-  const raw = await generateQaResponse({
+  const raw = await generateJson({
     systemPrompt,
     userPrompt,
     schema: SELECTION_SUMMARY_SCHEMA,
     temperature: 0.25,
+  }, {
+    taskName: 'inline_summary',
   });
 
   const payload = parseLlmPayload(raw);

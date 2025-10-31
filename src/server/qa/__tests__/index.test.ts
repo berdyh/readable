@@ -4,8 +4,8 @@ vi.mock('@/server/qa/context', () => ({
   loadQuestionEvidence: vi.fn(),
 }));
 
-vi.mock('@/server/qa/openai', () => ({
-  generateQaResponse: vi.fn(),
+vi.mock('@/server/llm', () => ({
+  generateJson: vi.fn(),
 }));
 
 vi.mock('@/server/summarize/kontext', () => ({
@@ -14,7 +14,7 @@ vi.mock('@/server/summarize/kontext', () => ({
 
 import { answerPaperQuestion } from '@/server/qa';
 import { loadQuestionEvidence } from '@/server/qa/context';
-import { generateQaResponse } from '@/server/qa/openai';
+import { generateJson } from '@/server/llm';
 import { fetchKontextSystemPrompt } from '@/server/summarize/kontext';
 import type { QuestionEvidenceContext } from '@/server/qa/types';
 
@@ -43,7 +43,7 @@ const mockEvidence = (overrides: Partial<QuestionEvidenceContext> = {}): Questio
 
 describe('answerPaperQuestion', () => {
   const mockedEvidence = vi.mocked(loadQuestionEvidence);
-  const mockedGenerate = vi.mocked(generateQaResponse);
+  const mockedGenerate = vi.mocked(generateJson);
   const mockedKontext = vi.mocked(fetchKontextSystemPrompt);
 
   it('returns answer and cites from the language model payload', async () => {

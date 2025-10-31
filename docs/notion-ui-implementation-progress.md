@@ -150,7 +150,6 @@ NotionEditor
 ## Next Phases
 
 - **Phase 6**: Connect backend APIs (summarize, qa, figures, citations)
-- **Phase 6**: Connect backend APIs (summarize, qa, figures, citations)
 - **Phase 7**: Implement figure/graph rendering in blocks
 - **Phase 8**: Add block state persistence to backend
 - **Phase 9**: Replace ResearchEditor with NotionEditor in ReaderWorkspace
@@ -159,7 +158,6 @@ NotionEditor
 ## Known Issues
 
 - API execution handlers (Phase 6) need implementation
-- Chat integration (Phase 5) not yet implemented
 - Block drag-and-drop reordering UI exists but functionality not wired
 - Figure/graph rendering (Phase 7) pending
 

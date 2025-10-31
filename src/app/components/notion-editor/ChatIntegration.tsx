@@ -5,7 +5,6 @@ import {
   MessageSquare,
   X,
   FileText,
-  Languages,
   Search,
   CheckCircle,
   Paperclip,
@@ -160,22 +159,111 @@ export function ChatSidePanel({
     ],
   );
 
-  // Quick action handlers
-  const handleQuickAction = useCallback(
-    (action: string) => {
-      const prompts: Record<string, string> = {
-        summarize: "Summarize this page",
-        translate: "Translate this page to English",
-        analyze: "Analyze this page for insights",
-        task: "Create a task tracker based on this page",
+  // Handle summarize action - calls API and inserts blocks
+  const handleSummarizeAction = useCallback(async () => {
+    if (isSubmitting) return;
+
+    setIsSubmitting(true);
+    setMessages((prev) => [...prev, { role: "user", content: "Summarizing paper..." }]);
+
+    try {
+      const response = await fetch("/api/summarize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          paperId,
+          userId: userId ?? "default",
+          personaId: personaEnabled ? "demo" : undefined,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(error?.error || `Failed to summarize: ${response.status}`);
+      }
+
+      const summary = (await response.json()) as {
+        sections?: Array<{ title: string; summary: string }>;
+        key_findings?: Array<{ statement: string }>;
       };
 
-      const prompt = prompts[action] || action;
-      setInput(prompt);
-      // Auto-submit quick actions
-      void sendQuestion(prompt);
+      // Create summary text for display
+      let summaryText = "Paper Summary\n\n";
+      if (summary.sections) {
+        for (const section of summary.sections) {
+          summaryText += `## ${section.title}\n${section.summary}\n\n`;
+        }
+      }
+      if (summary.key_findings && summary.key_findings.length > 0) {
+        summaryText += "## Key Findings\n";
+        for (const finding of summary.key_findings) {
+          summaryText += `- ${finding.statement}\n`;
+        }
+      }
+
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: summaryText.trim() },
+      ]);
+
+      // Insert blocks if handler available
+      if (onInsertBlocks) {
+        const { parseSummaryToBlocks } = await import("./parsers");
+        const blocks = parseSummaryToBlocks(summary as any);
+        if (blocks.length > 0) {
+          onInsertBlocks(blocks);
+        }
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to summarize paper.";
+      handleError(message);
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: `Error: ${message}` },
+      ]);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [
+    isSubmitting,
+    paperId,
+    userId,
+    personaEnabled,
+    onInsertBlocks,
+    handleError,
+  ]);
+
+  // Quick action handlers
+  const handleQuickAction = useCallback(
+    async (action: string) => {
+      switch (action) {
+        case "summarize":
+          // Call actual summarize API and insert blocks
+          await handleSummarizeAction();
+          break;
+        case "question":
+          // Just focus input for asking a question
+          const inputEl = document.querySelector<HTMLInputElement>(
+            'input[placeholder*="Ask, search"]',
+          );
+          inputEl?.focus();
+          break;
+        case "findings":
+          // Ask Q&A about key findings
+          await sendQuestion("What are the key findings and main contributions of this paper?");
+          break;
+        default:
+          // For other actions, send as Q&A question
+          const prompts: Record<string, string> = {
+            analyze: "What are the main insights and implications of this research?",
+            task: "What tasks or action items can be derived from this paper?",
+          };
+          const prompt = prompts[action] || action;
+          await sendQuestion(prompt);
+      }
     },
-    [sendQuestion],
+    [sendQuestion, handleSummarizeAction],
   );
 
   if (!isOpen) {
@@ -286,21 +374,19 @@ export function ChatSidePanel({
                 {/* Quick Action Buttons */}
                 <div className="space-y-2 mb-12">
                   {[
-                    { icon: FileText, label: "Summarize this page", action: "summarize" },
-                    { icon: Languages, label: "Translate this page", action: "translate" },
+                    { icon: FileText, label: "Summarize paper", action: "summarize", api: true },
                     {
                       icon: Search,
-                      label: "Analyze for insights",
-                      action: "analyze",
-                      badge: "New",
+                      label: "Ask a question",
+                      action: "question",
                     },
                     {
                       icon: CheckCircle,
-                      label: "Create a task tracker",
-                      action: "task",
+                      label: "Key findings",
+                      action: "findings",
                       badge: "New",
                     },
-                  ].map(({ icon: Icon, label, action, badge }) => (
+                  ].map(({ icon: Icon, label, action, badge, api }) => (
                     <button
                       key={action}
                       type="button"

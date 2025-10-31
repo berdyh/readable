@@ -8,7 +8,7 @@ import { TipTapBlock } from "./TipTapBlock";
 interface TodoBlockProps {
   block: Block;
   onUpdate: (content: string) => void;
-  onEnter?: () => void;
+  onEnter?: (markDone?: boolean) => void;
   onBackspace?: () => void;
   onSlashCommand?: (query: string) => void;
   updateBlock: (blockId: string, updates: Partial<Block>) => void;

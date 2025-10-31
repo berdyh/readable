@@ -6,7 +6,7 @@ import { TipTapBlock } from "./TipTapBlock";
 interface HeadingBlockProps {
   block: Block;
   onUpdate: (content: string) => void;
-  onEnter?: () => void;
+  onEnter?: (markDone?: boolean) => void;
   onBackspace?: () => void;
   onSlashCommand?: (query: string) => void;
   paperId?: string;
@@ -27,15 +27,13 @@ export function HeadingBlock({
   blockIndex = 0,
   onChangeBlockType,
   onInsertBlock,
-      onExecuteApi,
-      isLocked = false,
+  onExecuteApi,
+  isLocked = false,
 }: HeadingBlockProps) {
   const placeholder =
-    block.type === "heading_1"
-      ? "Heading 1"
-      : block.type === "heading_2"
-        ? "Heading 2"
-        : "Heading 3";
+    block.type === "heading_1" ? "Heading 1"
+    : block.type === "heading_2" ? "Heading 2"
+    : "Heading 3";
 
   return (
     <TipTapBlock

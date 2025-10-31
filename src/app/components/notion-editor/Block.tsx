@@ -66,17 +66,20 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
     [block.id, updateBlock],
   );
 
-  const handleEnter = useCallback(() => {
-    // Create new block of the same type (like Notion's plus button)
-    // Always preserve the current block type
-    const newBlockType = block.type;
+  const handleEnter = useCallback((markDone?: boolean) => {
+    // Mark current block as done if it's a todo or list and markDone is true
+    if (markDone && (block.type === "to_do_list" || block.type === "bullet_list" || block.type === "number_list")) {
+      updateBlock(block.id, {
+        metadata: { ...block.metadata, checked: true },
+      });
+    }
     
-    // Create new block after current block
+    // Create new block of the same type
+    const newBlockType = block.type;
     const newBlock = addBlock(newBlockType, index);
     
     // Focus the new block after a short delay
     setTimeout(() => {
-      // Find and focus the TipTap editor in the new block
       const nextBlockElement = document.querySelector(
         `[data-block-id="${newBlock.id}"] .ProseMirror`,
       ) as HTMLElement;
@@ -84,31 +87,38 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
         nextBlockElement.focus();
       }
     }, 0);
-  }, [addBlock, block.type, index]);
+  }, [addBlock, block.type, block.id, block.metadata, index, updateBlock]);
 
   const handleBackspace = useCallback(() => {
-    // Check if block is empty
-    // TipTap might return empty HTML like "<p></p>" or just empty string
     const blockContent = block.content?.trim() || "";
-    
-    // Strip all HTML tags and check if there's any actual text content
     const textContent = blockContent
-      .replace(/<[^>]*>/g, "") // Remove all HTML tags
-      .replace(/&nbsp;/g, " ") // Replace non-breaking spaces
-      .replace(/&[a-zA-Z]+;/g, "") // Remove HTML entities
+      .replace(/<[^>]*>/g, "")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&[a-zA-Z]+;/g, "")
       .trim();
     
     const isEmpty = 
       blockContent.length === 0 || 
       blockContent === "<p></p>" || 
-      blockContent === "" ||
       blockContent === "<p><br></p>" ||
       blockContent === "<br>" ||
-      // Check if there's no actual text content after stripping HTML
       textContent.length === 0;
     
+    // If todo block is empty, convert to paragraph instead of deleting
+    if (isEmpty && block.type === "to_do_list") {
+      changeBlockType(block.id, "paragraph");
+      setTimeout(() => {
+        const blockElement = document.querySelector(
+          `[data-block-id="${block.id}"] .ProseMirror`,
+        ) as HTMLElement;
+        if (blockElement) {
+          blockElement.focus();
+        }
+      }, 0);
+      return;
+    }
+    
     if (isEmpty) {
-      // If there's a previous block, focus it
       if (index > 0) {
         const prevBlockElement = document.querySelector(
           `[data-block-id="${block.id}"]`,
@@ -118,7 +128,6 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
           const prevTipTap = prevBlockElement.querySelector(".ProseMirror") as HTMLElement;
           if (prevTipTap) {
             prevTipTap.focus();
-            // Move cursor to end of previous block
             setTimeout(() => {
               const range = document.createRange();
               const sel = window.getSelection();
@@ -130,10 +139,8 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
           }
         }
       }
-      
       deleteBlock(block.id);
     } else if (index > 0) {
-      // Block has content and backspace at start - merge with previous
       const prevBlockElement = document.querySelector(
         `[data-block-id="${block.id}"]`,
       )?.previousElementSibling as HTMLElement;
@@ -142,7 +149,6 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
         const prevTipTap = prevBlockElement.querySelector(".ProseMirror") as HTMLElement;
         if (prevTipTap) {
           prevTipTap.focus();
-          // Move cursor to end of previous block
           setTimeout(() => {
             const range = document.createRange();
             const sel = window.getSelection();
@@ -153,10 +159,9 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
           }, 0);
         }
       }
-      
       deleteBlock(block.id);
     }
-  }, [block.id, block.content, deleteBlock, index]);
+  }, [block.id, block.content, block.type, deleteBlock, index, changeBlockType]);
 
   const handleSlashCommand = useCallback(
     (query: string) => {

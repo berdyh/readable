@@ -6,7 +6,7 @@ import { TipTapBlock } from "./TipTapBlock";
 interface CodeBlockProps {
   block: Block;
   onUpdate: (content: string) => void;
-  onEnter?: () => void;
+  onEnter?: (markDone?: boolean) => void;
   onBackspace?: () => void;
   onSlashCommand?: (query: string) => void;
   paperId?: string;

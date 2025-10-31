@@ -8,7 +8,7 @@ interface ListBlockProps {
   block: Block;
   index: number;
   onUpdate: (content: string) => void;
-  onEnter?: () => void;
+  onEnter?: (markDone?: boolean) => void;
   onBackspace?: () => void;
   onSlashCommand?: (query: string) => void;
   paperId?: string;

@@ -13,7 +13,7 @@ interface TipTapBlockProps {
   block: Block;
   blockType: BlockType;
   onUpdate: (content: string) => void;
-  onEnter?: () => void;
+  onEnter?: (markDone?: boolean) => void;
   onBackspace?: () => void;
   onSlashCommand?: (query: string) => void;
   placeholder?: string;
@@ -24,7 +24,7 @@ interface TipTapBlockProps {
   onInsertBlock?: (type: BlockType, index: number, content?: string) => void;
   blockIndex?: number;
   onExecuteApi?: (command: string, params?: Record<string, unknown>) => Promise<void>;
-  isLocked?: boolean; // If true, block is read-only (slash commands still work but won't insert in locked area)
+  isLocked?: boolean;
 }
 
 export function TipTapBlock({
@@ -42,7 +42,6 @@ export function TipTapBlock({
   onExecuteApi,
   isLocked = false,
 }: TipTapBlockProps) {
-  // Build slash command items using useMemo to avoid setState in effect
   const slashItems = useMemo(() => {
     const context: SlashCommandContext = {
       blockId: block.id,
@@ -61,40 +60,22 @@ export function TipTapBlock({
     editable: !isLocked, // Make editor read-only when locked
     extensions: [
       StarterKit.configure({
-        // Disable default heading since we handle block types externally
-        heading: false,
+        heading: false, // Block types handled externally
         paragraph: {
           HTMLAttributes: {
             class: "m-0",
           },
         },
-        // Allow hard breaks (Shift+Enter) for multi-line text within a block
         hardBreak: {
           keepMarks: true,
         },
-        // Keep text formatting - use default configs
         bold: {},
         italic: {},
         strike: {},
         code: {},
-        // Enable lists for list block types - allows inline list editing with Enter
-        bulletList:
-          blockType === "bullet_list"
-            ? {
-                keepAttributes: false,
-                keepMarks: true,
-              }
-            : false,
-        orderedList:
-          blockType === "number_list"
-            ? {
-                keepMarks: true,
-              }
-            : false,
-        listItem:
-          blockType === "bullet_list" || blockType === "number_list"
-            ? {}
-            : false,
+        bulletList: blockType === "bullet_list" ? { keepAttributes: false, keepMarks: true } : false,
+        orderedList: blockType === "number_list" ? { keepMarks: true } : false,
+        listItem: blockType === "bullet_list" || blockType === "number_list" ? {} : false,
       }),
       Placeholder.configure({
         placeholder,
@@ -137,82 +118,35 @@ export function TipTapBlock({
         return false;
       },
       handleKeyDown: (view, event) => {
-        // In locked blocks, only allow slash commands, no other editing
         if (isLocked) {
-          // Allow "/" to trigger slash commands (but commands insert after locked block)
-          if (event.key === "/") {
-            return false; // Let slash command extension handle it
-          }
-          // Prevent all other key interactions in locked blocks
-          return true; // Prevent default behavior
-        }
-
-        // Handle Enter key (without Shift) - creates new block at end, allows inline editing otherwise
-        if (event.key === "Enter" && !event.shiftKey) {
-          const { from } = view.state.selection;
-          const doc = view.state.doc;
-          const isAtEnd = from === doc.content.size;
-          
-          // For list blocks (to-do, bullet, number), always create new block of same type
-          // This matches Notion's behavior where Enter creates a new item of the same type
-          if (blockType === "to_do_list" || blockType === "bullet_list" || blockType === "number_list") {
-            event.preventDefault();
-            onEnter?.();
-            return true;
-          }
-          
-          // For code blocks, always allow Enter to create new lines within the block
-          if (blockType === "code") {
-            // Let TipTap handle Enter normally (creates line breaks)
-            return false;
-          }
-          
-          // For paragraph/heading/quote/callout blocks, allow inline editing with Enter (line breaks)
-          // Only create new block when at the very end of content
-          if (
-            blockType === "paragraph" ||
-            blockType === "heading_1" ||
-            blockType === "heading_2" ||
-            blockType === "heading_3" ||
-            blockType === "quote" ||
-            blockType === "callout"
-          ) {
-            // At end of content - create new block for new paragraph/heading
-            if (isAtEnd && doc.textContent.trim().length > 0) {
-              event.preventDefault();
-              onEnter?.();
-              return true;
-            }
-            // Otherwise let TipTap handle Enter normally (creates line breaks for inline editing)
-            return false;
-          }
-        }
-
-        // Handle Shift+Enter - always create new block of same type (like plus button)
-        if (event.key === "Enter" && event.shiftKey) {
-          // For code blocks, Shift+Enter should still create line breaks
-          if (blockType === "code") {
-            return false; // Let TipTap handle it (creates line break)
-          }
-          
-          // For all other blocks, Shift+Enter creates a new block of the same type
-          event.preventDefault();
-          onEnter?.();
+          if (event.key === "/") return false;
           return true;
         }
 
-        // Handle Backspace - delete block if empty
+        // Handle Enter key (without modifiers) - creates new line in block (not new block)
+        if (event.key === "Enter" && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
+          // Let TipTap handle Enter normally (creates line breaks)
+          return false;
+        }
+
+        // Handle Shift+Enter - creates new block of same type
+        if (event.key === "Enter" && event.shiftKey && !event.ctrlKey && !event.metaKey) {
+          event.preventDefault();
+          onEnter?.(false);
+          return true;
+        }
+
+        // Handle Ctrl+Enter (or Cmd+Enter on Mac) - creates new block and marks done if todo/list
+        if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+          event.preventDefault();
+          onEnter?.(true);
+          return true;
+        }
+
+        // Handle Backspace/Delete - delegate to parent handler
         if (event.key === "Backspace" || event.key === "Delete") {
           const textContent = view.state.doc.textContent.trim();
-          // If block is empty (no text content), delete it
-          if (textContent.length === 0) {
-            event.preventDefault();
-            onBackspace?.();
-            return true;
-          }
-          // If at start of non-empty content, also allow delete (will merge with previous)
-          const { from } = view.state.selection;
-          if (from === 0 && event.key === "Backspace") {
+          if (textContent.length === 0 || (event.key === "Backspace" && view.state.selection.from === 0)) {
             event.preventDefault();
             onBackspace?.();
             return true;
@@ -224,20 +158,11 @@ export function TipTapBlock({
       },
     },
     onUpdate: ({ editor }) => {
-      // Don't update if block is locked (read-only)
-      if (isLocked) {
-        return;
-      }
+      if (isLocked) return;
       
       const html = editor.getHTML();
       const textContent = editor.getText().trim();
-      
-      // If content is empty, update to empty string (not "<p></p>")
-      if (textContent.length === 0) {
-        onUpdate("");
-      } else {
-        onUpdate(html);
-      }
+      onUpdate(textContent.length === 0 ? "" : html);
     },
     immediatelyRender: false,
   });

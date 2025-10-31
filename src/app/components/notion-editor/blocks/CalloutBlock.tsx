@@ -8,7 +8,7 @@ import { clsx } from "clsx";
 interface CalloutBlockProps {
   block: Block;
   onUpdate: (content: string) => void;
-  onEnter?: () => void;
+  onEnter?: (markDone?: boolean) => void;
   onBackspace?: () => void;
   onSlashCommand?: (query: string) => void;
   paperId?: string;

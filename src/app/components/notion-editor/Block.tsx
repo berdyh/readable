@@ -364,31 +364,28 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
       onFocus={handleFocus}
       onBlur={handleBlur}
     >
+      {/* Lock/Edit toggle button - always in top-right corner */}
+      <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity z-10">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation(); // Prevent event bubbling
+            handleToggleLock();
+          }}
+          className="flex h-6 w-6 items-center justify-center rounded hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors"
+          title={isLocked ? "Click to unlock and edit" : "Click to lock (make read-only)"}
+        >
+          {isLocked ? (
+            <Edit2 className="h-4 w-4 text-neutral-400" />
+          ) : (
+            <Lock className="h-4 w-4 text-neutral-400" />
+          )}
+        </button>
+      </div>
+
       {/* Block options (shown on hover/focus) */}
       {(isFocused || showOptions) && (
         <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-          {/* Edit/Lock toggle button - shown for locked blocks */}
-          {isLocked && (
-            <button
-              type="button"
-              onClick={handleToggleLock}
-              className="flex h-6 w-6 items-center justify-center rounded hover:bg-neutral-200 dark:hover:bg-neutral-700"
-              title="Unlock block for editing"
-            >
-              <Edit2 className="h-4 w-4" />
-            </button>
-          )}
-          {/* Lock button - shown for unlocked blocks */}
-          {!isLocked && isFocused && (
-            <button
-              type="button"
-              onClick={handleToggleLock}
-              className="flex h-6 w-6 items-center justify-center rounded hover:bg-neutral-200 dark:hover:bg-neutral-700"
-              title="Lock block (make read-only)"
-            >
-              <Lock className="h-4 w-4" />
-            </button>
-          )}
           <button
             type="button"
             onClick={handleAddClick}
@@ -403,19 +400,6 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
             title="Drag to reorder"
           >
             <GripVertical className="h-4 w-4" />
-          </button>
-        </div>
-      )}
-      {/* Lock indicator for locked blocks */}
-      {isLocked && !isFocused && (
-        <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button
-            type="button"
-            onClick={handleToggleLock}
-            className="flex h-6 w-6 items-center justify-center rounded hover:bg-neutral-200 dark:hover:bg-neutral-700"
-            title="Click to unlock and edit"
-          >
-            <Edit2 className="h-4 w-4 text-neutral-400" />
           </button>
         </div>
       )}

@@ -17,6 +17,7 @@ interface TodoBlockProps {
   onChangeBlockType?: (blockId: string, newType: Block["type"]) => void;
   onInsertBlock?: (type: Block["type"], index: number, content?: string) => void;
   onExecuteApi?: (command: string, params?: Record<string, unknown>) => Promise<void>;
+  isLocked?: boolean;
 }
 
 export function TodoBlock({
@@ -29,8 +30,9 @@ export function TodoBlock({
   paperId,
   blockIndex = 0,
   onChangeBlockType,
-  onInsertBlock,
-  onExecuteApi,
+      onInsertBlock,
+      onExecuteApi,
+      isLocked = false,
 }: TodoBlockProps) {
   const checked = block.metadata?.checked ?? false;
 
@@ -46,7 +48,8 @@ export function TodoBlock({
         type="checkbox"
         checked={checked}
         onChange={handleCheckboxChange}
-        className="mt-1 h-4 w-4 cursor-pointer rounded border-neutral-300"
+        disabled={isLocked}
+        className="mt-1 h-4 w-4 cursor-pointer rounded border-neutral-300 disabled:opacity-50 disabled:cursor-not-allowed"
       />
       <div className={clsx("flex-1", checked && "opacity-60")}>
         <TipTapBlock
@@ -63,6 +66,7 @@ export function TodoBlock({
           onChangeBlockType={onChangeBlockType}
           onInsertBlock={onInsertBlock}
           onExecuteApi={onExecuteApi}
+          isLocked={isLocked}
         />
       </div>
     </div>

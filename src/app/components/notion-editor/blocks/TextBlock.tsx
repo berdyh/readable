@@ -14,6 +14,7 @@ interface TextBlockProps {
   onChangeBlockType?: (blockId: string, newType: Block["type"]) => void;
   onInsertBlock?: (type: Block["type"], index: number, content?: string) => void;
   onExecuteApi?: (command: string, params?: Record<string, unknown>) => Promise<void>;
+  isLocked?: boolean;
 }
 
 export function TextBlock({
@@ -27,6 +28,7 @@ export function TextBlock({
   onChangeBlockType,
   onInsertBlock,
   onExecuteApi,
+  isLocked = false,
 }: TextBlockProps) {
   return (
     <TipTapBlock
@@ -42,6 +44,7 @@ export function TextBlock({
       onChangeBlockType={onChangeBlockType}
       onInsertBlock={onInsertBlock}
       onExecuteApi={onExecuteApi}
+      isLocked={isLocked}
     />
   );
 }

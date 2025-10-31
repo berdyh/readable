@@ -24,6 +24,7 @@ interface TipTapBlockProps {
   onInsertBlock?: (type: BlockType, index: number, content?: string) => void;
   blockIndex?: number;
   onExecuteApi?: (command: string, params?: Record<string, unknown>) => Promise<void>;
+  isLocked?: boolean; // If true, block is read-only (slash commands still work but won't insert in locked area)
 }
 
 export function TipTapBlock({
@@ -39,6 +40,7 @@ export function TipTapBlock({
   onInsertBlock,
   blockIndex = 0,
   onExecuteApi,
+  isLocked = false,
 }: TipTapBlockProps) {
   // Build slash command items using useMemo to avoid setState in effect
   const slashItems = useMemo(() => {
@@ -56,6 +58,7 @@ export function TipTapBlock({
   }, [block.id, block.content, blockType, blockIndex, paperId, onChangeBlockType, onInsertBlock, onExecuteApi]);
 
   const editor = useEditor({
+    editable: !isLocked, // Make editor read-only when locked
     extensions: [
       StarterKit.configure({
         // Disable default heading since we handle block types externally
@@ -98,6 +101,8 @@ export function TipTapBlock({
       }),
       SlashCommandExtension.configure({
         getItems: () => slashItems,
+        // Slash commands work even in locked blocks, but won't insert in locked area
+        // They will insert after the locked block instead
       }),
     ],
     content: block.content || "",
@@ -115,6 +120,16 @@ export function TipTapBlock({
         ),
       },
       handleKeyDown: (view, event) => {
+        // In locked blocks, only allow slash commands, no other editing
+        if (isLocked) {
+          // Allow "/" to trigger slash commands (but commands insert after locked block)
+          if (event.key === "/") {
+            return false; // Let slash command extension handle it
+          }
+          // Prevent all other key interactions in locked blocks
+          return true; // Prevent default behavior
+        }
+
         // Handle Enter key based on block type
         if (event.key === "Enter" && !event.shiftKey) {
           const { from } = view.state.selection;
@@ -179,6 +194,11 @@ export function TipTapBlock({
       },
     },
     onUpdate: ({ editor }) => {
+      // Don't update if block is locked (read-only)
+      if (isLocked) {
+        return;
+      }
+      
       const html = editor.getHTML();
       const textContent = editor.getText().trim();
       
@@ -191,6 +211,13 @@ export function TipTapBlock({
     },
     immediatelyRender: false,
   });
+
+  // Sync editable state when lock status changes
+  useEffect(() => {
+    if (editor) {
+      editor.setEditable(!isLocked);
+    }
+  }, [editor, isLocked]);
 
   // Sync content when block changes externally
   useEffect(() => {

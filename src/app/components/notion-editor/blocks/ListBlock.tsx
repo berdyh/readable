@@ -16,6 +16,7 @@ interface ListBlockProps {
   onChangeBlockType?: (blockId: string, newType: Block["type"]) => void;
   onInsertBlock?: (type: Block["type"], index: number, content?: string) => void;
   onExecuteApi?: (command: string, params?: Record<string, unknown>) => Promise<void>;
+  isLocked?: boolean;
 }
 
 export function ListBlock({
@@ -28,8 +29,9 @@ export function ListBlock({
   paperId,
   blockIndex = 0,
   onChangeBlockType,
-  onInsertBlock,
-  onExecuteApi,
+      onInsertBlock,
+      onExecuteApi,
+      isLocked = false,
 }: ListBlockProps) {
   const isBulletList = block.type === "bullet_list";
 
@@ -57,6 +59,7 @@ export function ListBlock({
           onChangeBlockType={onChangeBlockType}
           onInsertBlock={onInsertBlock}
           onExecuteApi={onExecuteApi}
+          isLocked={isLocked}
         />
       </div>
     </div>

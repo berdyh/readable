@@ -34,6 +34,7 @@ export interface BlockMetadata {
   title?: string;
   url?: string;
   checked?: boolean; // for to_do_list
+  locked?: boolean; // Blocks generated from API are locked by default (read-only until edit is clicked)
   [key: string]: unknown;
 }
 

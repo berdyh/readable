@@ -77,6 +77,18 @@ Readable pulls metadata and PDFs from arXiv. Make sure your deployment complies 
 
 Kontext API usage follows their [Get Context](https://docs.kontext.dev/api-reference/get-context) contract. Persona data remains in your Weaviate cluster; no raw emails or documents leave Kontext.
 
+## Notion-Style Editor
+
+The application includes a Notion-style block-based editor for analyzing and annotating research papers. Key features:
+
+- **Block-based editing**: Text, headings, lists, code blocks, quotes, and callouts
+- **Locked blocks**: Blocks generated from API calls (summaries, figures, citations) are locked (read-only) by default. Click the edit icon (pencil) in the block options to unlock for manual editing.
+- **Slash commands**: Type "/" to access formatting and research commands
+- **Slash commands in locked blocks**: The "/" trigger works in locked blocks, but results are inserted after the locked block, not within it
+- **AI chat integration**: Floating chat button and inline chat blocks for Q&A
+
+See `src/app/components/notion-editor/LOCKED_BLOCKS.md` for detailed documentation on the locked blocks feature.
+
 ## Next steps
 
 - Review `PRIVACY.md` for data-handling notes.

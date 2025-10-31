@@ -43,6 +43,9 @@ export function parseSummaryToBlocks(summary: SummaryResult): Block[] {
       id: uuidv4(),
       type: "heading_1",
       content: "Paper Summary",
+      metadata: {
+        locked: true, // Generated blocks are locked by default
+      },
     });
   }
 
@@ -57,6 +60,7 @@ export function parseSummaryToBlocks(summary: SummaryResult): Block[] {
         metadata: {
           section: section.section_id,
           page: section.page_span?.start,
+          locked: true, // Generated blocks are locked by default
         },
       });
 
@@ -66,6 +70,9 @@ export function parseSummaryToBlocks(summary: SummaryResult): Block[] {
           id: uuidv4(),
           type: "paragraph",
           content: section.summary,
+          metadata: {
+            locked: true, // Generated blocks are locked by default
+          },
         });
       }
 
@@ -76,6 +83,9 @@ export function parseSummaryToBlocks(summary: SummaryResult): Block[] {
             id: uuidv4(),
             type: "bullet_list",
             content: point,
+            metadata: {
+              locked: true, // Generated blocks are locked by default
+            },
           });
         }
       }
@@ -93,11 +103,14 @@ export function parseSummaryToBlocks(summary: SummaryResult): Block[] {
 
   // Parse key findings as callout blocks
   if (summary.key_findings && summary.key_findings.length > 0) {
-    blocks.push({
-      id: uuidv4(),
-      type: "heading_2",
-      content: "Key Findings",
-    });
+      blocks.push({
+        id: uuidv4(),
+        type: "heading_2",
+        content: "Key Findings",
+        metadata: {
+          locked: true, // Generated blocks are locked by default
+        },
+      });
 
     for (const finding of summary.key_findings) {
       const findingText = `${finding.statement}\n\nEvidence: ${finding.evidence}`;
@@ -111,6 +124,7 @@ export function parseSummaryToBlocks(summary: SummaryResult): Block[] {
         metadata: {
           type: "info",
           page: pageNumber,
+          locked: true, // Generated blocks are locked by default
         },
       });
     }
@@ -118,11 +132,14 @@ export function parseSummaryToBlocks(summary: SummaryResult): Block[] {
 
   // Parse figures
   if (summary.figures && summary.figures.length > 0) {
-    blocks.push({
-      id: uuidv4(),
-      type: "heading_2",
-      content: "Figures",
-    });
+      blocks.push({
+        id: uuidv4(),
+        type: "heading_2",
+        content: "Figures",
+        metadata: {
+          locked: true, // Generated blocks are locked by default
+        },
+      });
 
     for (const figure of summary.figures) {
       blocks.push({
@@ -134,6 +151,7 @@ export function parseSummaryToBlocks(summary: SummaryResult): Block[] {
           page: figure.page_anchor ? parseInt(figure.page_anchor) : undefined,
           caption: figure.caption,
           insight: figure.insight,
+          locked: true, // Generated blocks are locked by default
         },
       });
     }
@@ -159,6 +177,7 @@ export function parseFiguresToBlocks(result: SelectionFiguresResult): Block[] {
           imageUrl: figure.imageUrl,
           page: figure.pageNumber,
           caption: figure.caption,
+          locked: true, // Generated blocks are locked by default
         },
       });
     }
@@ -190,6 +209,7 @@ export function parseCitationsToBlocks(result: SelectionCitationsResult): Block[
           year: citation.year,
           url: citation.url || citation.doi || citation.arxivId,
           source: citation.source,
+          locked: true, // Generated blocks are locked by default
         },
       });
     }
@@ -214,6 +234,7 @@ export function parseSelectionSummaryToBlocks(result: SelectionSummaryResult): B
       content: bulletsText,
       metadata: {
         type: "info",
+        locked: true, // Generated blocks are locked by default
       },
     });
   }
@@ -225,6 +246,9 @@ export function parseSelectionSummaryToBlocks(result: SelectionSummaryResult): B
         id: uuidv4(),
         type: "paragraph",
         content: insight,
+        metadata: {
+          locked: true, // Generated blocks are locked by default
+        },
       });
     }
   }
@@ -256,6 +280,7 @@ export function parseTextSummaryToBlocks(
       metadata: {
         type: "info",
         ...metadata,
+        locked: true, // Generated blocks are locked by default
       },
     });
   }
@@ -266,7 +291,10 @@ export function parseTextSummaryToBlocks(
       id: uuidv4(),
       type: "paragraph",
       content: paragraph,
-      metadata,
+      metadata: {
+        ...metadata,
+        locked: true, // Generated blocks are locked by default
+      },
     });
   }
 

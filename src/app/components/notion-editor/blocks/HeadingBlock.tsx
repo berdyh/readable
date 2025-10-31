@@ -14,6 +14,7 @@ interface HeadingBlockProps {
   onChangeBlockType?: (blockId: string, newType: Block["type"]) => void;
   onInsertBlock?: (type: Block["type"], index: number, content?: string) => void;
   onExecuteApi?: (command: string, params?: Record<string, unknown>) => Promise<void>;
+  isLocked?: boolean;
 }
 
 export function HeadingBlock({
@@ -26,7 +27,8 @@ export function HeadingBlock({
   blockIndex = 0,
   onChangeBlockType,
   onInsertBlock,
-  onExecuteApi,
+      onExecuteApi,
+      isLocked = false,
 }: HeadingBlockProps) {
   const placeholder =
     block.type === "heading_1"
@@ -49,6 +51,7 @@ export function HeadingBlock({
       onChangeBlockType={onChangeBlockType}
       onInsertBlock={onInsertBlock}
       onExecuteApi={onExecuteApi}
+      isLocked={isLocked}
     />
   );
 }

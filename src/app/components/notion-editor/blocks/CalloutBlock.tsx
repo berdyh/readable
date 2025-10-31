@@ -16,6 +16,7 @@ interface CalloutBlockProps {
   onChangeBlockType?: (blockId: string, newType: Block["type"]) => void;
   onInsertBlock?: (type: Block["type"], index: number, content?: string) => void;
   onExecuteApi?: (command: string, params?: Record<string, unknown>) => Promise<void>;
+  isLocked?: boolean;
 }
 
 export function CalloutBlock({
@@ -29,6 +30,7 @@ export function CalloutBlock({
   onChangeBlockType,
   onInsertBlock,
   onExecuteApi,
+  isLocked = false,
 }: CalloutBlockProps) {
   // Determine callout type from metadata or default to info
   const calloutType = (block.metadata?.type as string) || "info";
@@ -62,6 +64,7 @@ export function CalloutBlock({
             onChangeBlockType={onChangeBlockType}
             onInsertBlock={onInsertBlock}
             onExecuteApi={onExecuteApi}
+            isLocked={isLocked}
           />
         </div>
       </div>

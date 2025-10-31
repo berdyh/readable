@@ -5,7 +5,7 @@ import {
   useCallback,
 } from "react";
 import { clsx } from "clsx";
-import { GripVertical, Plus } from "lucide-react";
+import { GripVertical, Plus, Edit2, Lock } from "lucide-react";
 
 import { useEditorStore } from "./store";
 import type { Block as BlockType, Block } from "./types";
@@ -30,6 +30,7 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
   const { state, updateBlock, deleteBlock, addBlock, changeBlockType, insertBlock } = useEditorStore();
   const [isFocused, setIsFocused] = useState(false);
   const [showOptions, setShowOptions] = useState(false);
+  const isLocked = block.metadata?.locked === true;
 
   // Handler for API execution from slash commands
   const handleExecuteApi = useCallback(
@@ -162,6 +163,15 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
     setShowOptions(false);
   }, [addBlock, block.type, index]);
 
+  const handleToggleLock = useCallback(() => {
+    updateBlock(block.id, {
+      metadata: {
+        ...block.metadata,
+        locked: !isLocked,
+      },
+    });
+  }, [block.id, block.metadata, isLocked, updateBlock]);
+
   const handleFocus = useCallback(() => {
     setIsFocused(true);
     setShowOptions(true);
@@ -196,6 +206,7 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
               insertBlock(newBlock, idx);
             }}
             onExecuteApi={handleExecuteApi}
+            isLocked={isLocked}
           />
         );
       case "bullet_list":
@@ -216,6 +227,7 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
               insertBlock(newBlock, idx);
             }}
             onExecuteApi={handleExecuteApi}
+            isLocked={isLocked}
           />
         );
       case "to_do_list":
@@ -235,6 +247,7 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
               insertBlock(newBlock, idx);
             }}
             onExecuteApi={handleExecuteApi}
+            isLocked={isLocked}
           />
         );
       case "code":
@@ -253,6 +266,7 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
               insertBlock(newBlock, idx);
             }}
             onExecuteApi={handleExecuteApi}
+            isLocked={isLocked}
           />
         );
       case "quote":
@@ -271,6 +285,7 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
               insertBlock(newBlock, idx);
             }}
             onExecuteApi={handleExecuteApi}
+            isLocked={isLocked}
           />
         );
       case "divider":
@@ -291,6 +306,7 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
               insertBlock(newBlock, idx);
             }}
             onExecuteApi={handleExecuteApi}
+            isLocked={isLocked}
           />
         );
       case "chat_message":
@@ -324,6 +340,7 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
               insertBlock(newBlock, idx);
             }}
             onExecuteApi={handleExecuteApi}
+            isLocked={isLocked}
           />
         );
     }
@@ -342,6 +359,28 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
       {/* Block options (shown on hover/focus) */}
       {(isFocused || showOptions) && (
         <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+          {/* Edit/Lock toggle button - shown for locked blocks */}
+          {isLocked && (
+            <button
+              type="button"
+              onClick={handleToggleLock}
+              className="flex h-6 w-6 items-center justify-center rounded hover:bg-neutral-200 dark:hover:bg-neutral-700"
+              title="Unlock block for editing"
+            >
+              <Edit2 className="h-4 w-4" />
+            </button>
+          )}
+          {/* Lock button - shown for unlocked blocks */}
+          {!isLocked && isFocused && (
+            <button
+              type="button"
+              onClick={handleToggleLock}
+              className="flex h-6 w-6 items-center justify-center rounded hover:bg-neutral-200 dark:hover:bg-neutral-700"
+              title="Lock block (make read-only)"
+            >
+              <Lock className="h-4 w-4" />
+            </button>
+          )}
           <button
             type="button"
             onClick={handleAddClick}
@@ -356,6 +395,19 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
             title="Drag to reorder"
           >
             <GripVertical className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+      {/* Lock indicator for locked blocks */}
+      {isLocked && !isFocused && (
+        <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            type="button"
+            onClick={handleToggleLock}
+            className="flex h-6 w-6 items-center justify-center rounded hover:bg-neutral-200 dark:hover:bg-neutral-700"
+            title="Click to unlock and edit"
+          >
+            <Edit2 className="h-4 w-4 text-neutral-400" />
           </button>
         </div>
       )}

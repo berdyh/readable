@@ -41,22 +41,16 @@ function getDefaultModel(taskType?: string): string {
   return envModel || modelFromConfig;
 }
 
-function getOpenAiConfig(config?: LlmConfig): OpenAiProviderConfig {
+function getOpenAiConfig(config?: LlmConfig, taskType?: string): OpenAiProviderConfig {
   const apiKey =
     config?.apiKey ??
     requireEnvVar('OPENAI_API_KEY', 'to use OpenAI. Set it in your environment.');
   const baseUrl =
-    config?.baseUrl ??
-    requireEnvVar(
-      'OPENAI_API_BASE_URL',
-      'to use OpenAI. Update .env.local if needed.',
-    );
+    (config?.baseUrl as string) ??
+    process.env.OPENAI_API_BASE_URL ??
+    'https://api.openai.com/v1';
   const model =
-    config?.model ??
-    requireEnvVar(
-      'OPENAI_MODEL',
-      'for OpenAI. Update .env.local if needed.',
-    );
+    (config?.model as string) ?? getDefaultModel(taskType);
 
   return {
     apiKey,
@@ -75,7 +69,7 @@ export class OpenAiProvider implements LlmProviderInterface {
   private taskType?: string;
 
   constructor(config?: LlmConfig, taskType?: string) {
-    this.config = getOpenAiConfig(config);
+    this.config = getOpenAiConfig(config, taskType);
     this.taskType = taskType;
   }
 

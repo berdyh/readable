@@ -39,7 +39,7 @@ function getDefaultModel(taskType?: string): string {
   return envModel || modelFromConfig;
 }
 
-function getAnthropicConfig(config?: LlmConfig): AnthropicProviderConfig {
+function getAnthropicConfig(config?: LlmConfig, taskType?: string): AnthropicProviderConfig {
   const apiKey =
     config?.apiKey ??
     requireEnvVar('ANTHROPIC_API_KEY', 'to use Anthropic. Set it in your environment.');
@@ -48,7 +48,7 @@ function getAnthropicConfig(config?: LlmConfig): AnthropicProviderConfig {
     process.env.ANTHROPIC_API_BASE_URL ??
     'https://api.anthropic.com';
   const model =
-    (config?.model as string) ?? getDefaultModel();
+    (config?.model as string) ?? getDefaultModel(taskType);
 
   return {
     apiKey,
@@ -65,7 +65,7 @@ export class AnthropicProvider implements LlmProviderInterface {
   private taskType?: string;
 
   constructor(config?: LlmConfig, taskType?: string) {
-    this.config = getAnthropicConfig(config);
+    this.config = getAnthropicConfig(config, taskType);
     this.taskType = taskType;
   }
 

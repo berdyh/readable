@@ -5,6 +5,7 @@ import type {
   Citation,
   Figure,
   Interaction,
+  KontextPrompt,
   PaperChunk,
   PersonaConcept,
 } from './types';
@@ -12,6 +13,7 @@ import {
   buildCitationUuid,
   buildFigureUuid,
   buildInteractionUuid,
+  buildKontextPromptUuid,
   buildPaperChunkUuid,
   buildPersonaConceptUuid,
 } from './ids';
@@ -268,4 +270,44 @@ export async function upsertInteractions(
   );
   ensureNoFailures(result, 'Interaction');
   return result.map((item) => item.id);
+}
+
+const buildKontextPromptObject = (
+  prompt: KontextPrompt,
+): WeaviateObject => {
+  const id =
+    prompt.id ??
+    buildKontextPromptUuid(
+      prompt.userId,
+      prompt.personaId,
+      prompt.taskId,
+      prompt.paperId,
+    );
+
+  return {
+    class: 'KontextPrompt',
+    id,
+    properties: removeUndefined({
+      userId: prompt.userId,
+      personaId: prompt.personaId,
+      taskId: prompt.taskId,
+      paperId: prompt.paperId,
+      systemPrompt: prompt.systemPrompt,
+      fetchedAt: prompt.fetchedAt
+        ? new Date(prompt.fetchedAt).toISOString()
+        : new Date().toISOString(),
+      expiresAt: prompt.expiresAt
+        ? new Date(prompt.expiresAt).toISOString()
+        : undefined,
+    }),
+  };
+};
+
+export async function upsertKontextPrompt(
+  prompt: KontextPrompt,
+  client: WeaviateClient = getWeaviateClient(),
+): Promise<string> {
+  const result = await batchUpsert(client, [buildKontextPromptObject(prompt)]);
+  ensureNoFailures(result, 'KontextPrompt');
+  return result[0]?.id ?? '';
 }

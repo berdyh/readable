@@ -110,48 +110,40 @@ async function executeSummaryCommand(
   }
 }
 
+// TODO: Implement these commands in Phase 6
+ 
 async function executeFigureCommand(
   _paperId: string,
   _blockId: string,
   _blockIndex: number,
   _onInsertBlock: (type: BlockType, index: number, content?: string) => void,
 ): Promise<void> {
-  try {
-    // TODO: Implement figure fetching
-    // This should call /api/editor/selection/figures
-    console.log("Figure command not yet implemented");
-  } catch (error) {
-    console.error("Failed to execute figure command:", error);
-  }
+  // TODO: Implement figure fetching
+  // This should call /api/editor/selection/figures
+  console.log("Figure command not yet implemented");
 }
 
+ 
 async function executeCitationCommand(
   _paperId: string,
   _blockId: string,
   _blockIndex: number,
   _onInsertBlock: (type: BlockType, index: number, content?: string) => void,
 ): Promise<void> {
-  try {
-    // TODO: Implement citation fetching
-    // This should call /api/editor/selection/citations
-    console.log("Citation command not yet implemented");
-  } catch (error) {
-    console.error("Failed to execute citation command:", error);
-  }
+  // TODO: Implement citation fetching
+  // This should call /api/editor/selection/citations
+  console.log("Citation command not yet implemented");
 }
 
+ 
 async function executeArxivCommand(
   _paperId: string,
   _blockId: string,
   _blockIndex: number,
   _onInsertBlock: (type: BlockType, index: number, content?: string) => void,
 ): Promise<void> {
-  try {
-    // TODO: Implement arXiv ingestion
-    // This should call /api/editor/ingest/arxiv
-    console.log("ArXiv command not yet implemented");
-  } catch (error) {
-    console.error("Failed to execute arxiv command:", error);
-  }
+  // TODO: Implement arXiv ingestion
+  // This should call /api/editor/ingest/arxiv
+  console.log("ArXiv command not yet implemented");
 }
 

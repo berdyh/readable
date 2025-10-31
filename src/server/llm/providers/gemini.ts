@@ -39,7 +39,7 @@ function getDefaultModel(taskType?: string): string {
   return envModel || modelFromConfig;
 }
 
-function getGeminiConfig(config?: LlmConfig): GeminiProviderConfig {
+function getGeminiConfig(config?: LlmConfig, taskType?: string): GeminiProviderConfig {
   const apiKey =
     config?.apiKey ??
     requireEnvVar('GEMINI_API_KEY', 'to use Gemini. Set it in your environment.');
@@ -48,7 +48,7 @@ function getGeminiConfig(config?: LlmConfig): GeminiProviderConfig {
     process.env.GEMINI_API_BASE_URL ??
     'https://generativelanguage.googleapis.com/v1beta';
   const model =
-    (config?.model as string) ?? getDefaultModel();
+    (config?.model as string) ?? getDefaultModel(taskType);
 
   return {
     apiKey,
@@ -65,7 +65,7 @@ export class GeminiProvider implements LlmProviderInterface {
   private taskType?: string;
 
   constructor(config?: LlmConfig, taskType?: string) {
-    this.config = getGeminiConfig(config);
+    this.config = getGeminiConfig(config, taskType);
     this.taskType = taskType;
   }
 

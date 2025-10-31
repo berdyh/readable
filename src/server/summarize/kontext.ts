@@ -1,6 +1,10 @@
+import { upsertKontextPrompt } from '@/server/weaviate/upsert';
+import type { KontextPrompt } from '@/server/weaviate/types';
+
 const DEFAULT_BASE_URL = 'https://api.kontext.dev';
 const DEFAULT_PATH = '/v1/context/get';
 const DEFAULT_TIMEOUT_MS = 8_000;
+const CACHE_TTL_HOURS = 24; // Cache prompts for 24 hours
 
 interface KontextConfig {
   apiKey?: string;
@@ -78,7 +82,34 @@ export async function fetchKontextSystemPrompt(
         ? data.system_prompt
         : undefined;
 
-    return systemPrompt?.trim() || undefined;
+    const trimmedPrompt = systemPrompt?.trim();
+
+    // Save prompt to Weaviate if we got one
+    if (trimmedPrompt) {
+      try {
+        const expiresAt = new Date();
+        expiresAt.setHours(expiresAt.getHours() + CACHE_TTL_HOURS);
+
+        const kontextPrompt: KontextPrompt = {
+          userId: request.userId,
+          personaId: request.personaId,
+          taskId: request.taskId,
+          paperId: request.paperId,
+          systemPrompt: trimmedPrompt,
+          fetchedAt: new Date().toISOString(),
+          expiresAt: expiresAt.toISOString(),
+        };
+
+        // Save asynchronously - don't block on save errors
+        upsertKontextPrompt(kontextPrompt).catch((error) => {
+          console.warn('[kontext] Failed to save prompt to Weaviate:', error);
+        });
+      } catch (error) {
+        console.warn('[kontext] Error preparing prompt for storage:', error);
+      }
+    }
+
+    return trimmedPrompt || undefined;
   } catch (error) {
     if ((error as Error)?.name !== 'AbortError') {
       console.warn('[summarize] Kontext request threw', error);

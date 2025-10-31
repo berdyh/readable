@@ -32,3 +32,18 @@ export const buildInteractionUuid = (
   prompt: string,
 ): string =>
   buildNamespacedId(`${userId}:${paperId}:${interactionType}:${prompt}`);
+
+export const buildKontextPromptUuid = (
+  userId: string | undefined,
+  personaId: string | undefined,
+  taskId: string,
+  paperId: string | undefined,
+): string => {
+  const parts = [
+    userId ?? 'anonymous',
+    personaId ?? 'default',
+    taskId,
+    paperId ?? 'global',
+  ];
+  return buildNamespacedId(parts.join(':'));
+};

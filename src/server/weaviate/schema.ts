@@ -250,6 +250,46 @@ const classes: WeaviateClass[] = [
       },
     ],
   },
+  {
+    class: 'KontextPrompt',
+    description:
+      'System prompts fetched from kontext.dev API for persona personalization.',
+    vectorizer: TEXT_MODULE,
+    moduleConfig: {
+      [TEXT_MODULE]: {
+        vectorizeClassName: false,
+      },
+    },
+    vectorIndexConfig: {
+      distance: 'cosine',
+    },
+    invertedIndexConfig: {
+      bm25: {
+        k1: 1.2,
+        b: 0.75,
+      },
+    },
+    properties: [
+      defaultTextProperty('userId', 'User identifier for the prompt.'),
+      defaultTextProperty('personaId', 'Persona identifier (optional).'),
+      defaultTextProperty('taskId', 'Task identifier (e.g., "summarize_research_paper", "qa_research_paper").'),
+      defaultTextProperty('paperId', 'Paper identifier (optional, for paper-specific prompts).'),
+      defaultTextProperty(
+        'systemPrompt',
+        'The system prompt text returned from kontext.dev (vectorized).',
+      ),
+      {
+        name: 'fetchedAt',
+        description: 'Timestamp when the prompt was fetched from kontext.dev.',
+        dataType: ['date'],
+      },
+      {
+        name: 'expiresAt',
+        description: 'Optional expiration timestamp for prompt cache invalidation.',
+        dataType: ['date'],
+      },
+    ],
+  },
 ];
 
 export async function ensureWeaviateSchema(

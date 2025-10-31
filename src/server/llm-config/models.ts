@@ -87,19 +87,27 @@ export function getModel(
  */
 export function getModelConfig(
   provider: 'openai' | 'anthropic' | 'gemini',
-  taskType: 'paper_summary' | 'selection_summary' | 'qa' | 'default',
+  taskType?: string | 'paper_summary' | 'selection_summary' | 'qa' | 'default',
 ): ModelConfig {
   const config = modelsData[provider];
   
   // Map task names to config keys
-  let taskKey: 'paper_summary' | 'selection_summary' | 'qa' | 'default' = taskType;
+  let taskKey: 'paper_summary' | 'selection_summary' | 'qa' | 'default' = 'default';
   
-  if (taskType === 'summary' || taskType === 'summarize') {
-    taskKey = 'paper_summary';
-  } else if (taskType === 'inline_summary') {
-    taskKey = 'selection_summary';
-  } else if (taskType === 'question') {
-    taskKey = 'qa';
+  if (!taskType) {
+    taskKey = 'default';
+  } else {
+    // Handle aliases and map to correct task keys (matching getModel logic)
+    const normalized = taskType.toLowerCase();
+    if (normalized === 'summary' || normalized === 'summarize' || normalized === 'paper_summary') {
+      taskKey = 'paper_summary';
+    } else if (normalized === 'inline_summary' || normalized === 'selection_summary') {
+      taskKey = 'selection_summary';
+    } else if (normalized === 'question' || normalized === 'qa') {
+      taskKey = 'qa';
+    } else if (normalized === 'default') {
+      taskKey = 'default';
+    }
   }
   
   return config[taskKey] ?? config.default;

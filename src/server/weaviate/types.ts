@@ -55,3 +55,14 @@ export interface Interaction {
   chunkIds?: string[];
   personaConceptIds?: string[];
 }
+
+export interface KontextPrompt {
+  id?: string;
+  userId?: string;
+  personaId?: string;
+  taskId: string;
+  paperId?: string;
+  systemPrompt: string;
+  fetchedAt?: string;
+  expiresAt?: string;
+}

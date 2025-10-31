@@ -71,7 +71,7 @@ export class GeminiProvider implements LlmProviderInterface {
 
   async generateJson(
     request: LlmRequest,
-    options?: { taskName?: string },
+    _options?: { taskName?: string },
   ): Promise<string> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.config.timeoutMs);

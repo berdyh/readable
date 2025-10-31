@@ -156,10 +156,18 @@ export function TipTapBlock({
           }
         }
 
-        // Handle Backspace at start - delete block or move to previous
-        if (event.key === "Backspace") {
+        // Handle Backspace - delete block if empty
+        if (event.key === "Backspace" || event.key === "Delete") {
+          const textContent = view.state.doc.textContent.trim();
+          // If block is empty (no text content), delete it
+          if (textContent.length === 0) {
+            event.preventDefault();
+            onBackspace?.();
+            return true;
+          }
+          // If at start of non-empty content, also allow delete (will merge with previous)
           const { from } = view.state.selection;
-          if (from === 0 && view.state.doc.textContent.length === 0) {
+          if (from === 0 && event.key === "Backspace") {
             event.preventDefault();
             onBackspace?.();
             return true;
@@ -172,7 +180,14 @@ export function TipTapBlock({
     },
     onUpdate: ({ editor }) => {
       const html = editor.getHTML();
-      onUpdate(html);
+      const textContent = editor.getText().trim();
+      
+      // If content is empty, update to empty string (not "<p></p>")
+      if (textContent.length === 0) {
+        onUpdate("");
+      } else {
+        onUpdate(html);
+      }
     },
     immediatelyRender: false,
   });

@@ -86,8 +86,45 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
   }, [addBlock, block.type, index]);
 
   const handleBackspace = useCallback(() => {
-    if (index > 0) {
-      // Focus previous block before deleting current
+    // Check if block is empty
+    // TipTap might return empty HTML like "<p></p>" or just empty string
+    const blockContent = block.content?.trim() || "";
+    const isEmpty = 
+      blockContent.length === 0 || 
+      blockContent === "<p></p>" || 
+      blockContent === "" ||
+      blockContent === "<p><br></p>" ||
+      blockContent === "<br>" ||
+      // Check if it's just HTML tags with no text
+      (blockContent.startsWith("<p") && blockContent.endsWith("</p>") && !blockContent.match(/[^<>]/));
+    
+    if (isEmpty) {
+      // If there's a previous block, focus it
+      if (index > 0) {
+        const prevBlockElement = document.querySelector(
+          `[data-block-id="${block.id}"]`,
+        )?.previousElementSibling as HTMLElement;
+        
+        if (prevBlockElement) {
+          const prevTipTap = prevBlockElement.querySelector(".ProseMirror") as HTMLElement;
+          if (prevTipTap) {
+            prevTipTap.focus();
+            // Move cursor to end of previous block
+            setTimeout(() => {
+              const range = document.createRange();
+              const sel = window.getSelection();
+              range.selectNodeContents(prevTipTap);
+              range.collapse(false);
+              sel?.removeAllRanges();
+              sel?.addRange(range);
+            }, 0);
+          }
+        }
+      }
+      
+      deleteBlock(block.id);
+    } else if (index > 0) {
+      // Block has content and backspace at start - merge with previous
       const prevBlockElement = document.querySelector(
         `[data-block-id="${block.id}"]`,
       )?.previousElementSibling as HTMLElement;
@@ -97,18 +134,20 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
         if (prevTipTap) {
           prevTipTap.focus();
           // Move cursor to end of previous block
-          const range = document.createRange();
-          const sel = window.getSelection();
-          range.selectNodeContents(prevTipTap);
-          range.collapse(false);
-          sel?.removeAllRanges();
-          sel?.addRange(range);
+          setTimeout(() => {
+            const range = document.createRange();
+            const sel = window.getSelection();
+            range.selectNodeContents(prevTipTap);
+            range.collapse(false);
+            sel?.removeAllRanges();
+            sel?.addRange(range);
+          }, 0);
         }
       }
       
       deleteBlock(block.id);
     }
-  }, [block.id, deleteBlock, index]);
+  }, [block.id, block.content, deleteBlock, index]);
 
   const handleSlashCommand = useCallback(
     (query: string) => {
@@ -118,9 +157,10 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
   );
 
   const handleAddClick = useCallback(() => {
-    addBlock("paragraph", index);
+    // Add same type of block (like Notion)
+    addBlock(block.type, index);
     setShowOptions(false);
-  }, [addBlock, index]);
+  }, [addBlock, block.type, index]);
 
   const handleFocus = useCallback(() => {
     setIsFocused(true);

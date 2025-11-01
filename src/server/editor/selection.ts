@@ -4,6 +4,7 @@ import type {
   AnswerCitation,
   QuestionSelection,
   QuestionEvidenceContext,
+  QaChunkContext,
 } from '@/server/qa/types';
 import { generateJson } from '@/server/llm';
 import { fetchKontextSystemPrompt } from '@/server/summarize/kontext';
@@ -52,11 +53,11 @@ const SELECTION_SUMMARY_SCHEMA: Record<string, unknown> = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['chunk_id'],
+        required: ['chunk_id', 'page', 'quote'],
         properties: {
           chunk_id: { type: 'string', minLength: 1 },
-          page: { type: 'integer' },
-          quote: { type: 'string' },
+          page: { type: 'integer', minimum: 1 },
+          quote: { type: 'string', minLength: 1 },
         },
       },
     },
@@ -232,6 +233,32 @@ function normalizeCitations(
   return citations;
 }
 
+/**
+ * Create a citation from a chunk, ensuring all required fields are present.
+ * Uses chunk text as quote and ensures page is a valid number >= 1.
+ * Ensures quote has minLength: 1 as required by the schema.
+ */
+function createCitationFromChunk(chunk: QaChunkContext): AnswerCitation {
+  const page =
+    typeof chunk.pageNumber === 'number' &&
+    Number.isFinite(chunk.pageNumber) &&
+    chunk.pageNumber >= 1
+      ? chunk.pageNumber
+      : 1;
+
+  const trimmedText = chunk.text.replace(/\s+/g, ' ').trim();
+  const quote =
+    trimmedText.length > 0
+      ? truncate(trimmedText, 240)
+      : `[chunk_id=${chunk.chunkId}]`;
+
+  return {
+    chunkId: chunk.chunkId,
+    page,
+    quote,
+  };
+}
+
 function ensureCitationForChunk(
   chunkId: string,
   existing: Map<string, AnswerCitation>,
@@ -246,10 +273,7 @@ function ensureCitationForChunk(
     evidence.expandedWindow.find((hit) => hit.chunkId === chunkId);
 
   if (chunk) {
-    existing.set(chunkId, {
-      chunkId,
-      page: chunk.pageNumber,
-    });
+    existing.set(chunkId, createCitationFromChunk(chunk));
   }
 }
 
@@ -277,10 +301,7 @@ function buildCalloutResult(
       citationIds: [chunkId],
     });
     if (fallbackChunk) {
-      citationMap.set(chunkId, {
-        chunkId,
-        page: fallbackChunk.pageNumber,
-      });
+      citationMap.set(chunkId, createCitationFromChunk(fallbackChunk));
     }
   }
 
@@ -303,10 +324,10 @@ function buildCalloutResult(
   }
 
   if (citationMap.size === 0 && evidence.hits[0]) {
-    citationMap.set(evidence.hits[0].chunkId, {
-      chunkId: evidence.hits[0].chunkId,
-      page: evidence.hits[0].pageNumber,
-    });
+    citationMap.set(
+      evidence.hits[0].chunkId,
+      createCitationFromChunk(evidence.hits[0]),
+    );
   }
 
   return {

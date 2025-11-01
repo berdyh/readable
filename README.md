@@ -63,7 +63,7 @@ Useful scripts:
 2. **Summaries** - load persona context (`systemPrompt`) from Kontext or the persona graph, gather relevant paper sections, and prompt OpenAI for structured JSON.
 3. **Q&A** - perform hybrid retrieval in Weaviate constrained to the selected paper, combine chunks/figures/citations, and answer with grounded citations.
 
-See `API.md` for JSON contracts if you are integrating with the backend programmatically.
+See `docs/API_ANALYSIS.md` and `docs/API_TESTING.md` for API documentation and testing information.
 
 ## Working with personas & models
 
@@ -91,5 +91,6 @@ See `src/app/components/block-editor/LOCKED_BLOCKS.md` for detailed documentatio
 
 ## Next steps
 
-- Review `PRIVACY.md` for data-handling notes.
-- Check `TASKS.md` for outstanding operational to-dos tied to the project plan.
+- Review `docs/PRIVACY.md` for data-handling notes.
+- Check `docs/PLAN-notion-ui.md` for the implementation plan.
+- See `docs/CLEANUP_SUMMARY.md` for component cleanup information.

@@ -244,7 +244,7 @@ function normalizeCitations(
 
 /**
  * Create a citation from a chunk, ensuring all required fields are present.
- * Uses chunk text as quote and ensures page is a valid number >= 1.
+ * Uses chunk text as quote and ensures page is a valid number >= 1 if available.
  * Ensures quote has minLength: 1 as required by the schema.
  */
 function createCitationFromChunk(chunk: QaChunkContext): AnswerCitation {
@@ -253,7 +253,7 @@ function createCitationFromChunk(chunk: QaChunkContext): AnswerCitation {
     Number.isFinite(chunk.pageNumber) &&
     chunk.pageNumber >= 1
       ? chunk.pageNumber
-      : 1;
+      : undefined;
 
   const trimmedText = chunk.text.replace(/\s+/g, ' ').trim();
   const quote =

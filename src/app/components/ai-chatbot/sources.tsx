@@ -105,7 +105,8 @@ export function SourcesContent({
             const displayText = source.quote 
               ? (source.quote.length > 120 ? `${source.quote.slice(0, 120)}...` : source.quote)
               : `Chunk ${source.chunkId}`;
-            const hasNavigation = paperId && source.page;
+            // Navigation works with chunkId alone - page number is optional
+            const hasNavigation = paperId && source.chunkId;
 
             return (
               <li key={key} className="flex items-start gap-2">
@@ -114,7 +115,7 @@ export function SourcesContent({
                     type="button"
                     onClick={(e) => handleSourceClick(source, e)}
                     className="flex items-start gap-2 text-left text-blue-600 hover:underline dark:text-blue-400 group w-full"
-                    title={`Jump to page ${source.page}${source.chunkId ? ` (chunk: ${source.chunkId})` : ''}`}
+                    title={`Jump to chunk ${source.chunkId}${source.page ? ` (page ${source.page})` : ''}`}
                   >
                     <FileText className="h-3 w-3 mt-0.5 flex-shrink-0" />
                     <span className="flex-1">{displayText}</span>

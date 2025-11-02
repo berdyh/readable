@@ -555,10 +555,8 @@ export function ChatSidePanel({
         {/* Tab bar */}
         <div className="flex items-center gap-1 px-2 pt-2 overflow-x-auto">
           {tabs.map((tab) => (
-            <button
+            <div
               key={tab.id}
-              type="button"
-              onClick={() => setActiveTabId(tab.id)}
               className={clsx(
                 "flex items-center gap-2 px-3 py-2 rounded-t-lg text-sm transition-colors relative group",
                 activeTabId === tab.id
@@ -570,7 +568,13 @@ export function ChatSidePanel({
                     : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-50",
               )}
             >
-              <span className="whitespace-nowrap">{tab.title}</span>
+              <button
+                type="button"
+                onClick={() => setActiveTabId(tab.id)}
+                className="flex items-center gap-2 text-left flex-1"
+              >
+                <span className="whitespace-nowrap">{tab.title}</span>
+              </button>
               {tabs.length > 1 && (
                 <button
                   type="button"
@@ -579,7 +583,7 @@ export function ChatSidePanel({
                     handleCloseTab(tab.id);
                   }}
                   className={clsx(
-                    "opacity-0 group-hover:opacity-100 transition-opacity rounded p-0.5",
+                    "opacity-0 group-hover:opacity-100 transition-opacity rounded p-0.5 flex-shrink-0",
                     isDarkMode ? "hover:bg-neutral-700" : "hover:bg-neutral-200",
                   )}
                   aria-label="Close tab"
@@ -587,7 +591,7 @@ export function ChatSidePanel({
                   <X className="h-3 w-3" />
                 </button>
               )}
-            </button>
+            </div>
           ))}
           <button
             type="button"
@@ -674,7 +678,6 @@ export function ChatSidePanel({
                   <Message key={message.id} from={message.role}>
                     <MessageAvatar from={message.role} />
                     <MessageContent
-                      citations={message.citations}
                       reasoning={message.reasoning}
                     >
                       <div className="whitespace-pre-wrap">{message.content}</div>

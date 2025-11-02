@@ -80,8 +80,12 @@ function formatChunk(
   return `${header}\n${body}`;
 }
 
-function formatCitations(citations: LlmCitationPayload[]): AnswerCitation[] {
-  const results: AnswerCitation[] = [];
+/**
+ * Extract citations from LLM response, ignoring LLM-provided page numbers.
+ * We only extract chunkId and quote here - page numbers will come from chunk data.
+ */
+function formatCitations(citations: LlmCitationPayload[]): Array<{ chunkId: string; quote?: string }> {
+  const results: Array<{ chunkId: string; quote?: string }> = [];
   const seen = new Set<string>();
 
   for (const citation of citations) {
@@ -94,11 +98,6 @@ function formatCitations(citations: LlmCitationPayload[]): AnswerCitation[] {
       continue;
     }
 
-    const page =
-      typeof citation.page === 'number' && Number.isFinite(citation.page)
-        ? citation.page
-        : undefined;
-
     const quote =
       typeof citation.quote === 'string' && citation.quote.trim()
         ? citation.quote.trim()
@@ -106,13 +105,43 @@ function formatCitations(citations: LlmCitationPayload[]): AnswerCitation[] {
 
     results.push({
       chunkId,
-      page,
       quote,
     });
     seen.add(chunkId);
   }
 
   return results;
+}
+
+/**
+ * Enrich citations with page numbers from chunk data.
+ * Always uses chunk page numbers - never trusts LLM-provided page numbers.
+ */
+function enrichCitationsWithChunkData(
+  citations: Array<{ chunkId: string; quote?: string }>,
+  evidence: QuestionEvidenceContext,
+): AnswerCitation[] {
+  return citations.map((citation) => {
+    // Find the chunk in evidence to get the actual page number
+    const chunk =
+      evidence.hits.find((hit) => hit.chunkId === citation.chunkId) ??
+      evidence.expandedWindow.find((hit) => hit.chunkId === citation.chunkId);
+
+    // Always use chunk page number if available, otherwise undefined
+    const page =
+      chunk && typeof chunk.pageNumber === 'number' && chunk.pageNumber >= 1
+        ? chunk.pageNumber
+        : undefined;
+
+    // Use chunk text as quote if no quote provided
+    const quote = citation.quote || (chunk ? chunk.text.slice(0, 240).trim() : undefined);
+
+    return {
+      chunkId: citation.chunkId,
+      page,
+      quote,
+    };
+  });
 }
 
 function buildQaUserPrompt(
@@ -258,13 +287,23 @@ export async function answerPaperQuestion(
     ? payload.citations
     : [];
 
-  const citations = formatCitations(citationsPayload);
+  // Extract citations (chunkId and quote only - ignoring LLM page numbers)
+  const rawCitations = formatCitations(citationsPayload);
 
+  // Always enrich with actual page numbers from chunk data
+  const citations = enrichCitationsWithChunkData(rawCitations, evidence);
+
+  // Fallback to first hit if no citations
   if (citations.length === 0 && evidence.hits.length > 0) {
     const fallbackChunk = evidence.hits[0];
+    const page =
+      typeof fallbackChunk.pageNumber === 'number' && fallbackChunk.pageNumber >= 1
+        ? fallbackChunk.pageNumber
+        : undefined;
     citations.push({
       chunkId: fallbackChunk.chunkId,
-      page: fallbackChunk.pageNumber,
+      page,
+      quote: fallbackChunk.text?.slice(0, 240).trim() || undefined,
     });
   }
 

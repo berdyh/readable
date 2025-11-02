@@ -99,6 +99,116 @@ function BlockEditorContent({
     }
   }, [statusMessage, onStatusClear]);
 
+  // Handle block navigation from source clicks
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ page?: number; chunkId?: string; quote?: string; paperId: string }>).detail;
+      if (!detail || detail.paperId !== paperId) {
+        return;
+      }
+
+      // Helper to extract plain text from HTML
+      const getPlainText = (html: string): string => {
+        const div = document.createElement('div');
+        div.innerHTML = html;
+        return div.textContent || div.innerText || '';
+      };
+
+      // Helper to normalize text for comparison
+      const normalizeText = (text: string): string => {
+        return text.toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 200);
+      };
+
+      let targetBlock: BlockType | undefined;
+
+      // Strategy 1: Try to match by quote text (most accurate)
+      if (detail.quote) {
+        const normalizedQuote = normalizeText(detail.quote);
+        
+        // Try exact match first
+        targetBlock = state.blocks.find((block) => {
+          const blockText = normalizeText(getPlainText(block.content));
+          return blockText.includes(normalizedQuote) || normalizedQuote.includes(blockText);
+        });
+
+        // If no exact match, try fuzzy match (check if quote contains key words from block)
+        if (!targetBlock && normalizedQuote.length > 20) {
+          const quoteWords = normalizedQuote.split(' ').filter(w => w.length > 3);
+          
+          // Only attempt fuzzy matching if we have qualifying words (length > 3)
+          // If all words are 3 chars or less, skip fuzzy matching to avoid false positives
+          if (quoteWords.length > 0) {
+            // Require matching: 1 word if 1-2 words, up to 3 words if 3+ words available
+            const minMatches = Math.min(3, quoteWords.length);
+            
+            targetBlock = state.blocks.find((block) => {
+              const blockText = normalizeText(getPlainText(block.content));
+              // Check if required number of words from quote appear in block
+              const matchingWords = quoteWords.filter(word => blockText.includes(word));
+              return matchingWords.length >= minMatches;
+            });
+          }
+        }
+      }
+
+      // Strategy 2: Fall back to page number matching
+      if (!targetBlock && detail.page) {
+        // Find exact page match
+        targetBlock = state.blocks.find((block) => block.metadata?.page === detail.page);
+        
+        // If no exact match, find closest page (within ±1)
+        if (!targetBlock) {
+          targetBlock = state.blocks.find((block) => {
+            const blockPage = block.metadata?.page;
+            return blockPage && Math.abs(blockPage - detail.page!) <= 1;
+          });
+        }
+
+        // If still no match, find first block with a page number >= target page
+        if (!targetBlock) {
+          targetBlock = state.blocks.find((block) => {
+            const blockPage = block.metadata?.page;
+            return blockPage && blockPage >= detail.page!;
+          });
+        }
+      }
+
+      // Strategy 3: If we have chunkId, try to find by section (chunks are organized by sections)
+      if (!targetBlock && detail.chunkId) {
+        // Chunk IDs often contain section info (e.g., "intro-p1" or "S1-p1")
+        const sectionMatch = detail.chunkId.match(/^[A-Z]?\d+/);
+        if (sectionMatch) {
+          const sectionId = sectionMatch[0];
+          targetBlock = state.blocks.find((block) => 
+            block.metadata?.section?.includes(sectionId) || 
+            block.content.toLowerCase().includes(sectionId.toLowerCase())
+          );
+        }
+      }
+      
+      if (targetBlock) {
+        // Find the block element and scroll to it
+        const blockElement = document.querySelector(`[data-block-id="${targetBlock.id}"]`);
+        if (blockElement) {
+          blockElement.scrollIntoView({ 
+            behavior: "smooth", 
+            block: "center",
+            inline: "nearest"
+          });
+          
+          // Add a temporary highlight effect
+          blockElement.classList.add("ring-2", "ring-blue-500", "dark:ring-blue-400", "bg-blue-50/50", "dark:bg-blue-950/30");
+          setTimeout(() => {
+            blockElement.classList.remove("ring-2", "ring-blue-500", "dark:ring-blue-400", "bg-blue-50/50", "dark:bg-blue-950/30");
+          }, 2000);
+        }
+      }
+    };
+
+    window.addEventListener("block-editor-navigate", handler);
+    return () => window.removeEventListener("block-editor-navigate", handler);
+  }, [state.blocks, paperId]);
+
   // Always ensure there's at least one block
   const blocksToRender = state.blocks.length === 0 
     ? [{ id: "placeholder", type: "paragraph" as const, content: "" }]

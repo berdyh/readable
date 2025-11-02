@@ -49,7 +49,7 @@ interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
-  citations?: Array<{ id: string; title: string; url?: string; page?: number }>;
+  citations?: Array<{ chunkId: string; page?: number; quote?: string }>;
   reasoning?: string;
   createdAt: number;
 }
@@ -282,6 +282,35 @@ export function ChatSidePanel({
       setIsSubmitting(true);
       const userMessageId = `msg-${Date.now()}`;
       
+      // Ensure sessionId exists - create if missing
+      let currentSessionId = activeTab.sessionId;
+      if (!currentSessionId) {
+        try {
+          const sessionResponse = await fetch("/api/chat/session", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              paperId,
+              userId: userId ?? "default",
+            }),
+          });
+          if (sessionResponse.ok) {
+            const sessionResult = (await sessionResponse.json()) as { session: { id: string } };
+            currentSessionId = sessionResult.session.id;
+            // Update tab with new sessionId
+            setTabs((prev) =>
+              prev.map((tab) =>
+                tab.id === activeTabId
+                  ? { ...tab, sessionId: currentSessionId }
+                  : tab,
+              ),
+            );
+          }
+        } catch (error) {
+          console.error("Failed to create session:", error);
+        }
+      }
+
       // Add user message
       const userMessage: ChatMessage = {
         id: userMessageId,
@@ -298,14 +327,14 @@ export function ChatSidePanel({
         ),
       );
 
-      // Save user message to history
-      if (activeTab?.sessionId) {
+      // Save user message to history (now sessionId should always exist)
+      if (currentSessionId) {
         try {
           await fetch("/api/chat/history", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              sessionId: activeTab.sessionId,
+              sessionId: currentSessionId,
               paperId,
               userId: userId ?? "default",
               message: userMessage,
@@ -317,6 +346,7 @@ export function ChatSidePanel({
       }
 
       setInput("");
+      setMentionQuery(""); // Clear mention query after sending message
 
       try {
         const response = await fetch("/api/qa", {
@@ -339,7 +369,7 @@ export function ChatSidePanel({
 
         const result = (await response.json()) as {
           answer: string;
-          cites?: Array<{ id: string; title: string; url?: string; page?: number }>;
+          cites?: Array<{ chunkId: string; page?: number; quote?: string }>;
         };
 
         // Add assistant message with citations
@@ -359,14 +389,18 @@ export function ChatSidePanel({
           ),
         );
 
+        // Get current sessionId from updated tab state
+        const updatedTab = tabs.find((tab) => tab.id === activeTabId);
+        const sessionIdToSave = updatedTab?.sessionId || currentSessionId;
+
         // Save assistant message to history
-        if (activeTab?.sessionId) {
+        if (sessionIdToSave) {
           try {
             await fetch("/api/chat/history", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                sessionId: activeTab.sessionId,
+                sessionId: sessionIdToSave,
                 paperId,
                 userId: userId ?? "default",
                 message: assistantMessage,
@@ -406,14 +440,18 @@ export function ChatSidePanel({
           ),
         );
 
+        // Get current sessionId from updated tab state
+        const updatedTab = tabs.find((tab) => tab.id === activeTabId);
+        const sessionIdToSave = updatedTab?.sessionId || currentSessionId;
+
         // Save error message to history
-        if (activeTab?.sessionId) {
+        if (sessionIdToSave) {
           try {
             await fetch("/api/chat/history", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                sessionId: activeTab.sessionId,
+                sessionId: sessionIdToSave,
                 paperId,
                 userId: userId ?? "default",
                 message: errorMessage,
@@ -437,6 +475,7 @@ export function ChatSidePanel({
       selection,
       mentionQuery,
       onInsertBlocks,
+      tabs,
     ],
   );
 
@@ -640,7 +679,7 @@ export function ChatSidePanel({
                     >
                       <div className="whitespace-pre-wrap">{message.content}</div>
                       {message.citations && message.citations.length > 0 && (
-                        <Sources sources={message.citations} defaultVisible={true} />
+                        <Sources sources={message.citations} defaultVisible={true} paperId={paperId} />
                       )}
                       {message.reasoning && <Reasoning content={message.reasoning} />}
                     </MessageContent>

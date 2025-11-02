@@ -14,6 +14,7 @@ import type {
   SelectionSummaryResult,
   SelectionFiguresResult,
   SelectionCitationsResult,
+  InlineArxivIngestResult,
 } from "@/server/editor/types";
 
 interface FigureData {
@@ -311,6 +312,164 @@ export function parseTextSummaryToBlocks(
         locked: true, // Generated blocks are locked by default
       },
     });
+  }
+
+  return blocks;
+}
+
+/**
+ * Parse InlineArxivIngestResult from /api/editor/ingest/arxiv into blocks
+ * This displays the full HTML content of an arxiv paper
+ */
+export function parseArxivHtmlToBlocks(result: InlineArxivIngestResult): Block[] {
+  const blocks: Block[] = [];
+
+  // Add paper metadata as header
+  if (result.title) {
+    blocks.push({
+      id: uuidv4(),
+      type: "heading_1",
+      content: result.title,
+      metadata: {
+        locked: true,
+      },
+    });
+  }
+
+  // Add authors and metadata
+  if (result.authors && result.authors.length > 0) {
+    blocks.push({
+      id: uuidv4(),
+      type: "paragraph",
+      content: `**Authors:** ${result.authors.join(", ")}`,
+      metadata: {
+        locked: true,
+      },
+    });
+  }
+
+  if (result.publishedAt) {
+    const dateStr = new Date(result.publishedAt).toLocaleDateString();
+    blocks.push({
+      id: uuidv4(),
+      type: "paragraph",
+      content: `**Published:** ${dateStr}`,
+      metadata: {
+        locked: true,
+      },
+    });
+  }
+
+  if (result.categories && result.categories.length > 0) {
+    blocks.push({
+      id: uuidv4(),
+      type: "paragraph",
+      content: `**Categories:** ${result.categories.join(", ")}`,
+      metadata: {
+        locked: true,
+      },
+    });
+  }
+
+  // Add source link
+  blocks.push({
+    id: uuidv4(),
+    type: "paragraph",
+    content: `**Source:** [arXiv:${result.arxivId}](${result.sourceUrl})`,
+    metadata: {
+      locked: true,
+    },
+  });
+
+  // Add divider before content
+  if (result.sections.length > 0 || result.figures.length > 0) {
+    blocks.push({
+      id: uuidv4(),
+      type: "divider",
+      content: "",
+    });
+  }
+
+  // Parse sections
+  if (result.sections && result.sections.length > 0) {
+    for (const section of result.sections) {
+      // Section heading - convert level to heading type
+      let headingType: "heading_1" | "heading_2" | "heading_3" = "heading_2";
+      if (section.level === 1) {
+        headingType = "heading_1";
+      } else if (section.level === 2) {
+        headingType = "heading_2";
+      } else {
+        headingType = "heading_3";
+      }
+
+      blocks.push({
+        id: uuidv4(),
+        type: headingType,
+        content: section.title,
+        metadata: {
+          section: section.id,
+          locked: true,
+        },
+      });
+
+      // Section paragraphs
+      for (const paragraph of section.paragraphs) {
+        if (paragraph.trim()) {
+          blocks.push({
+            id: uuidv4(),
+            type: "paragraph",
+            content: paragraph,
+            metadata: {
+              section: section.id,
+              locked: true,
+            },
+          });
+        }
+      }
+
+      // Add divider between sections (except last)
+      if (section !== result.sections[result.sections.length - 1]) {
+        blocks.push({
+          id: uuidv4(),
+          type: "divider",
+          content: "",
+        });
+      }
+    }
+  }
+
+  // Parse figures
+  if (result.figures && result.figures.length > 0) {
+    blocks.push({
+      id: uuidv4(),
+      type: "divider",
+      content: "",
+    });
+
+    blocks.push({
+      id: uuidv4(),
+      type: "heading_2",
+      content: "Figures",
+      metadata: {
+        locked: true,
+      },
+    });
+
+    for (const figure of result.figures) {
+      blocks.push({
+        id: uuidv4(),
+        type: "figure",
+        content: figure.caption || "",
+        metadata: {
+          figureId: figure.id,
+          caption: figure.caption,
+          imageUrl: figure.imageUrl,
+          label: figure.label,
+          locked: true,
+        },
+      });
+    }
   }
 
   return blocks;

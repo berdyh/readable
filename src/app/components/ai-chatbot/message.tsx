@@ -61,7 +61,7 @@ export function MessageContent({
 }: {
   children: React.ReactNode;
   className?: string;
-  citations?: Array<{ id: string; title: string; url?: string }>;
+  citations?: Array<{ id?: string; title?: string; url?: string; chunkId?: string; page?: number; quote?: string }> | Array<{ chunkId: string; page?: number; quote?: string }>;
   reasoning?: string;
 }) {
   return (
@@ -99,22 +99,34 @@ export function MessageContent({
             Sources:
           </div>
           <ul className="space-y-1">
-            {citations.map((cite) => (
-              <li key={cite.id}>
-                {cite.url ? (
-                  <a
-                    href={cite.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 hover:underline dark:text-blue-400"
-                  >
-                    {cite.title}
-                  </a>
-                ) : (
-                  <span className="text-neutral-600 dark:text-neutral-400">{cite.title}</span>
-                )}
-              </li>
-            ))}
+            {citations.map((cite, index) => {
+              // Check if it's AnswerCitation format (has chunkId)
+              const isAnswerCitation = 'chunkId' in cite && cite.chunkId;
+              const key = isAnswerCitation 
+                ? cite.chunkId || `citation-${index}`
+                : ('id' in cite ? cite.id : undefined) || `citation-${index}`;
+              const title = isAnswerCitation 
+                ? (cite.quote || `Chunk ${cite.chunkId}`)
+                : ('title' in cite ? cite.title : undefined) || 'Source';
+              const url = 'url' in cite ? cite.url : undefined;
+
+              return (
+                <li key={key}>
+                  {url ? (
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline dark:text-blue-400"
+                    >
+                      {title}
+                    </a>
+                  ) : (
+                    <span className="text-neutral-600 dark:text-neutral-400">{title}</span>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}

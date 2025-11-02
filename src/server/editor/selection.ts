@@ -212,22 +212,31 @@ function normalizeCitations(
       continue;
     }
 
+    // Validate page: must be a number >= 1 (schema requirement)
     const page =
-      typeof entry.page === 'number' && Number.isFinite(entry.page)
+      typeof entry.page === 'number' &&
+      Number.isFinite(entry.page) &&
+      entry.page >= 1
         ? entry.page
         : undefined;
 
+    // Validate quote: must be a string with minLength: 1 (schema requirement)
     const quote =
-      typeof entry.quote === 'string' && entry.quote.trim()
+      typeof entry.quote === 'string' && entry.quote.trim().length >= 1
         ? entry.quote.trim()
         : undefined;
 
-    citations.push({
-      chunkId,
-      page,
-      quote,
-    });
-    seen.add(chunkId);
+    // Only include citations that meet schema requirements
+    // Incomplete citations will be filtered out and can be enriched later
+    // via ensureCitationForChunk when their chunkIds are referenced
+    if (page !== undefined && quote !== undefined) {
+      citations.push({
+        chunkId,
+        page,
+        quote,
+      });
+      seen.add(chunkId);
+    }
   }
 
   return citations;
@@ -285,9 +294,22 @@ function buildCalloutResult(
   const deeper = normalizeDeeper(payload.more);
   const citationList = normalizeCitations(payload.citations);
   const citationMap = new Map<string, AnswerCitation>();
-  citationList.forEach((citation) =>
-    citationMap.set(citation.chunkId, citation),
-  );
+  
+  // Only add citations that meet schema requirements (already validated in normalizeCitations)
+  // Incomplete citations are filtered out and will be created via ensureCitationForChunk
+  // when their chunkIds are referenced in bullets
+  citationList.forEach((citation) => {
+    // Double-check: ensure citation has all required fields (defensive programming)
+    if (
+      citation.chunkId &&
+      typeof citation.page === 'number' &&
+      citation.page >= 1 &&
+      typeof citation.quote === 'string' &&
+      citation.quote.length >= 1
+    ) {
+      citationMap.set(citation.chunkId, citation);
+    }
+  });
 
   if (!bullets.length) {
     const fallbackChunk = evidence.hits[0];
@@ -295,13 +317,21 @@ function buildCalloutResult(
       fallbackChunk?.text?.slice(0, 180) ??
       evidence.selection?.text ??
       'No inline summary available.';
-    const chunkId = fallbackChunk?.chunkId ?? 'unknown';
-    bullets.push({
-      text: fallbackText.trim(),
-      citationIds: [chunkId],
-    });
+    
     if (fallbackChunk) {
+      // Only create bullet with citation if we have a valid chunk
+      const chunkId = fallbackChunk.chunkId;
+      bullets.push({
+        text: fallbackText.trim(),
+        citationIds: [chunkId],
+      });
       citationMap.set(chunkId, createCitationFromChunk(fallbackChunk));
+    } else {
+      // No chunk available - create bullet without citation references
+      bullets.push({
+        text: fallbackText.trim(),
+        citationIds: [],
+      });
     }
   }
 

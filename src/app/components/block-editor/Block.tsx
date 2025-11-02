@@ -460,28 +460,28 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
       </div>
 
       {/* Block options (shown on hover/focus) */}
-      {(isFocused || showOptions) && (
-        <div className="flex items-center gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+      <div className="flex items-center gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto">
+        {(isFocused || showOptions) && (
           <button
             type="button"
             onClick={handleAddClick}
-            className="flex h-6 w-6 items-center justify-center rounded hover:bg-neutral-200 dark:hover:bg-neutral-700 active:scale-95 transition-all duration-150 text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
+            className="flex h-6 w-6 items-center justify-center rounded hover:bg-neutral-200 dark:hover:bg-neutral-700 active:scale-95 transition-all duration-150 text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 pointer-events-auto"
             title="Add block"
           >
             <Plus className="h-4 w-4" />
           </button>
-          <button
-            type="button"
-            draggable
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
-            className="flex h-6 w-6 items-center justify-center rounded hover:bg-neutral-200 dark:hover:bg-neutral-700 active:scale-95 transition-all duration-150 cursor-move text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
-            title="Drag to reorder"
-          >
-            <GripVertical className="h-4 w-4" />
-          </button>
-        </div>
-      )}
+        )}
+        <button
+          type="button"
+          draggable
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          className="flex h-6 w-6 items-center justify-center rounded hover:bg-neutral-200 dark:hover:bg-neutral-700 active:scale-95 transition-all duration-150 cursor-move text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 pointer-events-auto"
+          title="Drag to reorder"
+        >
+          <GripVertical className="h-4 w-4" />
+        </button>
+      </div>
 
       {/* Block content */}
       <div className="flex-1" onFocus={handleFocus}>{renderBlock()}</div>

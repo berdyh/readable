@@ -6,6 +6,7 @@ import {
   useState,
   useCallback,
   useRef,
+  useEffect,
   type ReactNode,
 } from "react";
 import { v4 as uuidv4 } from "uuid";
@@ -45,10 +46,17 @@ export function EditorProvider({
   paperId,
   initialBlocks = [],
 }: EditorProviderProps) {
-  const [blocks, setBlocks] = useState<Block[]>(initialBlocks);
+  const [blocks, setBlocksState] = useState<Block[]>(initialBlocks);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Sync blocks when initialBlocks change (e.g., when HTML/summary loads)
+  // This ensures that when ReaderWorkspace loads HTML or summary content,
+  // the blocks are updated in the editor
+  useEffect(() => {
+    setBlocksState(initialBlocks);
+  }, [initialBlocks]);
 
   const state: EditorState = {
     blocks,
@@ -101,7 +109,7 @@ export function EditorProvider({
             : undefined,
       };
 
-      setBlocks((prev) => {
+      setBlocksState((prev) => {
         const updated = [...prev];
         updated.splice(index + 1, 0, newBlock);
         void saveToBackend(updated);
@@ -115,7 +123,7 @@ export function EditorProvider({
 
   const updateBlock = useCallback(
     (blockId: string, updates: Partial<Block>) => {
-      setBlocks((prev) => {
+      setBlocksState((prev) => {
         const updated = prev.map((block) =>
           block.id === blockId ? { ...block, ...updates } : block,
         );
@@ -128,7 +136,7 @@ export function EditorProvider({
 
   const deleteBlock = useCallback(
     (blockId: string) => {
-      setBlocks((prev) => {
+      setBlocksState((prev) => {
         const updated = prev.filter((block) => block.id !== blockId);
         void saveToBackend(updated);
         return updated;
@@ -139,7 +147,7 @@ export function EditorProvider({
 
   const moveBlock = useCallback(
     (blockId: string, fromIndex: number, toIndex: number) => {
-      setBlocks((prev) => {
+      setBlocksState((prev) => {
         const updated = [...prev];
         const [movedBlock] = updated.splice(fromIndex, 1);
         updated.splice(toIndex, 0, movedBlock);
@@ -152,7 +160,7 @@ export function EditorProvider({
 
   const insertBlock = useCallback(
     (block: Block, index: number) => {
-      setBlocks((prev) => {
+      setBlocksState((prev) => {
         const updated = [...prev];
         updated.splice(index, 0, block);
         void saveToBackend(updated);
@@ -171,7 +179,7 @@ export function EditorProvider({
 
   const changeBlockType = useCallback(
     (blockId: string, newType: Block["type"]) => {
-      setBlocks((prev) => {
+      setBlocksState((prev) => {
         const updated = prev.map((block) => {
           if (block.id === blockId) {
             // Preserve metadata for to-do lists
@@ -202,6 +210,14 @@ export function EditorProvider({
         void saveToBackend(updated);
         return updated;
       });
+    },
+    [saveToBackend],
+  );
+
+  const setBlocks = useCallback(
+    (newBlocks: Block[]) => {
+      setBlocksState(newBlocks);
+      void saveToBackend(newBlocks);
     },
     [saveToBackend],
   );

@@ -26,6 +26,7 @@ export type BlockType =
 export interface BlockMetadata {
   page?: number;
   section?: string;
+  chunkId?: string; // Chunk ID from the paper for navigation/citation purposes
   figureId?: string;
   caption?: string;
   imageUrl?: string;

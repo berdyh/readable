@@ -119,14 +119,22 @@ function BlockEditorContent({
         return text.toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 200);
       };
 
+      // Filter out divider blocks - they're not actual content blocks and shouldn't be navigated to
+      const contentBlocks = state.blocks.filter((block) => block.type !== "divider");
+
       let targetBlock: BlockType | undefined;
 
-      // Strategy 1: Try to match by quote text (most accurate)
-      if (detail.quote) {
+      // Strategy 1: Direct chunkId match (most accurate for citations)
+      if (detail.chunkId) {
+        targetBlock = contentBlocks.find((block) => block.metadata?.chunkId === detail.chunkId);
+      }
+
+      // Strategy 2: Try to match by quote text
+      if (!targetBlock && detail.quote) {
         const normalizedQuote = normalizeText(detail.quote);
         
         // Try exact match first
-        targetBlock = state.blocks.find((block) => {
+        targetBlock = contentBlocks.find((block) => {
           const blockText = normalizeText(getPlainText(block.content));
           return blockText.includes(normalizedQuote) || normalizedQuote.includes(blockText);
         });
@@ -141,7 +149,7 @@ function BlockEditorContent({
             // Require matching: 1 word if 1-2 words, up to 3 words if 3+ words available
             const minMatches = Math.min(3, quoteWords.length);
             
-            targetBlock = state.blocks.find((block) => {
+            targetBlock = contentBlocks.find((block) => {
               const blockText = normalizeText(getPlainText(block.content));
               // Check if required number of words from quote appear in block
               const matchingWords = quoteWords.filter(word => blockText.includes(word));
@@ -151,14 +159,14 @@ function BlockEditorContent({
         }
       }
 
-      // Strategy 2: Fall back to page number matching
+      // Strategy 3: Fall back to page number matching
       if (!targetBlock && detail.page) {
         // Find exact page match
-        targetBlock = state.blocks.find((block) => block.metadata?.page === detail.page);
+        targetBlock = contentBlocks.find((block) => block.metadata?.page === detail.page);
         
         // If no exact match, find closest page (within ±1)
         if (!targetBlock) {
-          targetBlock = state.blocks.find((block) => {
+          targetBlock = contentBlocks.find((block) => {
             const blockPage = block.metadata?.page;
             return blockPage && Math.abs(blockPage - detail.page!) <= 1;
           });
@@ -166,20 +174,20 @@ function BlockEditorContent({
 
         // If still no match, find first block with a page number >= target page
         if (!targetBlock) {
-          targetBlock = state.blocks.find((block) => {
+          targetBlock = contentBlocks.find((block) => {
             const blockPage = block.metadata?.page;
             return blockPage && blockPage >= detail.page!;
           });
         }
       }
 
-      // Strategy 3: If we have chunkId, try to find by section (chunks are organized by sections)
+      // Strategy 4: If we have chunkId but no direct match, try to find by section (chunks are organized by sections)
       if (!targetBlock && detail.chunkId) {
         // Chunk IDs often contain section info (e.g., "intro-p1" or "S1-p1")
         const sectionMatch = detail.chunkId.match(/^[A-Z]?\d+/);
         if (sectionMatch) {
           const sectionId = sectionMatch[0];
-          targetBlock = state.blocks.find((block) => 
+          targetBlock = contentBlocks.find((block) => 
             block.metadata?.section?.includes(sectionId) || 
             block.content.toLowerCase().includes(sectionId.toLowerCase())
           );

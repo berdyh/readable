@@ -4,6 +4,7 @@ import { type ChangeEvent } from "react";
 import { clsx } from "clsx";
 import type { Block } from "../types";
 import { TipTapBlock } from "./TipTapBlock";
+import type { ApiCommandId } from "../commandRegistry";
 
 interface TodoBlockProps {
   block: Block;
@@ -16,7 +17,7 @@ interface TodoBlockProps {
   blockIndex?: number;
   onChangeBlockType?: (blockId: string, newType: Block["type"]) => void;
   onInsertBlock?: (type: Block["type"], index: number, content?: string) => void;
-  onExecuteApi?: (command: string, params?: Record<string, unknown>) => Promise<void>;
+  onExecuteApi?: (command: ApiCommandId, params?: Record<string, unknown>) => Promise<void>;
   isLocked?: boolean;
 }
 
@@ -30,13 +31,17 @@ export function TodoBlock({
   paperId,
   blockIndex = 0,
   onChangeBlockType,
-      onInsertBlock,
-      onExecuteApi,
-      isLocked = false,
+  onInsertBlock,
+  onExecuteApi,
+  isLocked = false,
 }: TodoBlockProps) {
   // Extract checked state from markdown [ ] or [x] syntax or metadata
   const content = block.content || "";
-  const markdownChecked = content.match(/^(\[[ xX]\])/)?.[1]?.toLowerCase().includes("x") ?? false;
+  const markdownChecked =
+    content
+      .match(/^(\[[ xX]\])/)?.[1]
+      ?.toLowerCase()
+      .includes("x") ?? false;
   const checked = block.metadata?.checked ?? markdownChecked;
 
   const handleCheckboxChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -44,10 +49,12 @@ export function TodoBlock({
     updateBlock(block.id, {
       metadata: { ...block.metadata, checked: newChecked },
     });
-    
+
     // Also update markdown content to reflect checkbox state
     const contentWithoutCheckbox = content.replace(/^\[[ xX]\]\s*/, "");
-    const newContent = newChecked ? `[x] ${contentWithoutCheckbox}` : `[ ] ${contentWithoutCheckbox}`;
+    const newContent = newChecked
+      ? `[x] ${contentWithoutCheckbox}`
+      : `[ ] ${contentWithoutCheckbox}`;
     onUpdate(newContent);
   };
 

@@ -17,7 +17,7 @@ import SlashCommandMenu, {
 import {
   EDITOR_INTENT_EVENT,
   type EditorIntentDetail,
-} from "../editor/intents";
+} from "../block-editor/intents";
 
 type MessageRole = "user" | "assistant";
 

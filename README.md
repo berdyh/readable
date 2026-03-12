@@ -77,20 +77,20 @@ Readable pulls metadata and PDFs from arXiv. Make sure your deployment complies 
 
 Kontext API usage follows their [Get Context](https://docs.kontext.dev/api-reference/get-context) contract. Persona data remains in your Weaviate cluster; no raw emails or documents leave Kontext.
 
-## Block-Based Editor
+## BlockEditor architecture
 
-The application includes a block-based editor for analyzing and annotating research papers. Key features:
+Readable now uses a single editor surface: `src/app/components/block-editor/`.
 
-- **Block-based editing**: Text, headings, lists, code blocks, quotes, and callouts
-- **Locked blocks**: Blocks generated from API calls (summaries, figures, citations) are locked (read-only) by default. Click the edit icon (pencil) in the block options to unlock for manual editing.
-- **Slash commands**: Type "/" to access formatting and research commands
-- **Slash commands in locked blocks**: The "/" trigger works in locked blocks, but results are inserted after the locked block, not within it
-- **AI chat integration**: Floating chat button and inline chat blocks for Q&A
+- **Single routed editor entry point**: `ReaderWorkspace` renders `BlockEditor` for paper workspaces.
+- **Unified command system**: Slash commands and research actions are registered in `block-editor/commands.ts` and executed via `block-editor/commandHandlers.ts` + `block-editor/apiHandlers.ts`.
+- **Shared editor intent contract**: Cross-component editor intent events are defined in `block-editor/intents.ts`.
+- **Composable block model**: Editing is driven by typed blocks (`types.ts`) and block renderers under `block-editor/blocks/`.
+- **Locked research output**: API-generated blocks remain read-only by default and can be explicitly unlocked.
 
-See `src/app/components/block-editor/LOCKED_BLOCKS.md` for detailed documentation on the locked blocks feature.
+The legacy `src/app/components/editor/` implementation has been removed. Migration details are captured in `docs/CLEANUP_SUMMARY.md`.
 
 ## Next steps
 
 - Review `docs/PRIVACY.md` for data-handling notes.
 - Check `docs/PLAN-notion-ui.md` for the implementation plan.
-- See `docs/CLEANUP_SUMMARY.md` for component cleanup information.
+- See `docs/CLEANUP_SUMMARY.md` for migration notes.

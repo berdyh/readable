@@ -51,12 +51,12 @@ function normalizeSingleItemListMarkdown(markdown: string, blockType?: string): 
   const trimmed = markdown.trim();
 
   if (blockType === "bullet_list") {
-    const content = trimmed.replace(/^[*+-]\s+/, "").trim();
+    const content = trimmed.replace(/^[*+-]\s+/, "").replace(/^\d+[.)]\s+/, "").replace(/^\[[ xX]\]\s*/, "").trim();
     return content ? `- ${content}` : "";
   }
 
   if (blockType === "number_list") {
-    const content = trimmed.replace(/^\d+[.)]\s+/, "").trim();
+    const content = trimmed.replace(/^[*+-]\s+/, "").replace(/^\d+[.)]\s+/, "").replace(/^\[[ xX]\]\s*/, "").trim();
     return content ? `1. ${content}` : "";
   }
 

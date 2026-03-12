@@ -47,37 +47,69 @@ marked.setOptions({
   breaks: false, // Don't convert line breaks to <br>
 });
 
-function stripLeadingListSyntax(markdown: string): string {
-  return markdown
-    .trim()
-    .replace(/^\[([ xX])\]\s+/, "")
-    .replace(/^[*+-]\s+/, "")
-    .replace(/^\d+[.)]\s+/, "")
-    .trim();
+function stripTodoPrefix(markdown: string): { checked: boolean; content: string } | null {
+  const match = markdown.trim().match(/^\[([ xX])\]\s*(.*)$/);
+  if (!match) return null;
+  return {
+    checked: match[1].toLowerCase() === "x",
+    content: match[2],
+  };
+}
+
+function stripBulletPrefix(markdown: string): string | null {
+  const match = markdown.trim().match(/^[*+-]\s+(.*)$/);
+  return match ? match[1] : null;
+}
+
+function stripNumberPrefix(markdown: string): { marker: string; content: string } | null {
+  const match = markdown.trim().match(/^(\d+)[.)]\s+(.*)$/);
+  if (!match) return null;
+  return {
+    marker: `${match[1]}.`,
+    content: match[2],
+  };
 }
 
 function normalizeSingleItemListMarkdown(markdown: string, blockType?: string): string {
   const trimmed = markdown.trim();
-  const content = stripLeadingListSyntax(trimmed);
 
   if (blockType === "bullet_list") {
-    return content ? `- ${content}` : "";
+    const bullet = stripBulletPrefix(trimmed);
+    if (bullet !== null) return bullet ? `- ${bullet.trim()}` : "";
+
+    const number = stripNumberPrefix(trimmed);
+    if (number) return number.content.trim() ? `- ${number.content.trim()}` : "";
+
+    const todo = stripTodoPrefix(trimmed);
+    if (todo) return todo.content.trim() ? `- ${todo.content.trim()}` : "";
+
+    return trimmed ? `- ${trimmed}` : "";
   }
 
   if (blockType === "number_list") {
-    const numberMatch = trimmed.match(/^(\d+)[.)]\s+/);
-    const marker = numberMatch ? `${numberMatch[1]}.` : "1.";
-    return content ? `${marker} ${content}` : "";
+    const number = stripNumberPrefix(trimmed);
+    if (number) {
+      const content = number.content.trim();
+      return content ? `${number.marker} ${content}` : "";
+    }
+
+    const bullet = stripBulletPrefix(trimmed);
+    if (bullet !== null) return bullet.trim() ? `1. ${bullet.trim()}` : "";
+
+    const todo = stripTodoPrefix(trimmed);
+    if (todo) return todo.content.trim() ? `1. ${todo.content.trim()}` : "";
+
+    return trimmed ? `1. ${trimmed}` : "";
   }
 
   if (blockType === "to_do_list") {
-    const todoMatch = trimmed.match(/^\[([ xX])\]\s*(.*)$/);
-    if (todoMatch) {
-      const checked = todoMatch[1].toLowerCase() === "x";
-      return content ? `[${checked ? "x" : " "}] ${content}` : `[${checked ? "x" : " "}]`;
+    const todo = stripTodoPrefix(trimmed);
+    if (todo) {
+      const content = todo.content.trim();
+      return content ? `[${todo.checked ? "x" : " "}] ${content}` : `[${todo.checked ? "x" : " "}]`;
     }
 
-    return content ? `[ ] ${content}` : "";
+    return trimmed ? `[ ] ${trimmed}` : "";
   }
 
   return trimmed;
@@ -130,7 +162,10 @@ export function htmlToMarkdown(html: string, blockType?: string): string {
       return `[${checked ? "x" : " "}] ${contentMarkdown}`.trim();
     }
 
-    return turndownService.turndown(html).trim();
+    return turndownService
+      .turndown(html)
+      .trim()
+      .replace(/^\\([*+-]\s)/gm, "$1");
   }
 
   // Handle headings

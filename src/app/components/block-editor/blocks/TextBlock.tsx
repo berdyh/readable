@@ -2,6 +2,7 @@
 
 import type { Block } from "../types";
 import { TipTapBlock } from "./TipTapBlock";
+import type { ApiCommandId } from "../commandRegistry";
 
 interface TextBlockProps {
   block: Block;
@@ -13,7 +14,7 @@ interface TextBlockProps {
   blockIndex?: number;
   onChangeBlockType?: (blockId: string, newType: Block["type"]) => void;
   onInsertBlock?: (type: Block["type"], index: number, content?: string) => void;
-  onExecuteApi?: (command: string, params?: Record<string, unknown>) => Promise<void>;
+  onExecuteApi?: (command: ApiCommandId, params?: Record<string, unknown>) => Promise<void>;
   isLocked?: boolean;
 }
 

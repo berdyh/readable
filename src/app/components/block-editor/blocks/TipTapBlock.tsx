@@ -15,7 +15,7 @@ interface TipTapBlockProps {
   blockType: BlockType;
   onUpdate: (content: string) => void;
   onEnter?: (markDone?: boolean) => void;
-  onBackspace?: () => void;
+  onBackspace?: (triggerKey?: "Backspace" | "Delete") => void;
   onSlashCommand?: (query: string) => void;
   placeholder?: string;
   className?: string;
@@ -188,7 +188,7 @@ export function TipTapBlock({
           const textContent = view.state.doc.textContent.trim();
           if (textContent.length === 0 || (event.key === "Backspace" && view.state.selection.from === 0)) {
             event.preventDefault();
-            onBackspace?.();
+            onBackspace?.(event.key as "Backspace" | "Delete");
             return true;
           }
         }

@@ -13,16 +13,23 @@ import { v4 as uuidv4 } from "uuid";
 
 import type { Block, EditorState } from "./types";
 
+export interface BlockFocusApi {
+  focus: (position?: "start" | "end") => void;
+}
+
 interface EditorContextValue {
   state: EditorState;
   addBlock: (type: Block["type"], index: number, content?: string) => Block;
   updateBlock: (blockId: string, updates: Partial<Block>) => void;
   deleteBlock: (blockId: string) => void;
-  moveBlock: (blockId: string, fromIndex: number, toIndex: number) => void;
+  moveBlock: (blockId: string, toIndex: number) => void;
   insertBlock: (block: Block, index: number) => void;
   changeBlockType: (blockId: string, newType: Block["type"]) => void;
   setBlocks: (blocks: Block[]) => void;
   getBlock: (blockId: string) => Block | undefined;
+  registerBlockFocusApi: (blockId: string, api: BlockFocusApi) => void;
+  unregisterBlockFocusApi: (blockId: string) => void;
+  focusBlock: (blockId: string, position?: "start" | "end") => void;
 }
 
 const EditorContext = createContext<EditorContextValue | null>(null);
@@ -50,6 +57,8 @@ export function EditorProvider({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const blockFocusApisRef = useRef<Map<string, BlockFocusApi>>(new Map());
+  const pendingFocusRef = useRef<{ blockId: string; position: "start" | "end" } | null>(null);
 
   // Sync blocks when initialBlocks change (e.g., when HTML/summary loads)
   // This ensures that when ReaderWorkspace loads HTML or summary content,
@@ -146,8 +155,13 @@ export function EditorProvider({
   );
 
   const moveBlock = useCallback(
-    (blockId: string, fromIndex: number, toIndex: number) => {
+    (blockId: string, toIndex: number) => {
       setBlocksState((prev) => {
+        const fromIndex = prev.findIndex((block) => block.id === blockId);
+        if (fromIndex === -1) {
+          return prev;
+        }
+
         const updated = [...prev];
         const [movedBlock] = updated.splice(fromIndex, 1);
         updated.splice(toIndex, 0, movedBlock);
@@ -176,6 +190,30 @@ export function EditorProvider({
     },
     [blocks],
   );
+
+  const registerBlockFocusApi = useCallback((blockId: string, api: BlockFocusApi) => {
+    blockFocusApisRef.current.set(blockId, api);
+    if (pendingFocusRef.current?.blockId === blockId) {
+      api.focus(pendingFocusRef.current.position);
+      pendingFocusRef.current = null;
+    }
+  }, []);
+
+  const unregisterBlockFocusApi = useCallback((blockId: string) => {
+    blockFocusApisRef.current.delete(blockId);
+  }, []);
+
+  const focusBlock = useCallback((blockId: string, position: "start" | "end" = "end") => {
+    const api = blockFocusApisRef.current.get(blockId);
+    if (api) {
+      api.focus(position);
+      pendingFocusRef.current = null;
+      return;
+    }
+
+    pendingFocusRef.current = { blockId, position };
+  }, []);
+
 
   const changeBlockType = useCallback(
     (blockId: string, newType: Block["type"]) => {
@@ -232,10 +270,12 @@ export function EditorProvider({
     changeBlockType,
     setBlocks,
     getBlock,
+    registerBlockFocusApi,
+    unregisterBlockFocusApi,
+    focusBlock,
   };
 
   return (
     <EditorContext.Provider value={value}>{children}</EditorContext.Provider>
   );
 }
-

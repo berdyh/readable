@@ -32,6 +32,7 @@ export function ListBlock({
   onExecuteApi,
   isLocked = false,
 }: ListBlockProps) {
+  // List semantics are rendered natively by TipTap; avoid duplicate visual markers here.
   return (
     <TipTapBlock
       block={block}

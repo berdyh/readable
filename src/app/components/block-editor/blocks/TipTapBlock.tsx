@@ -9,6 +9,7 @@ import type { Block, BlockType } from "../types";
 import { SlashCommandExtension } from "../SlashCommand";
 import { buildSlashCommandItems, type SlashCommandContext } from "../commands";
 import { htmlToMarkdown, markdownToHtml } from "../utils/markdown";
+import type { ApiCommandId } from "../commandRegistry";
 
 interface TipTapBlockProps {
   block: Block;
@@ -24,7 +25,7 @@ interface TipTapBlockProps {
   onChangeBlockType?: (blockId: string, newType: BlockType) => void;
   onInsertBlock?: (type: BlockType, index: number, content?: string) => void;
   blockIndex?: number;
-  onExecuteApi?: (command: string, params?: Record<string, unknown>) => Promise<void>;
+  onExecuteApi?: (command: ApiCommandId, params?: Record<string, unknown>) => Promise<void>;
   isLocked?: boolean;
 }
 
@@ -55,7 +56,16 @@ export function TipTapBlock({
       onExecuteApi,
     };
     return buildSlashCommandItems(context);
-  }, [block.id, block.content, blockType, blockIndex, paperId, onChangeBlockType, onInsertBlock, onExecuteApi]);
+  }, [
+    block.id,
+    block.content,
+    blockType,
+    blockIndex,
+    paperId,
+    onChangeBlockType,
+    onInsertBlock,
+    onExecuteApi,
+  ]);
 
   const editor = useEditor({
     editable: !isLocked, // Make editor read-only when locked
@@ -131,7 +141,7 @@ export function TipTapBlock({
         if (event.key === " " && blockType === "paragraph" && onChangeBlockType) {
           const { from } = view.state.selection;
           const textBefore = view.state.doc.textBetween(Math.max(0, from - 10), from);
-          
+
           // Check if "* " or "- " or "+ " was just typed
           if (textBefore.match(/[\*\-\+]\s*$/) && from <= 3) {
             // Only trigger if at the very start (first few characters)
@@ -139,14 +149,12 @@ export function TipTapBlock({
             if (match) {
               event.preventDefault();
               // Delete the trigger character and space
-              view.dispatch(
-                view.state.tr.delete(from - 1, from).insertText("")
-              );
+              view.dispatch(view.state.tr.delete(from - 1, from).insertText(""));
               onChangeBlockType(block.id, "bullet_list");
               return true;
             }
           }
-          
+
           // Check if "1. " or "1) " was just typed
           if (textBefore.match(/\d+[\.\)]\s*$/) && from <= 5) {
             const match = textBefore.match(/^\d+[\.\)]$/);
@@ -154,9 +162,7 @@ export function TipTapBlock({
               event.preventDefault();
               // Delete the trigger pattern and space
               const triggerLength = match[0].length;
-              view.dispatch(
-                view.state.tr.delete(from - triggerLength, from).insertText("")
-              );
+              view.dispatch(view.state.tr.delete(from - triggerLength, from).insertText(""));
               onChangeBlockType(block.id, "number_list");
               return true;
             }
@@ -186,7 +192,10 @@ export function TipTapBlock({
         // Handle Backspace/Delete - delegate to parent handler
         if (event.key === "Backspace" || event.key === "Delete") {
           const textContent = view.state.doc.textContent.trim();
-          if (textContent.length === 0 || (event.key === "Backspace" && view.state.selection.from === 0)) {
+          if (
+            textContent.length === 0 ||
+            (event.key === "Backspace" && view.state.selection.from === 0)
+          ) {
             event.preventDefault();
             onBackspace?.();
             return true;
@@ -199,17 +208,17 @@ export function TipTapBlock({
     },
     onUpdate: ({ editor }) => {
       if (isLocked) return;
-      
+
       const html = editor.getHTML();
       const textContent = editor.getText();
-      
+
       // Detect markdown triggers at the start of the line
       // Only check for paragraph blocks (not already list blocks)
       if (blockType === "paragraph" && onChangeBlockType && textContent.length > 0) {
         // Get the full text (not trimmed) to check for triggers at the very start
         const fullText = editor.getText();
         const firstLine = fullText.split("\n")[0];
-        
+
         // Check for bullet list trigger: "* ", "- ", or "+ " followed by space
         // Match at the very start of the document
         const bulletMatch = firstLine.match(/^[\*\-\+]\s+(.+)$/);
@@ -219,7 +228,10 @@ export function TipTapBlock({
           // Update content without the trigger
           setTimeout(() => {
             if (contentWithoutTrigger) {
-              editor.commands.setContent(markdownToHtml(contentWithoutTrigger, "bullet_list") || "", false);
+              editor.commands.setContent(
+                markdownToHtml(contentWithoutTrigger, "bullet_list") || "",
+                false,
+              );
             } else {
               editor.commands.setContent("", false);
             }
@@ -227,7 +239,7 @@ export function TipTapBlock({
           }, 0);
           return;
         }
-        
+
         // Check for numbered list trigger: "1. ", "1) " etc followed by space
         const numberMatch = firstLine.match(/^\d+[\.\)]\s+(.+)$/);
         if (numberMatch) {
@@ -236,7 +248,10 @@ export function TipTapBlock({
           // Update content without the trigger
           setTimeout(() => {
             if (contentWithoutTrigger) {
-              editor.commands.setContent(markdownToHtml(contentWithoutTrigger, "number_list") || "", false);
+              editor.commands.setContent(
+                markdownToHtml(contentWithoutTrigger, "number_list") || "",
+                false,
+              );
             } else {
               editor.commands.setContent("", false);
             }
@@ -245,7 +260,7 @@ export function TipTapBlock({
           return;
         }
       }
-      
+
       // Convert HTML back to Markdown for storage
       // Only convert if there's actual content
       if (textContent.trim().length === 0) {
@@ -271,7 +286,7 @@ export function TipTapBlock({
     if (editor) {
       const currentHtml = editor.getHTML();
       const expectedHtml = block.content ? markdownToHtml(block.content, blockType) : "";
-      
+
       // Only update if content actually changed (avoid infinite loops)
       if (currentHtml !== expectedHtml) {
         editor.commands.setContent(expectedHtml || "", false);
@@ -299,4 +314,3 @@ export function TipTapBlock({
     </div>
   );
 }
-

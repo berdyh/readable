@@ -9,8 +9,14 @@ import {
   parseFiguresToBlocks,
   parseCitationsToBlocks,
   parseSelectionSummaryToBlocks,
+  parseArxivHtmlToBlocks,
 } from "./parsers";
-import type { SelectionFiguresResult, SelectionCitationsResult, SelectionSummaryResult } from "@/server/editor/types";
+import type {
+  InlineArxivIngestResult,
+  SelectionFiguresResult,
+  SelectionCitationsResult,
+  SelectionSummaryResult,
+} from "@/server/editor/types";
 import type { SummaryResult } from "@/server/summarize/types";
 import type { QuestionSelection } from "@/server/qa/types";
 
@@ -21,7 +27,14 @@ export interface ApiHandlerContext {
   selection?: QuestionSelection;
   userId?: string;
   personaId?: string;
+  target?: string;
 }
+
+const BACKEND_UNAVAILABLE_MESSAGES: Record<string, string> = {
+  compare:
+    "The /compare command is not available yet because backend support has not been implemented.",
+  eli5: "The /eli5 command is not available yet because backend support has not been implemented.",
+};
 
 /**
  * Execute API command and insert resulting blocks
@@ -30,12 +43,26 @@ export async function executeApiCommand(
   command: string,
   context: ApiHandlerContext,
 ): Promise<void> {
-  const { paperId, blockIndex, onInsertBlocks, selection, userId, personaId } = context;
+  const {
+    paperId,
+    blockIndex,
+    onInsertBlocks,
+    selection,
+    userId,
+    personaId,
+    target,
+  } = context;
 
   try {
     switch (command) {
       case "summary":
-        await executeSummary(paperId, blockIndex, onInsertBlocks, userId, personaId);
+        await executeSummary(
+          paperId,
+          blockIndex,
+          onInsertBlocks,
+          userId,
+          personaId,
+        );
         break;
       case "figure":
         await executeFigures(paperId, blockIndex, onInsertBlocks, selection);
@@ -44,21 +71,54 @@ export async function executeApiCommand(
         await executeCitations(paperId, blockIndex, onInsertBlocks, selection);
         break;
       case "explain":
-        await executeSelectionSummary(paperId, blockIndex, onInsertBlocks, selection, userId, personaId);
+        await executeSelectionSummary(
+          paperId,
+          blockIndex,
+          onInsertBlocks,
+          selection,
+          userId,
+          personaId,
+        );
+        break;
+      case "arxiv":
+        await executeArxivImport(target, blockIndex, onInsertBlocks);
         break;
       case "compare":
       case "eli5":
-      case "arxiv":
-        // TODO: Implement these in future phases
-        console.warn(`Command ${command} not yet implemented`);
+        reportUnavailableCommand(command, blockIndex, onInsertBlocks);
         break;
       default:
-        console.warn(`Unknown API command: ${command}`);
+        reportUnavailableCommand(
+          command,
+          blockIndex,
+          onInsertBlocks,
+          "This command is not available in this editor yet.",
+        );
     }
   } catch (error) {
     console.error(`Failed to execute API command ${command}:`, error);
     throw error;
   }
+}
+
+function reportUnavailableCommand(
+  command: string,
+  blockIndex: number,
+  onInsertBlocks: (blocks: Block[], insertIndex?: number) => void,
+  fallbackMessage = "Backend support is unavailable for this command.",
+): void {
+  const content = BACKEND_UNAVAILABLE_MESSAGES[command] ?? fallbackMessage;
+  console.warn(`Unavailable API command: ${command}. ${content}`);
+  onInsertBlocks(
+    [
+      {
+        id: `status-${command}-${Date.now()}`,
+        type: "paragraph",
+        content: `⚠️ ${content}`,
+      },
+    ],
+    blockIndex,
+  );
 }
 
 /**
@@ -78,15 +138,57 @@ async function executeSummary(
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: "Failed to generate summary" }));
+    const error = await response
+      .json()
+      .catch(() => ({ error: "Failed to generate summary" }));
     throw new Error(error.error || `Failed to generate summary: ${response.status}`);
   }
 
   const result = (await response.json()) as SummaryResult;
   const blocks = parseSummaryToBlocks(result);
-  
+
   if (blocks.length > 0) {
-    // Use blockIndex to ensure blocks are inserted at the correct position
+    onInsertBlocks(blocks, blockIndex);
+  }
+}
+
+async function executeArxivImport(
+  target: string | undefined,
+  blockIndex: number,
+  onInsertBlocks: (blocks: Block[], insertIndex?: number) => void,
+): Promise<void> {
+  const resolvedTarget = target?.trim();
+  if (!resolvedTarget) {
+    onInsertBlocks(
+      [
+        {
+          id: `status-arxiv-${Date.now()}`,
+          type: "paragraph",
+          content:
+            "⚠️ The /arxiv command needs an arXiv ID, DOI, or URL in the current block.",
+        },
+      ],
+      blockIndex,
+    );
+    return;
+  }
+
+  const response = await fetch("/api/editor/ingest/arxiv", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ target: resolvedTarget }),
+  });
+
+  if (!response.ok) {
+    const error = await response
+      .json()
+      .catch(() => ({ error: "Failed to ingest arXiv content" }));
+    throw new Error(error.error || `Failed to ingest arXiv content: ${response.status}`);
+  }
+
+  const result = (await response.json()) as InlineArxivIngestResult;
+  const blocks = parseArxivHtmlToBlocks(result);
+  if (blocks.length > 0) {
     onInsertBlocks(blocks, blockIndex);
   }
 }
@@ -111,22 +213,28 @@ async function executeFigures(
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: "Failed to fetch figures" }));
+    const error = await response
+      .json()
+      .catch(() => ({ error: "Failed to fetch figures" }));
     throw new Error(error.error || `Failed to fetch figures: ${response.status}`);
   }
 
   const result = (await response.json()) as SelectionFiguresResult;
   const blocks = parseFiguresToBlocks(result);
-  
+
   if (blocks.length > 0) {
     onInsertBlocks(blocks, blockIndex);
   } else {
-    // Insert a placeholder if no figures found
-    onInsertBlocks([{
-      id: `placeholder-${Date.now()}`,
-      type: "paragraph",
-      content: "No figures found for this selection.",
-    }], blockIndex);
+    onInsertBlocks(
+      [
+        {
+          id: `placeholder-${Date.now()}`,
+          type: "paragraph",
+          content: "No figures found for this selection.",
+        },
+      ],
+      blockIndex,
+    );
   }
 }
 
@@ -150,22 +258,28 @@ async function executeCitations(
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: "Failed to fetch citations" }));
+    const error = await response
+      .json()
+      .catch(() => ({ error: "Failed to fetch citations" }));
     throw new Error(error.error || `Failed to fetch citations: ${response.status}`);
   }
 
   const result = (await response.json()) as SelectionCitationsResult;
   const blocks = parseCitationsToBlocks(result);
-  
+
   if (blocks.length > 0) {
     onInsertBlocks(blocks, blockIndex);
   } else {
-    // Insert a placeholder if no citations found
-    onInsertBlocks([{
-      id: `placeholder-${Date.now()}`,
-      type: "paragraph",
-      content: "No citations found for this selection.",
-    }], blockIndex);
+    onInsertBlocks(
+      [
+        {
+          id: `placeholder-${Date.now()}`,
+          type: "paragraph",
+          content: "No citations found for this selection.",
+        },
+      ],
+      blockIndex,
+    );
   }
 }
 
@@ -191,15 +305,18 @@ async function executeSelectionSummary(
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: "Failed to generate selection summary" }));
-    throw new Error(error.error || `Failed to generate selection summary: ${response.status}`);
+    const error = await response
+      .json()
+      .catch(() => ({ error: "Failed to generate selection summary" }));
+    throw new Error(
+      error.error || `Failed to generate selection summary: ${response.status}`,
+    );
   }
 
   const result = (await response.json()) as SelectionSummaryResult;
   const blocks = parseSelectionSummaryToBlocks(result);
-  
+
   if (blocks.length > 0) {
     onInsertBlocks(blocks, blockIndex);
   }
 }
-

@@ -90,6 +90,7 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
         selection: params?.selection as QuestionSelection | undefined,
         userId: params?.userId as string | undefined,
         personaId: params?.personaId as string | undefined,
+        target: params?.target as string | undefined,
       });
     },
     [state.paperId, index, insertBlock],

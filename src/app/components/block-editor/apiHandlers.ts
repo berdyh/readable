@@ -23,6 +23,12 @@ export interface ApiHandlerContext {
   personaId?: string;
 }
 
+const BACKEND_UNAVAILABLE_MESSAGES: Record<string, string> = {
+  compare: "The /compare command is not available yet because backend support has not been implemented.",
+  eli5: "The /eli5 command is not available yet because backend support has not been implemented.",
+  arxiv: "The /arxiv command is not available yet because backend support has not been implemented.",
+};
+
 /**
  * Execute API command and insert resulting blocks
  */
@@ -49,16 +55,32 @@ export async function executeApiCommand(
       case "compare":
       case "eli5":
       case "arxiv":
-        // TODO: Implement these in future phases
-        console.warn(`Command ${command} not yet implemented`);
+        reportUnavailableCommand(command, blockIndex, onInsertBlocks);
         break;
       default:
-        console.warn(`Unknown API command: ${command}`);
+        reportUnavailableCommand(command, blockIndex, onInsertBlocks, "This command is not available in this editor yet.");
     }
   } catch (error) {
     console.error(`Failed to execute API command ${command}:`, error);
     throw error;
   }
+}
+
+function reportUnavailableCommand(
+  command: string,
+  blockIndex: number,
+  onInsertBlocks: (blocks: Block[], insertIndex?: number) => void,
+  fallbackMessage = "Backend support is unavailable for this command.",
+): void {
+  const content = BACKEND_UNAVAILABLE_MESSAGES[command] ?? fallbackMessage;
+  console.warn(`Unavailable API command: ${command}. ${content}`);
+  onInsertBlocks([
+    {
+      id: `status-${command}-${Date.now()}`,
+      type: "paragraph",
+      content: `⚠️ ${content}`,
+    },
+  ], blockIndex);
 }
 
 /**
@@ -202,4 +224,3 @@ async function executeSelectionSummary(
     onInsertBlocks(blocks, blockIndex);
   }
 }
-

@@ -166,19 +166,6 @@ export const RESEARCH_COMMANDS: SlashCommandItem[] = [
     },
   },
   {
-    id: "arxiv",
-    title: "Insert from arXiv",
-    description: "Pull sections and figures from an arXiv paper",
-    icon: "Globe",
-    category: "research",
-    keywords: ["arxiv", "paper", "import"],
-    run: async (context) => {
-      await context.onExecuteApi?.("arxiv", {
-        paperId: context.paperId,
-      });
-    },
-  },
-  {
     id: "explain",
     title: "Explain",
     description: "Get explanation of selected text",
@@ -187,20 +174,6 @@ export const RESEARCH_COMMANDS: SlashCommandItem[] = [
     keywords: ["explain", "clarify", "what"],
     run: async (context) => {
       await context.onExecuteApi?.("explain", {
-        paperId: context.paperId,
-        text: context.currentContent,
-      });
-    },
-  },
-  {
-    id: "compare",
-    title: "Compare",
-    description: "Compare with related work or concepts",
-    icon: "Layers",
-    category: "research",
-    keywords: ["compare", "vs", "versus"],
-    run: async (context) => {
-      await context.onExecuteApi?.("compare", {
         paperId: context.paperId,
         text: context.currentContent,
       });

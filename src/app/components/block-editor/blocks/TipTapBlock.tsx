@@ -74,11 +74,10 @@ export function TipTapBlock({
         italic: {},
         strike: {},
         code: {},
-        // For list blocks, we handle the list structure externally (ListBlock component)
-        // TipTap should just render the content as a paragraph, not as a nested list
-        bulletList: false, // Disabled - ListBlock handles bullet display
-        orderedList: false, // Disabled - ListBlock handles numbering
-        listItem: false, // Disabled - each block is already a list item
+        // Keep list nodes enabled so markdown list semantics stay native
+        bulletList: {},
+        orderedList: {},
+        listItem: {},
       }),
       Placeholder.configure({
         placeholder,
@@ -252,6 +251,12 @@ export function TipTapBlock({
         onUpdate("");
       } else {
         const markdown = htmlToMarkdown(html, blockType);
+        if (blockType === "to_do_list") {
+          const isChecked = /^\[[xX]\]/.test(block.content.trim());
+          const contentWithoutCheckbox = markdown.replace(/^\[[ xX]\]\s*/, "").trim();
+          onUpdate(`[${isChecked ? "x" : " "}] ${contentWithoutCheckbox}`.trim());
+          return;
+        }
         onUpdate(markdown);
       }
     },
@@ -299,4 +304,3 @@ export function TipTapBlock({
     </div>
   );
 }
-

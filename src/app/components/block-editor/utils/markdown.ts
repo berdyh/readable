@@ -10,7 +10,7 @@ import { marked } from "marked";
 const turndownService = new TurndownService({
   headingStyle: "atx", // Use # for headings
   codeBlockStyle: "fenced", // Use ``` for code blocks
-  bulletListMarker: "*", // Use * for bullet lists
+  bulletListMarker: "-", // Use - for bullet lists
   emDelimiter: "*", // Use * for emphasis
 });
 
@@ -20,8 +20,8 @@ turndownService.addRule("strikethrough", {
     return (
       node.nodeName === "DEL" ||
       node.nodeName === "S" ||
-      (node.nodeName === "SPAN" && 
-       (node as HTMLElement).style.textDecoration?.includes("line-through"))
+      (node.nodeName === "SPAN" &&
+        (node as HTMLElement).style.textDecoration?.includes("line-through"))
     );
   },
   replacement: (content) => `~~${content}~~`,
@@ -35,7 +35,7 @@ turndownService.addRule("checkbox", {
       (node as HTMLInputElement).type === "checkbox"
     );
   },
-  replacement: (content, node) => {
+  replacement: (_content, node) => {
     const input = node as HTMLInputElement;
     return input.checked ? "[x]" : "[ ]";
   },
@@ -46,6 +46,74 @@ marked.setOptions({
   gfm: true, // GitHub Flavored Markdown
   breaks: false, // Don't convert line breaks to <br>
 });
+
+function stripTodoPrefix(markdown: string): { checked: boolean; content: string } | null {
+  const match = markdown.trim().match(/^\[([ xX])\]\s*(.*)$/);
+  if (!match) return null;
+  return {
+    checked: match[1].toLowerCase() === "x",
+    content: match[2],
+  };
+}
+
+function stripBulletPrefix(markdown: string): string | null {
+  const match = markdown.trim().match(/^[*+-]\s+(.*)$/);
+  return match ? match[1] : null;
+}
+
+function stripNumberPrefix(markdown: string): { marker: string; content: string } | null {
+  const match = markdown.trim().match(/^(\d+)[.)]\s+(.*)$/);
+  if (!match) return null;
+  return {
+    marker: `${match[1]}.`,
+    content: match[2],
+  };
+}
+
+function normalizeSingleItemListMarkdown(markdown: string, blockType?: string): string {
+  const trimmed = markdown.trim();
+
+  if (blockType === "bullet_list") {
+    const bullet = stripBulletPrefix(trimmed);
+    if (bullet !== null) return bullet ? `- ${bullet.trim()}` : "";
+
+    const number = stripNumberPrefix(trimmed);
+    if (number) return number.content.trim() ? `- ${number.content.trim()}` : "";
+
+    const todo = stripTodoPrefix(trimmed);
+    if (todo) return todo.content.trim() ? `- ${todo.content.trim()}` : "";
+
+    return trimmed ? `- ${trimmed}` : "";
+  }
+
+  if (blockType === "number_list") {
+    const number = stripNumberPrefix(trimmed);
+    if (number) {
+      const content = number.content.trim();
+      return content ? `${number.marker} ${content}` : "";
+    }
+
+    const bullet = stripBulletPrefix(trimmed);
+    if (bullet !== null) return bullet.trim() ? `1. ${bullet.trim()}` : "";
+
+    const todo = stripTodoPrefix(trimmed);
+    if (todo) return todo.content.trim() ? `1. ${todo.content.trim()}` : "";
+
+    return trimmed ? `1. ${trimmed}` : "";
+  }
+
+  if (blockType === "to_do_list") {
+    const todo = stripTodoPrefix(trimmed);
+    if (todo) {
+      const content = todo.content.trim();
+      return content ? `[${todo.checked ? "x" : " "}] ${content}` : `[${todo.checked ? "x" : " "}]`;
+    }
+
+    return trimmed ? `[ ] ${trimmed}` : "";
+  }
+
+  return trimmed;
+}
 
 /**
  * Convert HTML content to Markdown format
@@ -60,116 +128,76 @@ export function htmlToMarkdown(html: string, blockType?: string): string {
 
   // Handle code blocks specially
   if (blockType === "code") {
-    // Extract language from code block if present
-    // TipTap code blocks might have class="language-{lang}"
-    const langMatch = html.match(/<pre[^>]*class="[^"]*language-(\w+)[^"]*"[^>]*><code[^>]*>([\s\S]*?)<\/code><\/pre>/);
+    const langMatch = html.match(
+      /<pre[^>]*><code[^>]*class="[^"]*language-(\w+)[^"]*"[^>]*>([\s\S]*?)<\/code><\/pre>/,
+    );
     if (langMatch) {
       const language = langMatch[1];
-      const code = decodeHtmlEntities(langMatch[2]);
+      const code = decodeHtmlEntities(langMatch[2]).replace(/\n+$/, "");
       return `\`\`\`${language}\n${code}\n\`\`\``;
     }
-    
-    // Plain code block
+
     const codeMatch = html.match(/<pre[^>]*><code[^>]*>([\s\S]*?)<\/code><\/pre>/);
     if (codeMatch) {
-      const code = decodeHtmlEntities(codeMatch[1]);
+      const code = decodeHtmlEntities(codeMatch[1]).replace(/\n+$/, "");
       return `\`\`\`\n${code}\n\`\`\``;
     }
-    
-    // Inline code - convert <code> tags to backticks
+
     if (html.includes("<code")) {
       return html.replace(/<code[^>]*>([^<]*)<\/code>/g, "`$1`");
     }
   }
 
-  // Handle todo blocks - preserve [ ] or [x] syntax
   if (blockType === "to_do_list") {
-    // Check if there's a checkbox in the HTML (from markdown conversion or direct HTML)
-    const checkboxMatch = html.match(/<input[^>]*type=["']checkbox["'][^>]*(checked[^>]*>|>)/);
-    if (checkboxMatch) {
-      const isChecked = checkboxMatch[0].includes("checked");
-      // Remove checkbox HTML and any hidden checkbox markers
-      const content = html.replace(/<input[^>]*type=["']checkbox["'][^>]*>/g, "").replace(/data-markdown-checkbox[^>]*/g, "").trim();
-      const markdown = turndownService.turndown(content);
-      // Remove leading/trailing whitespace
-      const cleanMarkdown = markdown.trim();
-      return `${isChecked ? "[x]" : "[ ]"} ${cleanMarkdown}`;
+    const checkedMatch = html.match(/data-type="taskItem"[^>]*data-checked="(true|false)"/i);
+    const contentMatch = html.match(/<div><p>([\s\S]*?)<\/p><\/div>/i);
+
+    if (checkedMatch) {
+      const checked = checkedMatch[1] === "true";
+      const contentMarkdown = contentMatch
+        ? turndownService.turndown(contentMatch[1]).trim()
+        : turndownService
+            .turndown(html.replace(/<label>[\s\S]*?<\/label>/i, ""))
+            .trim();
+      return `[${checked ? "x" : " "}] ${contentMarkdown}`.trim();
     }
-    // If content already starts with [ ] or [x], preserve it
-    if (html.match(/^\[[ xX]\]/)) {
-      return turndownService.turndown(html);
-    }
+
+    return turndownService
+      .turndown(html)
+      .trim()
+      .replace(/^\\([*+-]\s)/gm, "$1");
   }
 
   // Handle headings
   if (blockType?.startsWith("heading_")) {
-    const level = blockType === "heading_1" ? 1 : blockType === "heading_2" ? 2 : 3;
-    // Extract text content, preserving formatting
+    const level =
+      blockType === "heading_1" ? 1 : blockType === "heading_2" ? 2 : 3;
     const headingMatch = html.match(/<h\d[^>]*>([\s\S]*?)<\/h\d>/);
     if (headingMatch) {
       const content = turndownService.turndown(headingMatch[1]).trim();
       return `${"#".repeat(level)} ${content}`;
     }
-    // Fallback: strip HTML tags
     const content = html.replace(/<[^>]+>/g, "").trim();
     if (content) {
       return `${"#".repeat(level)} ${content}`;
     }
   }
 
-  // Handle bullet lists
-  // For bullet_list blocks, we store just the content without the bullet marker
-  // The bullet is displayed by the ListBlock component, not in the markdown
-  // TipTap renders content as paragraphs (since list extensions are disabled)
-  if (blockType === "bullet_list") {
-    // Extract text content from paragraphs (TipTap renders as <p>content</p>)
-    // Remove list structure if present (from old format)
-    const liMatch = html.match(/<li[^>]*>([\s\S]*?)<\/li>/);
-    if (liMatch) {
-      const content = turndownService.turndown(liMatch[1]).trim();
-      return content.replace(/^[\*\-\+]\s+/, "").trim();
-    }
-    // For paragraph content (current format)
-    const pMatch = html.match(/<p[^>]*>([\s\S]*?)<\/p>/);
-    if (pMatch) {
-      const content = turndownService.turndown(pMatch[1]).trim();
-      return content.replace(/^[\*\-\+]\s+/, "").trim();
-    }
-    // Fallback: use turndown but strip list markers
-    const markdown = turndownService.turndown(html);
-    return markdown.replace(/^[\*\-\+]\s+/gm, "").trim();
-  }
-
-  // Handle numbered lists
-  // For number_list blocks, we store just the content without the number marker
-  // The number is displayed by the ListBlock component based on index
-  // TipTap renders content as paragraphs (since list extensions are disabled)
-  if (blockType === "number_list") {
-    // Extract text content from paragraphs or list items
-    const liMatch = html.match(/<li[^>]*>([\s\S]*?)<\/li>/);
-    if (liMatch) {
-      const content = turndownService.turndown(liMatch[1]).trim();
-      return content.replace(/^\d+\.\s+/, "").trim();
-    }
-    // For paragraph content (current format)
-    const pMatch = html.match(/<p[^>]*>([\s\S]*?)<\/p>/);
-    if (pMatch) {
-      const content = turndownService.turndown(pMatch[1]).trim();
-      return content.replace(/^\d+\.\s+/, "").trim();
-    }
-    // Fallback
-    return turndownService.turndown(html).replace(/^\d+\.\s+/gm, "").trim();
-  }
-
   // Handle quotes
   if (blockType === "quote") {
     const content = turndownService.turndown(html);
-    // Ensure each line has > prefix
-    return content.split("\n").map((line) => line.trim() ? `> ${line.trim()}` : "").filter(Boolean).join("\n");
+    return content
+      .split("\n")
+      .map((line) => {
+        const normalized = line.trim().replace(/^>\s*/, "").trim();
+        return normalized ? `> ${normalized}` : "";
+      })
+      .filter(Boolean)
+      .join("\n");
   }
 
-  // Default conversion
-  return turndownService.turndown(html).trim();
+  const markdown = turndownService.turndown(html).trim();
+  return normalizeSingleItemListMarkdown(markdown, blockType);
 }
 
 /**
@@ -185,32 +213,16 @@ export function markdownToHtml(markdown: string, blockType?: string): string {
 
   // Handle code blocks specially
   if (blockType === "code") {
-    // Parse ```language or ``` code blocks
     const codeBlockMatch = markdown.match(/^```(\w+)?\n([\s\S]*?)```$/);
     if (codeBlockMatch) {
       const language = codeBlockMatch[1] || "";
       const code = codeBlockMatch[2];
       return `<pre><code class="language-${language}">${escapeHtml(code)}</code></pre>`;
     }
-    
-    // Inline code
+
     if (markdown.includes("`") && !markdown.includes("```")) {
       const parsed = marked.parse(markdown) as string;
       return parsed;
-    }
-  }
-
-  // Handle todo blocks - parse [ ] or [x] syntax
-  if (blockType === "to_do_list") {
-    const todoMatch = markdown.match(/^(\[[ xX]\])?\s*(.+)$/);
-    if (todoMatch) {
-      const checkbox = todoMatch[1] || "[ ]";
-      const isChecked = checkbox.toLowerCase().includes("x");
-      const content = todoMatch[2];
-      const html = marked.parse(content) as string;
-      // Remove wrapping <p> tags if present
-      const cleanHtml = html.replace(/^<p>|<\/p>$/g, "");
-      return `<input type="checkbox" ${isChecked ? "checked" : ""} disabled style="display: none;" data-markdown-checkbox />${cleanHtml}`;
     }
   }
 
@@ -222,7 +234,6 @@ export function markdownToHtml(markdown: string, blockType?: string): string {
       const content = headingMatch[2];
       return `<h${level}>${content}</h${level}>`;
     }
-    // If markdown already has #, just parse it
     if (markdown.startsWith("#")) {
       const parsed = marked.parse(markdown) as string;
       return parsed;
@@ -231,42 +242,33 @@ export function markdownToHtml(markdown: string, blockType?: string): string {
 
   // Handle quotes
   if (blockType === "quote") {
-    // Remove > prefix if present and parse
     const content = markdown.replace(/^>\s*/gm, "");
     const parsed = marked.parse(content) as string;
-    // Wrap in blockquote if not already
     if (!parsed.includes("<blockquote")) {
       return `<blockquote>${parsed}</blockquote>`;
     }
     return parsed;
   }
 
-  // Handle bullet lists
-  // For bullet_list blocks, the markdown content is just the text (no * prefix)
-  // Since TipTap list extensions are disabled, we render as paragraph
+  if (blockType === "to_do_list") {
+    const normalized = normalizeSingleItemListMarkdown(markdown, blockType);
+    if (!normalized) {
+      return "";
+    }
+    const content = normalized.replace(/^\[[ xX]\]\s*/, "").trim();
+    return marked.parseInline(content) as string;
+  }
+
   if (blockType === "bullet_list") {
-    // Remove leading * or - if present (shouldn't be for individual items)
-    const cleanMarkdown = markdown.replace(/^[\*\-\+]\s+/, "").trim();
-    if (!cleanMarkdown) return "";
-    // Parse as paragraph content (TipTap will handle as paragraph)
-    const parsed = marked.parseInline(cleanMarkdown) as string;
-    // Return as paragraph content (TipTap's paragraph extension will handle it)
-    return parsed || cleanMarkdown;
+    const normalized = normalizeSingleItemListMarkdown(markdown, blockType);
+    return normalized ? (marked.parse(normalized) as string) : "";
   }
 
-  // Handle numbered lists in markdownToHtml
-  // For number_list blocks, the markdown content is just the text (no number prefix)
-  // Since TipTap list extensions are disabled, we render as paragraph
   if (blockType === "number_list") {
-    // Remove leading number pattern if present
-    const cleanMarkdown = markdown.replace(/^\d+\.\s+/, "").trim();
-    if (!cleanMarkdown) return "";
-    // Parse as paragraph content
-    const parsed = marked.parseInline(cleanMarkdown) as string;
-    return parsed || cleanMarkdown;
+    const normalized = normalizeSingleItemListMarkdown(markdown, blockType);
+    return normalized ? (marked.parse(normalized) as string) : "";
   }
 
-  // Default conversion
   return marked.parse(markdown) as string;
 }
 
@@ -290,7 +292,6 @@ function escapeHtml(text: string): string {
  */
 function decodeHtmlEntities(text: string): string {
   if (typeof document === "undefined") {
-    // Server-side: basic entity decoding
     return text
       .replace(/&amp;/g, "&")
       .replace(/&lt;/g, "<")
@@ -303,4 +304,3 @@ function decodeHtmlEntities(text: string): string {
   textarea.innerHTML = text;
   return textarea.value;
 }
-

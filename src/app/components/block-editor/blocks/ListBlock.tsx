@@ -2,6 +2,7 @@
 
 import type { Block } from "../types";
 import { TipTapBlock } from "./TipTapBlock";
+import type { ApiCommandId } from "../commandRegistry";
 
 interface ListBlockProps {
   block: Block;
@@ -14,7 +15,7 @@ interface ListBlockProps {
   blockIndex?: number; // Actual block index in the editor
   onChangeBlockType?: (blockId: string, newType: Block["type"]) => void;
   onInsertBlock?: (type: Block["type"], index: number, content?: string) => void;
-  onExecuteApi?: (command: string, params?: Record<string, unknown>) => Promise<void>;
+  onExecuteApi?: (command: ApiCommandId, params?: Record<string, unknown>) => Promise<void>;
   isLocked?: boolean;
 }
 
@@ -34,20 +35,36 @@ export function ListBlock({
 }: ListBlockProps) {
   // List semantics are rendered natively by TipTap; avoid duplicate visual markers here.
   return (
-    <TipTapBlock
-      block={block}
-      blockType={block.type}
-      onUpdate={onUpdate}
-      onEnter={onEnter}
-      onBackspace={onBackspace}
-      onSlashCommand={onSlashCommand}
-      placeholder={block.type === "bullet_list" ? "List item" : `List item ${index + 1}`}
-      paperId={paperId}
-      blockIndex={blockIndex}
-      onChangeBlockType={onChangeBlockType}
-      onInsertBlock={onInsertBlock}
-      onExecuteApi={onExecuteApi}
-      isLocked={isLocked}
-    />
+    <div className="flex items-start gap-2 w-full">
+      <div
+        className={clsx(
+          "flex items-center justify-center min-w-[24px] text-neutral-600 dark:text-neutral-400 select-none flex-shrink-0",
+          isBulletList ? "text-xl" : "text-sm font-mono",
+        )}
+        style={{
+          height: "1.5rem", // Match typical line height
+          lineHeight: "1.5rem", // Center the bullet/number vertically
+        }}
+      >
+        {isBulletList ? "•" : `${index + 1}.`}
+      </div>
+      <div className="flex-1 min-w-0">
+        <TipTapBlock
+          block={block}
+          blockType={block.type}
+          onUpdate={onUpdate}
+          onEnter={onEnter}
+          onBackspace={onBackspace}
+          onSlashCommand={onSlashCommand}
+          placeholder="List item"
+          paperId={paperId}
+          blockIndex={blockIndex}
+          onChangeBlockType={onChangeBlockType}
+          onInsertBlock={onInsertBlock}
+          onExecuteApi={onExecuteApi}
+          isLocked={isLocked}
+        />
+      </div>
+    </div>
   );
 }

@@ -10,9 +10,14 @@ import {
   parseCitationsToBlocks,
   parseSelectionSummaryToBlocks,
 } from "./parsers";
-import type { SelectionFiguresResult, SelectionCitationsResult, SelectionSummaryResult } from "@/server/editor/types";
+import type {
+  SelectionFiguresResult,
+  SelectionCitationsResult,
+  SelectionSummaryResult,
+} from "@/server/editor/types";
 import type { SummaryResult } from "@/server/summarize/types";
 import type { QuestionSelection } from "@/server/qa/types";
+import type { ApiCommandId } from "./commandRegistry";
 
 export interface ApiHandlerContext {
   paperId: string;
@@ -27,7 +32,7 @@ export interface ApiHandlerContext {
  * Execute API command and insert resulting blocks
  */
 export async function executeApiCommand(
-  command: string,
+  command: ApiCommandId,
   context: ApiHandlerContext,
 ): Promise<void> {
   const { paperId, blockIndex, onInsertBlocks, selection, userId, personaId } = context;
@@ -44,7 +49,14 @@ export async function executeApiCommand(
         await executeCitations(paperId, blockIndex, onInsertBlocks, selection);
         break;
       case "explain":
-        await executeSelectionSummary(paperId, blockIndex, onInsertBlocks, selection, userId, personaId);
+        await executeSelectionSummary(
+          paperId,
+          blockIndex,
+          onInsertBlocks,
+          selection,
+          userId,
+          personaId,
+        );
         break;
       case "compare":
       case "eli5":
@@ -84,7 +96,7 @@ async function executeSummary(
 
   const result = (await response.json()) as SummaryResult;
   const blocks = parseSummaryToBlocks(result);
-  
+
   if (blocks.length > 0) {
     // Use blockIndex to ensure blocks are inserted at the correct position
     onInsertBlocks(blocks, blockIndex);
@@ -117,16 +129,21 @@ async function executeFigures(
 
   const result = (await response.json()) as SelectionFiguresResult;
   const blocks = parseFiguresToBlocks(result);
-  
+
   if (blocks.length > 0) {
     onInsertBlocks(blocks, blockIndex);
   } else {
     // Insert a placeholder if no figures found
-    onInsertBlocks([{
-      id: `placeholder-${Date.now()}`,
-      type: "paragraph",
-      content: "No figures found for this selection.",
-    }], blockIndex);
+    onInsertBlocks(
+      [
+        {
+          id: `placeholder-${Date.now()}`,
+          type: "paragraph",
+          content: "No figures found for this selection.",
+        },
+      ],
+      blockIndex,
+    );
   }
 }
 
@@ -156,16 +173,21 @@ async function executeCitations(
 
   const result = (await response.json()) as SelectionCitationsResult;
   const blocks = parseCitationsToBlocks(result);
-  
+
   if (blocks.length > 0) {
     onInsertBlocks(blocks, blockIndex);
   } else {
     // Insert a placeholder if no citations found
-    onInsertBlocks([{
-      id: `placeholder-${Date.now()}`,
-      type: "paragraph",
-      content: "No citations found for this selection.",
-    }], blockIndex);
+    onInsertBlocks(
+      [
+        {
+          id: `placeholder-${Date.now()}`,
+          type: "paragraph",
+          content: "No citations found for this selection.",
+        },
+      ],
+      blockIndex,
+    );
   }
 }
 
@@ -191,15 +213,16 @@ async function executeSelectionSummary(
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: "Failed to generate selection summary" }));
+    const error = await response
+      .json()
+      .catch(() => ({ error: "Failed to generate selection summary" }));
     throw new Error(error.error || `Failed to generate selection summary: ${response.status}`);
   }
 
   const result = (await response.json()) as SelectionSummaryResult;
   const blocks = parseSelectionSummaryToBlocks(result);
-  
+
   if (blocks.length > 0) {
     onInsertBlocks(blocks, blockIndex);
   }
 }
-

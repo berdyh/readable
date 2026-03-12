@@ -4,6 +4,7 @@ import { AlertCircle } from "lucide-react";
 import type { Block } from "../types";
 import { TipTapBlock } from "./TipTapBlock";
 import { clsx } from "clsx";
+import type { ApiCommandId } from "../commandRegistry";
 
 interface CalloutBlockProps {
   block: Block;
@@ -15,7 +16,7 @@ interface CalloutBlockProps {
   blockIndex?: number;
   onChangeBlockType?: (blockId: string, newType: Block["type"]) => void;
   onInsertBlock?: (type: Block["type"], index: number, content?: string) => void;
-  onExecuteApi?: (command: string, params?: Record<string, unknown>) => Promise<void>;
+  onExecuteApi?: (command: ApiCommandId, params?: Record<string, unknown>) => Promise<void>;
   isLocked?: boolean;
 }
 
@@ -42,12 +43,7 @@ export function CalloutBlock({
   };
 
   return (
-    <div
-      className={clsx(
-        "my-2 rounded-lg border p-4",
-        bgColors[calloutType] || bgColors.info,
-      )}
-    >
+    <div className={clsx("my-2 rounded-lg border p-4", bgColors[calloutType] || bgColors.info)}>
       <div className="flex items-start gap-3">
         <AlertCircle className="mt-0.5 h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
         <div className="flex-1">
@@ -71,4 +67,3 @@ export function CalloutBlock({
     </div>
   );
 }
-

@@ -3,6 +3,8 @@
 import {
   useState,
   useCallback,
+  useRef,
+  useEffect,
 } from "react";
 import { clsx } from "clsx";
 import { GripVertical, Plus, Edit2, Lock } from "lucide-react";
@@ -20,6 +22,7 @@ import { DividerBlock } from "./blocks/DividerBlock";
 import { CalloutBlock } from "./blocks/CalloutBlock";
 import { ChatMessageBlock } from "./blocks/ChatMessageBlock";
 import { FigureBlock } from "./blocks/FigureBlock";
+import { getDeletionFocusTarget, isBlockContentEmpty, resolveDropReorder } from "./blockInteractionUtils";
 
 interface BlockProps {
   block: BlockType;
@@ -28,18 +31,50 @@ interface BlockProps {
 }
 
 export function Block({ block, index, onSlashCommand }: BlockProps) {
-  const { state, updateBlock, deleteBlock, addBlock, changeBlockType, insertBlock, moveBlock } = useEditorStore();
+  const {
+    state,
+    updateBlock,
+    deleteBlock,
+    addBlock,
+    changeBlockType,
+    insertBlock,
+    moveBlock,
+    registerBlockFocusApi,
+    unregisterBlockFocusApi,
+    focusBlock,
+  } = useEditorStore();
   const [isFocused, setIsFocused] = useState(false);
   const [showOptions, setShowOptions] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const isLocked = block.metadata?.locked === true;
+
+  useEffect(() => {
+    registerBlockFocusApi(block.id, {
+      focus: (position = "end") => {
+        const editorElement = containerRef.current?.querySelector(".ProseMirror") as HTMLElement | null;
+        if (!editorElement) return false;
+
+        editorElement.focus();
+        const range = document.createRange();
+        const selection = window.getSelection();
+        range.selectNodeContents(editorElement);
+        range.collapse(position === "start");
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+        return true;
+      },
+    });
+
+    return () => unregisterBlockFocusApi(block.id);
+  }, [block.id, registerBlockFocusApi, unregisterBlockFocusApi]);
 
   // Handler for API execution from slash commands
   const handleExecuteApi = useCallback(
     async (command: string, params?: Record<string, unknown>) => {
       const { executeApiCommand } = await import("./apiHandlers");
-      
+
       // Insert blocks after the current block index
       await executeApiCommand(command, {
         paperId: state.paperId,
@@ -69,83 +104,39 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
   );
 
   const handleEnter = useCallback((markDone?: boolean) => {
-    // Mark current block as done if it's a todo or list and markDone is true
     if (markDone && (block.type === "to_do_list" || block.type === "bullet_list" || block.type === "number_list")) {
       updateBlock(block.id, {
         metadata: { ...block.metadata, checked: true },
       });
     }
-    
-    // Create new block of the same type
-    const newBlockType = block.type;
-    const newBlock = addBlock(newBlockType, index);
-    
-    // Focus the new block after a short delay
-    setTimeout(() => {
-      const nextBlockElement = document.querySelector(
-        `[data-block-id="${newBlock.id}"] .ProseMirror`,
-      ) as HTMLElement;
-      if (nextBlockElement) {
-        nextBlockElement.focus();
-      }
-    }, 0);
-  }, [addBlock, block.type, block.id, block.metadata, index, updateBlock]);
 
-  const handleBackspace = useCallback(() => {
-    const blockContent = block.content?.trim() || "";
-    const textContent = blockContent
-      .replace(/<[^>]*>/g, "")
-      .replace(/&nbsp;/g, " ")
-      .replace(/&[a-zA-Z]+;/g, "")
-      .trim();
-    
-    const isEmpty = 
-      blockContent.length === 0 || 
-      blockContent === "<p></p>" || 
-      blockContent === "<p><br></p>" ||
-      blockContent === "<br>" ||
-      textContent.length === 0;
-    
-    // If list block (todo, bullet, number) is empty, convert to paragraph instead of deleting
+    const newBlock = addBlock(block.type, index);
+    focusBlock(newBlock.id, "end");
+  }, [addBlock, block.type, block.id, block.metadata, index, updateBlock, focusBlock]);
+
+  const handleBackspace = useCallback((triggerKey?: "Backspace" | "Delete") => {
+    const effectiveTriggerKey = triggerKey ?? "Backspace";
+    const isEmpty = isBlockContentEmpty(block.content);
+
     if (isEmpty && (block.type === "to_do_list" || block.type === "bullet_list" || block.type === "number_list")) {
       changeBlockType(block.id, "paragraph");
       setTimeout(() => {
-        const blockElement = document.querySelector(
-          `[data-block-id="${block.id}"] .ProseMirror`,
-        ) as HTMLElement;
-        if (blockElement) {
-          blockElement.focus();
-        }
+        focusBlock(block.id, "end");
       }, 0);
       return;
     }
-    
-    if (isEmpty) {
-      if (index > 0) {
-        const prevBlockElement = document.querySelector(
-          `[data-block-id="${block.id}"]`,
-        )?.previousElementSibling as HTMLElement;
-        
-        if (prevBlockElement) {
-          const prevTipTap = prevBlockElement.querySelector(".ProseMirror") as HTMLElement;
-          if (prevTipTap) {
-            prevTipTap.focus();
-            setTimeout(() => {
-              const range = document.createRange();
-              const sel = window.getSelection();
-              range.selectNodeContents(prevTipTap);
-              range.collapse(false);
-              sel?.removeAllRanges();
-              sel?.addRange(range);
-            }, 0);
-          }
-        }
-      }
-      deleteBlock(block.id);
+
+    if (!isEmpty) {
+      return;
     }
-    // Note: For non-empty blocks, TipTap handles normal backspace behavior internally.
-    // We only intervene when the block is empty to delete it and move focus.
-  }, [block.id, block.content, block.type, deleteBlock, index, changeBlockType]);
+
+    const focusTarget = getDeletionFocusTarget(state.blocks, block.id, effectiveTriggerKey);
+    deleteBlock(block.id);
+
+    if (focusTarget) {
+      focusBlock(focusTarget.blockId, focusTarget.position);
+    }
+  }, [block.id, block.content, block.type, state.blocks, deleteBlock, changeBlockType, focusBlock]);
 
   const handleSlashCommand = useCallback(
     (query: string) => {
@@ -155,7 +146,6 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
   );
 
   const handleAddClick = useCallback(() => {
-    // Add same type of block
     addBlock(block.type, index);
     setShowOptions(false);
   }, [addBlock, block.type, index]);
@@ -169,17 +159,12 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
     });
   }, [block.id, block.metadata, isLocked, updateBlock]);
 
-  // Drag and drop handlers
   const handleDragStart = useCallback((e: React.DragEvent) => {
     setIsDragging(true);
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", block.id);
-    e.dataTransfer.setData("application/block-index", index.toString());
-    // Set a custom data type to identify this as a block reordering drag
     e.dataTransfer.setData("application/x-block-reorder", "true");
-    // Prevent TipTap editors from accepting this drop
     e.stopPropagation();
-    // Add visual feedback
     if (e.dataTransfer.setDragImage) {
       const dragImage = e.currentTarget.cloneNode(true) as HTMLElement;
       dragImage.style.opacity = "0.5";
@@ -188,12 +173,11 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
       e.dataTransfer.setDragImage(dragImage, 0, 0);
       setTimeout(() => document.body.removeChild(dragImage), 0);
     }
-  }, [block.id, index]);
+  }, [block.id]);
 
   const handleDragEnd = useCallback((e: React.DragEvent) => {
     setIsDragging(false);
     setDragOver(false);
-    // Ensure any visual artifacts are cleared
     e.preventDefault();
     e.stopPropagation();
   }, []);
@@ -208,7 +192,6 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    // Only set dragOver to false if we're leaving the block itself, not a child
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX;
     const y = e.clientY;
@@ -224,29 +207,19 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
     setIsDragging(false);
 
     const isBlockReorder = e.dataTransfer.getData("application/x-block-reorder") === "true";
-    if (!isBlockReorder) {
-      return;
-    }
+    if (!isBlockReorder) return;
 
     const draggedBlockId = e.dataTransfer.getData("text/plain");
-    const draggedIndex = parseInt(e.dataTransfer.getData("application/block-index"), 10);
+    if (!draggedBlockId || draggedBlockId === block.id) return;
 
-    if (draggedBlockId && draggedBlockId !== block.id && !isNaN(draggedIndex) && draggedIndex !== index) {
-      const rect = e.currentTarget.getBoundingClientRect();
-      const y = e.clientY;
-      const midPoint = rect.top + rect.height / 2;
-      const targetIndex = y < midPoint ? index : index + 1;
-      const finalTargetIndex = draggedIndex < targetIndex ? targetIndex - 1 : targetIndex;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const midPoint = rect.top + rect.height / 2;
+    const dropPosition = e.clientY < midPoint ? "before" : "after";
+    const reorder = resolveDropReorder(state.blocks, draggedBlockId, block.id, dropPosition);
+    if (!reorder) return;
 
-      moveBlock(draggedBlockId, draggedIndex, finalTargetIndex);
-      
-      // Clear dragging state for all blocks after move completes
-      setTimeout(() => {
-        setIsDragging(false);
-        setDragOver(false);
-      }, 0);
-    }
-  }, [block.id, index, moveBlock]);
+    moveBlock(draggedBlockId, reorder.toIndex);
+  }, [block.id, moveBlock, state.blocks]);
 
   const handleFocus = useCallback(() => {
     setIsFocused(true);
@@ -254,14 +227,12 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
   }, []);
 
   const handleBlur = useCallback(() => {
-    // Delay to allow focus to move to new block if clicking add button
     setTimeout(() => {
       setIsFocused(false);
       setShowOptions(false);
     }, 200);
   }, []);
 
-  // Render appropriate block component based on type
   const renderBlock = () => {
     switch (block.type) {
       case "heading_1":
@@ -426,6 +397,7 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
 
   return (
     <div
+      ref={containerRef}
       className={clsx(
         "group relative flex items-start gap-2 rounded-md px-2 py-1 transition-all duration-150",
         "hover:bg-neutral-50/50 dark:hover:bg-neutral-900/50",
@@ -441,12 +413,11 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
       onDrop={handleDrop}
       draggable={false}
     >
-      {/* Lock/Edit toggle button - always in top-right corner */}
       <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 z-10">
         <button
           type="button"
           onClick={(e) => {
-            e.stopPropagation(); // Prevent event bubbling
+            e.stopPropagation();
             handleToggleLock();
           }}
           className="flex h-6 w-6 items-center justify-center rounded hover:bg-neutral-200 dark:hover:bg-neutral-700 active:scale-95 transition-all duration-150 text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
@@ -460,7 +431,6 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
         </button>
       </div>
 
-      {/* Block options (shown on hover/focus) */}
       <div className="flex items-center gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto">
         {(isFocused || showOptions) && (
           <button
@@ -484,7 +454,6 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
         </button>
       </div>
 
-      {/* Block content */}
       <div className="flex-1" onFocus={handleFocus}>{renderBlock()}</div>
     </div>
   );

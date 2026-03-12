@@ -12,13 +12,13 @@ import {
   parseArxivHtmlToBlocks,
 } from "./parsers";
 import type {
-  InlineArxivIngestResult,
   SelectionFiguresResult,
   SelectionCitationsResult,
   SelectionSummaryResult,
 } from "@/server/editor/types";
 import type { SummaryResult } from "@/server/summarize/types";
 import type { QuestionSelection } from "@/server/qa/types";
+import type { ApiCommandId } from "./commandRegistry";
 
 export interface ApiHandlerContext {
   paperId: string;
@@ -40,7 +40,7 @@ const BACKEND_UNAVAILABLE_MESSAGES: Record<string, string> = {
  * Execute API command and insert resulting blocks
  */
 export async function executeApiCommand(
-  command: string,
+  command: ApiCommandId,
   context: ApiHandlerContext,
 ): Promise<void> {
   const {
@@ -79,9 +79,6 @@ export async function executeApiCommand(
           userId,
           personaId,
         );
-        break;
-      case "arxiv":
-        await executeArxivImport(target, blockIndex, onInsertBlocks);
         break;
       case "compare":
       case "eli5":
@@ -152,47 +149,6 @@ async function executeSummary(
   }
 }
 
-async function executeArxivImport(
-  target: string | undefined,
-  blockIndex: number,
-  onInsertBlocks: (blocks: Block[], insertIndex?: number) => void,
-): Promise<void> {
-  const resolvedTarget = target?.trim();
-  if (!resolvedTarget) {
-    onInsertBlocks(
-      [
-        {
-          id: `status-arxiv-${Date.now()}`,
-          type: "paragraph",
-          content:
-            "⚠️ The /arxiv command needs an arXiv ID, DOI, or URL in the current block.",
-        },
-      ],
-      blockIndex,
-    );
-    return;
-  }
-
-  const response = await fetch("/api/editor/ingest/arxiv", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ target: resolvedTarget }),
-  });
-
-  if (!response.ok) {
-    const error = await response
-      .json()
-      .catch(() => ({ error: "Failed to ingest arXiv content" }));
-    throw new Error(error.error || `Failed to ingest arXiv content: ${response.status}`);
-  }
-
-  const result = (await response.json()) as InlineArxivIngestResult;
-  const blocks = parseArxivHtmlToBlocks(result);
-  if (blocks.length > 0) {
-    onInsertBlocks(blocks, blockIndex);
-  }
-}
-
 /**
  * Execute /api/editor/selection/figures and parse result into blocks
  */
@@ -225,6 +181,7 @@ async function executeFigures(
   if (blocks.length > 0) {
     onInsertBlocks(blocks, blockIndex);
   } else {
+    // Insert a placeholder if no figures found
     onInsertBlocks(
       [
         {
@@ -270,6 +227,7 @@ async function executeCitations(
   if (blocks.length > 0) {
     onInsertBlocks(blocks, blockIndex);
   } else {
+    // Insert a placeholder if no citations found
     onInsertBlocks(
       [
         {
@@ -308,9 +266,7 @@ async function executeSelectionSummary(
     const error = await response
       .json()
       .catch(() => ({ error: "Failed to generate selection summary" }));
-    throw new Error(
-      error.error || `Failed to generate selection summary: ${response.status}`,
-    );
+    throw new Error(error.error || `Failed to generate selection summary: ${response.status}`);
   }
 
   const result = (await response.json()) as SelectionSummaryResult;

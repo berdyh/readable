@@ -1,5 +1,6 @@
 "use client";
 
+import clsx from "clsx";
 import type { Block } from "../types";
 import { TipTapBlock } from "./TipTapBlock";
 import type { ApiCommandId } from "../commandRegistry";
@@ -33,6 +34,8 @@ export function ListBlock({
   onExecuteApi,
   isLocked = false,
 }: ListBlockProps) {
+  const isBulletList = block.type === "bullet_list";
+
   // List semantics are rendered natively by TipTap; avoid duplicate visual markers here.
   return (
     <div className="flex items-start gap-2 w-full">

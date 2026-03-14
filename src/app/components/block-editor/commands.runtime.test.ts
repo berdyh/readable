@@ -21,7 +21,7 @@ describe("slash command API parameter mapping", () => {
     const explain = items.find((item) => item.id === "explain");
     expect(explain).toBeDefined();
 
-    await explain?.run();
+    await explain!.run(makeContext({ onExecuteApi }));
 
     expect(onExecuteApi).toHaveBeenCalledWith(
       "explain",

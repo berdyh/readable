@@ -283,3 +283,49 @@ async function executeCitations(
     );
   }
 }
+/**
+ * Execute /api/editor/selection/summary and parse result into blocks
+ */
+async function executeSelectionSummary(
+  paperId: string,
+  blockIndex: number,
+  onInsertBlocks: (blocks: Block[], insertIndex?: number) => void,
+  selection?: QuestionSelection,
+  userId?: string,
+  personaId?: string,
+): Promise<void> {
+  if (!selection?.text) {
+    throw new Error("Text selection is required to summarize a selection");
+  }
+
+  const response = await fetch("/api/editor/selection/summary", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ paperId, selection, userId, personaId }),
+  });
+
+  if (!response.ok) {
+    const error = await response
+      .json()
+      .catch(() => ({ error: "Failed to summarize selection" }));
+    throw new Error(error.error || `Failed to summarize selection: ${response.status}`);
+  }
+
+  const result = (await response.json()) as SelectionSummaryResult;
+  const blocks = parseSelectionSummaryToBlocks(result);
+
+  if (blocks.length > 0) {
+    onInsertBlocks(blocks, blockIndex);
+  } else {
+    onInsertBlocks(
+      [
+        {
+          id: `placeholder-${Date.now()}`,
+          type: "paragraph",
+          content: "No summary could be generated for this selection.",
+        },
+      ],
+      blockIndex,
+    );
+  }
+}

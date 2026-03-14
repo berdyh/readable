@@ -61,6 +61,39 @@ describe("executeApiCommand", () => {
     expect(blocks[0]?.content).toContain("needs an arXiv ID, DOI, or URL");
   });
 
+
+
+  it("routes /explain to selection summary endpoint", async () => {
+    const onInsertBlocks = vi.fn();
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        callout: {
+          bullets: [{ text: "Key point", citationIds: [] }],
+          deeper: [],
+          citations: [],
+        },
+      }),
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await executeApiCommand(
+      "explain",
+      createContext(onInsertBlocks, {
+        selection: {
+          text: "selected text",
+          page: 1,
+          section: "Introduction",
+        },
+      }),
+    );
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "/api/editor/selection/summary",
+      expect.any(Object),
+    );
+    expect(onInsertBlocks).toHaveBeenCalledTimes(1);
+  });
   it("routes /arxiv to ingest endpoint when target is provided", async () => {
     const onInsertBlocks = vi.fn();
     const fetchSpy = vi.fn().mockResolvedValue({

@@ -32,3 +32,4 @@ The following legacy files were removed as part of the migration:
 - No active imports of `ResearchEditor` remain in the app.
 - No active imports from `src/app/components/editor/` remain.
 - Chat/editor intent wiring now imports from `src/app/components/block-editor/intents.ts`.
+- Workspace status listeners also import `EDITOR_INTENT_EVENT` from `src/app/components/block-editor/intents.ts` (no `components/editor` runtime imports remain).

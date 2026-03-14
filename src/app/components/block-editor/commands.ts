@@ -38,7 +38,7 @@ function runSlashCommand(
   if (backendCommand) {
     const params: Record<string, unknown> = { paperId: context.paperId };
     if (commandId === "explain" || commandId === "compare") {
-      params.text = context.currentContent;
+      params.selection = { text: context.currentContent };
     }
     return context.onExecuteApi?.(backendCommand, params);
   }

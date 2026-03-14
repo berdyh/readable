@@ -2,7 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { EDITOR_INTENT_EVENT, type EditorIntentDetail } from "../editor/intents";
+import {
+  EDITOR_INTENT_EVENT,
+  type EditorIntentDetail,
+} from "../block-editor/intents";
 
 const truncateForPrompt = (text: string, maxLength = 80) => {
   const trimmed = text.trim();

@@ -1,5 +1,24 @@
 # Editor Workspace Architecture
 
+> **Status (current):** The production editor surface is `src/app/components/block-editor/`.
+> The legacy `src/app/components/editor/` tree has been removed.
+
+## Canonical helper locations
+
+- **Intent event contract for chat/workspace flows:** `src/app/components/block-editor/intents.ts`
+- **Slash command definitions and execution metadata:** `src/app/components/block-editor/commands.ts`
+- **Network/API command handlers:** `src/app/components/block-editor/apiHandlers.ts`
+- **Block parsing and conversion helpers:** `src/app/components/block-editor/parsers.ts`
+- **Markdown utility helpers:** `src/app/components/block-editor/utils/markdown.ts`
+
+## Import audit (legacy editor surface)
+
+- `src/app/components/editor/intents.ts` — removed; all active imports now point to `block-editor/intents.ts`.
+- `src/app/components/editor/pdfImport.ts` — removed with the legacy research editor command stack.
+- `src/app/components/editor/EditorToolbar.tsx` — removed with the legacy TipTap UI.
+
+---
+
 ## Component Tree
 
 ```

@@ -26,14 +26,13 @@ Relevant failing output:
 
 ```text
 src/app/components/editor/EditorToolbar.tsx(9,28): error TS2339: Property 'toggleUnderline' does not exist on type 'ChainedCommands'.
-src/app/components/editor/EditorToolbar.tsx(10,28): error TS2339: Property 'setFontFamily' does not exist on type 'ChainedCommands'.
 ```
 
 Additional unrelated TypeScript failures are also present in `src/app/components/block-editor/*` test and block files.
 
 ## 3) Corrected prior QA summary statement
 
-`src/app/components/editor/EditorToolbar.tsx` exists and currently fails due to missing TipTap command typings/extensions (`toggleUnderline` and `setFontFamily` are not present on `ChainedCommands`).
+`src/app/components/editor/EditorToolbar.tsx` exists and currently fails due to missing TipTap command typings/extensions (`toggleUnderline` is not present on `ChainedCommands`).
 
 ## 4) Branch sync status
 

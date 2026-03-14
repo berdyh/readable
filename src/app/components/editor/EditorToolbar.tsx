@@ -7,7 +7,6 @@ type EditorToolbarProps = {
 export function EditorToolbar({ editor }: EditorToolbarProps) {
   const applyFormatting = () => {
     editor.chain().focus().toggleUnderline().run();
-    editor.chain().focus().setFontFamily("Inter").run();
   };
 
   return (

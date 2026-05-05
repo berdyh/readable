@@ -95,6 +95,7 @@ describe('answerPaperQuestion', () => {
       {
         chunkId: 'chunk-2',
         page: 4,
+        quote: 'The encoder uses multi-head attention.',
       },
     ]);
   });

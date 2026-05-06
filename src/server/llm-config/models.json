@@ -89,6 +89,36 @@
       "rationale": "Default fallback - most cost-effective option."
     }
   },
+  "openrouter": {
+    "paper_summary": {
+      "model": "deepseek/deepseek-chat-v3.1:free",
+      "rationale": "Free tier on OpenRouter. DeepSeek v3.1 handles long context well; ideal for full-paper summarization without cost.",
+      "pricing": {
+        "input_per_1m": 0,
+        "output_per_1m": 0
+      }
+    },
+    "selection_summary": {
+      "model": "qwen/qwen3-235b-a22b:free",
+      "rationale": "Free tier; Qwen3 235B handles short inline summaries with strong fluency.",
+      "pricing": {
+        "input_per_1m": 0,
+        "output_per_1m": 0
+      }
+    },
+    "qa": {
+      "model": "meta-llama/llama-3.3-70b-instruct:free",
+      "rationale": "Free tier; Llama 3.3 70B is the strongest free reasoning model on OpenRouter for grounded Q&A.",
+      "pricing": {
+        "input_per_1m": 0,
+        "output_per_1m": 0
+      }
+    },
+    "default": {
+      "model": "meta-llama/llama-3.3-70b-instruct:free",
+      "rationale": "Default fallback - free tier on OpenRouter."
+    }
+  },
   "notes": {
     "selection_strategy": "Models chosen based on cost-effectiveness and task-specific requirements. Summarization tasks prioritize cost while Q&A prioritizes reasoning quality.",
     "customization": "Override specific models by setting environment variables: {PROVIDER}_{TASK}_MODEL (e.g., OPENAI_QA_MODEL=gpt-4o)",

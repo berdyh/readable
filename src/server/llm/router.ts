@@ -2,19 +2,26 @@ import type { LlmProvider, LlmProviderInterface, LlmConfig } from './types';
 import { OpenAiProvider } from './providers/openai';
 import { AnthropicProvider } from './providers/anthropic';
 import { GeminiProvider } from './providers/gemini';
+import { OpenRouterProvider } from './providers/openrouter';
+
+const SUPPORTED_PROVIDERS: LlmProvider[] = [
+  'openai',
+  'anthropic',
+  'gemini',
+  'openrouter',
+];
 
 /**
  * Get the default LLM provider from environment variables
  */
 export function getDefaultProvider(): LlmProvider {
   const provider = (process.env.LLM_PROVIDER ?? 'openai').toLowerCase() as LlmProvider;
-  
-  // Validate provider
-  if (!['openai', 'anthropic', 'gemini'].includes(provider)) {
+
+  if (!SUPPORTED_PROVIDERS.includes(provider)) {
     console.warn(`[llm] Invalid LLM_PROVIDER "${provider}", falling back to "openai"`);
     return 'openai';
   }
-  
+
   return provider;
 }
 
@@ -34,6 +41,8 @@ export function createLlmProvider(
       return new AnthropicProvider(config, taskType);
     case 'gemini':
       return new GeminiProvider(config, taskType);
+    case 'openrouter':
+      return new OpenRouterProvider(config, taskType);
     default:
       throw new Error(`Unsupported LLM provider: ${provider}`);
   }

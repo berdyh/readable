@@ -28,6 +28,12 @@ export interface ModelsConfig {
     qa: ModelConfig;
     default: ModelConfig;
   };
+  openrouter: {
+    paper_summary: ModelConfig;
+    selection_summary: ModelConfig;
+    qa: ModelConfig;
+    default: ModelConfig;
+  };
   notes: {
     selection_strategy: string;
     customization: string;
@@ -39,7 +45,7 @@ export interface ModelsConfig {
  * Get model for a specific provider and task type
  */
 export function getModel(
-  provider: 'openai' | 'anthropic' | 'gemini',
+  provider: 'openai' | 'anthropic' | 'gemini' | 'openrouter',
   taskType?: string | 'paper_summary' | 'selection_summary' | 'qa' | 'default',
 ): string {
   const config = modelsData[provider];
@@ -90,7 +96,7 @@ export function getModel(
  * Get full model configuration
  */
 export function getModelConfig(
-  provider: 'openai' | 'anthropic' | 'gemini',
+  provider: 'openai' | 'anthropic' | 'gemini' | 'openrouter',
   taskType?: string | 'paper_summary' | 'selection_summary' | 'qa' | 'default',
 ): ModelConfig {
   const config = modelsData[provider];

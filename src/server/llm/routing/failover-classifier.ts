@@ -200,17 +200,37 @@ export function classifyMessage(message: unknown): FailoverReason | null {
 /**
  * One-shot helper that combines status + message classification with a
  * sane fallback. Use when you have one or both pieces of context.
+ *
+ * Real-world errors often carry the diagnostic in `message` (the
+ * provider's `Error.message` is `"[OpenAI] request failed (401):
+ * { error: invalid_api_key }"`) rather than `body`. We feed both into
+ * the hint matcher together so reclassification (e.g. 401 → auth_permanent
+ * on `invalid_api_key`) works regardless of which field carries it.
  */
 export function classifyFailoverSignal(input: {
   status?: number;
   body?: string;
   message?: unknown;
 }): FailoverReason {
+  const messageString =
+    typeof input.message === 'string'
+      ? input.message
+      : input.message !== undefined && input.message !== null
+        ? (() => {
+            try {
+              return JSON.stringify(input.message);
+            } catch {
+              return String(input.message);
+            }
+          })()
+        : '';
+  const combined = [input.body ?? '', messageString].filter(Boolean).join(' ');
+
   if (typeof input.status === 'number') {
-    const fromStatus = classifyHttpStatus(input.status, input.body);
+    const fromStatus = classifyHttpStatus(input.status, combined);
     if (fromStatus) return fromStatus;
   }
-  const fromMessage = classifyMessage(input.message ?? input.body);
+  const fromMessage = classifyMessage(combined);
   if (fromMessage) return fromMessage;
   return 'unknown';
 }

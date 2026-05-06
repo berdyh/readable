@@ -123,7 +123,7 @@ pnpm exec tsx scripts/test-api-endpoints.ts
 **Endpoint:** `POST /api/editor/ingest/arxiv`
 
 - **Required:** `target` (arXiv ID or URL)
-- **Dependencies:** arXiv API, Weaviate
+- **Dependencies:** arXiv API, Postgres, Qdrant, OpenAI embeddings
 - **Test:**
   ```bash
   curl -X POST http://localhost:3000/api/editor/ingest/arxiv \

@@ -3,11 +3,13 @@ import type { ArxivMetadata } from '@/server/ingest/types';
 import {
   fetchPaperCitationsByPaperId,
   fetchPaperFiguresByPaperId,
-  hybridPaperChunkSearch,
   type Citation,
   type Figure,
+} from '@/server/db';
+import {
+  hybridPaperChunkSearch,
   type HybridPaperChunkHit,
-} from '@/server/weaviate';
+} from '@/server/search/hybrid';
 
 import type {
   NormalizedSelection,

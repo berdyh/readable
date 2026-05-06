@@ -331,7 +331,7 @@ const IngestLanding = () => {
             </li>
             <li>
               <span className="font-medium text-white">2.</span> Chunk the paper,
-              capture figures/citations, and upsert into Weaviate for retrieval.
+              capture figures/citations, persist to Postgres, and index embeddings in Qdrant for hybrid retrieval.
             </li>
             <li>
               <span className="font-medium text-white">3.</span> Redirect you to

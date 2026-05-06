@@ -23,7 +23,8 @@ All timeouts have defaults that work for most use cases:
 
 - **LLM Providers** (60s): OpenAI, Anthropic, Gemini - LLM operations can be slow
 - **Kontext.dev** (8s): Quick persona prompt fetch
-- **Weaviate** (20s): Database operations
+- **Postgres** (20s): Statement timeout for relational queries
+- **Qdrant** (20s): Vector search request timeout
 - **Ingestion**:
   - Fetch/PDF (20s): HTTP requests
   - GROBID (60s): PDF parsing can be slow

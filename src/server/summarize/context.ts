@@ -1,7 +1,10 @@
 import { fetchArxivMetadata } from '@/server/ingest/arxiv';
 import type { ArxivMetadata } from '@/server/ingest/types';
-import { fetchPaperFiguresByPaperId, fetchPaperChunksByPaperId } from '@/server/weaviate/paper';
-import type { Figure, PaperChunk } from '@/server/weaviate/types';
+import {
+  fetchPaperFiguresByPaperId,
+  fetchPaperChunksByPaperId,
+} from '@/server/db';
+import type { Figure, PaperChunk } from '@/server/db';
 
 import type { PageSpan } from './types';
 

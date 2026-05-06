@@ -831,8 +831,8 @@ vi.mock('@/server/ingest/ocr', () => ({
   runDeepSeekOcr: vi.fn(async () => undefined),
 }));
 
-const weaviateMock = {
-  getWeaviateClient: vi.fn(() => ({ kind: 'mock-client' })),
+const storeMock = {
+  upsertPaper: vi.fn(async () => undefined),
 
   upsertPaperChunks: vi.fn(async (chunks: Array<Omit<MockChunk, 'id'>>) => {
     for (const chunk of chunks) {
@@ -843,8 +843,8 @@ const weaviateMock = {
       filtered.push({
         ...chunk,
         id: `${chunk.paperId}:${chunk.chunkId}`,
-        citations: [...chunk.citations],
-        figureIds: [...chunk.figureIds],
+        citations: [...(chunk.citations ?? [])],
+        figureIds: [...(chunk.figureIds ?? [])],
       });
       mockStore.chunks.set(chunk.paperId, filtered);
     }
@@ -903,64 +903,92 @@ const weaviateMock = {
     const citations = mockStore.citations.get(paperId) ?? [];
     return citations.map(cloneCitation);
   }),
-
-  hybridPaperChunkSearch: vi.fn(
-    async (options: {
-      paperId: string;
-      query: string;
-      limit?: number;
-    }) => {
-      const chunks = mockStore.chunks.get(options.paperId) ?? [];
-      const normalizedQuery = options.query.toLowerCase();
-
-      const matching = chunks.filter((chunk) => {
-        const haystack = `${chunk.text} ${chunk.section ?? ''}`.toLowerCase();
-        return haystack.includes(normalizedQuery);
-      });
-
-      const selected =
-        matching.length > 0 ? matching : chunks.slice(0, options.limit ?? 5);
-
-      const hits = selected.slice(0, options.limit ?? 5).map((chunk, index) => ({
-        id: `${chunk.paperId}:${chunk.chunkId}:${index}`,
-        paperId: chunk.paperId,
-        chunkId: chunk.chunkId,
-        text: chunk.text,
-        section: chunk.section,
-        pageNumber: chunk.pageNumber,
-        score: 1 - index * 0.05,
-        distance: index * 0.05,
-        citations: chunk.citations,
-        figureIds: chunk.figureIds,
-        additional: {},
-      }));
-
-      return {
-        hits,
-        expandedWindow: [],
-      };
-    },
-  ),
 };
 
-vi.mock('@/server/weaviate', () => weaviateMock);
+const hybridSearchMock = vi.fn(
+  async (options: {
+    paperId: string;
+    query: string;
+    limit?: number;
+  }) => {
+    const chunks = mockStore.chunks.get(options.paperId) ?? [];
+    const normalizedQuery = options.query.toLowerCase();
 
-vi.mock('@/server/weaviate/paper', () => ({
-  fetchPaperChunksByPaperId: weaviateMock.fetchPaperChunksByPaperId,
-  fetchPaperFiguresByPaperId: weaviateMock.fetchPaperFiguresByPaperId,
-  fetchPaperCitationsByPaperId: weaviateMock.fetchPaperCitationsByPaperId,
+    const matching = chunks.filter((chunk) => {
+      const haystack = `${chunk.text} ${chunk.section ?? ''}`.toLowerCase();
+      return haystack.includes(normalizedQuery);
+    });
+
+    const selected =
+      matching.length > 0 ? matching : chunks.slice(0, options.limit ?? 5);
+
+    const hits = selected.slice(0, options.limit ?? 5).map((chunk, index) => ({
+      id: `${chunk.paperId}:${chunk.chunkId}:${index}`,
+      paperId: chunk.paperId,
+      chunkId: chunk.chunkId,
+      text: chunk.text,
+      section: chunk.section,
+      pageNumber: chunk.pageNumber,
+      score: 1 - index * 0.05,
+      distance: index * 0.05,
+      citations: chunk.citations,
+      figureIds: chunk.figureIds,
+      additional: {},
+    }));
+
+    return {
+      hits,
+      expandedWindow: [],
+    };
+  },
+);
+
+vi.mock('@/server/db', () => ({
+  upsertPaper: storeMock.upsertPaper,
+  upsertPaperChunks: storeMock.upsertPaperChunks,
+  upsertFigures: storeMock.upsertFigures,
+  upsertCitations: storeMock.upsertCitations,
+  fetchPaperChunksByPaperId: storeMock.fetchPaperChunksByPaperId,
+  fetchPaperFiguresByPaperId: storeMock.fetchPaperFiguresByPaperId,
+  fetchPaperCitationsByPaperId: storeMock.fetchPaperCitationsByPaperId,
+  buildPaperChunkUuid: (paperId: string, chunkId: string) =>
+    `${paperId}:${chunkId}`,
+}));
+
+vi.mock('@/server/search/hybrid', () => ({
+  hybridPaperChunkSearch: hybridSearchMock,
+}));
+
+vi.mock('@/server/vector/qdrant', () => ({
+  ensureQdrantCollection: vi.fn(async () => undefined),
+  upsertPaperChunkVectors: vi.fn(async () => undefined),
+  deletePaperChunkVectorsByPaper: vi.fn(async () => undefined),
+}));
+
+vi.mock('@/server/vector/embeddings', () => ({
+  embedTexts: vi.fn(async (texts: string[]) =>
+    texts.map(() => Array.from({ length: 4 }, () => 0)),
+  ),
+  embedQuery: vi.fn(async () => Array.from({ length: 4 }, () => 0)),
 }));
 
 vi.mock('@/server/summarize/kontext', () => ({
   fetchKontextSystemPrompt: fetchKontextSystemPromptMock,
 }));
 
-vi.mock('@/server/summarize/openai', () => ({
-  generateJsonSummary: generateJsonSummaryMock,
-}));
-
-vi.mock('@/server/qa/openai', () => ({
-  generateQaResponse: generateQaResponseMock,
+vi.mock('@/server/llm', () => ({
+  generateJson: vi.fn(
+    async (
+      params: { systemPrompt: string; userPrompt: string },
+      ctx?: { taskName?: string },
+    ) => {
+      if (ctx?.taskName === 'qa') {
+        return generateQaResponseMock(params);
+      }
+      return generateJsonSummaryMock(params);
+    },
+  ),
+  generateText: vi.fn(async () => ''),
 }));
 
 let ingestPaper: typeof import('@/server/ingest').ingestPaper;

@@ -14,9 +14,12 @@ export const DEFAULT_TIMEOUTS = {
   
   // Kontext.dev timeout (8 seconds for quick persona prompt fetch)
   kontext: 8_000,
-  
-  // Weaviate timeout (20 seconds for database operations)
-  weaviate: 20_000,
+
+  // Postgres statement timeout (20 seconds for relational queries)
+  postgres: 20_000,
+
+  // Qdrant request timeout (20 seconds for vector search)
+  qdrant: 20_000,
   
   // Ingestion timeouts
   ingest: {

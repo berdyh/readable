@@ -1,10 +1,13 @@
-import { upsertKontextPrompt } from '@/server/weaviate/upsert';
-import type { KontextPrompt } from '@/server/weaviate/types';
+import {
+  getCachedKontextPrompt,
+  upsertKontextPrompt,
+  type KontextPrompt,
+} from '@/server/db';
 
 const DEFAULT_BASE_URL = 'https://api.kontext.dev';
 const DEFAULT_PATH = '/v1/context/get';
 const DEFAULT_TIMEOUT_MS = 8_000;
-const CACHE_TTL_HOURS = 24; // Cache prompts for 24 hours
+const CACHE_TTL_HOURS = 24;
 
 interface KontextConfig {
   apiKey?: string;
@@ -32,6 +35,22 @@ export interface KontextPromptRequest {
   personaId?: string;
 }
 
+async function lookupCache(
+  request: KontextPromptRequest,
+): Promise<string | undefined> {
+  if (!request.userId || !request.paperId) {
+    return undefined;
+  }
+
+  try {
+    const cached = await getCachedKontextPrompt(request);
+    return cached?.systemPrompt;
+  } catch (error) {
+    console.warn('[kontext] Cache lookup failed:', error);
+    return undefined;
+  }
+}
+
 export async function fetchKontextSystemPrompt(
   request: KontextPromptRequest,
 ): Promise<string | undefined> {
@@ -39,6 +58,11 @@ export async function fetchKontextSystemPrompt(
 
   if (!config.apiKey) {
     return undefined;
+  }
+
+  const cached = await lookupCache(request);
+  if (cached) {
+    return cached;
   }
 
   const controller = new AbortController();
@@ -84,7 +108,6 @@ export async function fetchKontextSystemPrompt(
 
     const trimmedPrompt = systemPrompt?.trim();
 
-    // Save prompt to Weaviate if we got one
     if (trimmedPrompt) {
       try {
         const expiresAt = new Date();
@@ -100,9 +123,8 @@ export async function fetchKontextSystemPrompt(
           expiresAt: expiresAt.toISOString(),
         };
 
-        // Save asynchronously - don't block on save errors
         upsertKontextPrompt(kontextPrompt).catch((error) => {
-          console.warn('[kontext] Failed to save prompt to Weaviate:', error);
+          console.warn('[kontext] Failed to save prompt to Postgres:', error);
         });
       } catch (error) {
         console.warn('[kontext] Error preparing prompt for storage:', error);

@@ -1,13 +1,19 @@
-import type { WeaviateClient } from 'weaviate-ts-client';
-
 import {
-  getWeaviateClient,
+  buildPaperChunkUuid,
   upsertCitations,
   upsertFigures,
+  upsertPaper,
   upsertPaperChunks,
-} from '@/server/weaviate';
-import type { Citation, Figure, PaperChunk } from '@/server/weaviate';
-import { buildPaperChunkUuid } from '@/server/weaviate/ids';
+  type Citation,
+  type Figure,
+  type PaperChunk,
+} from '@/server/db';
+import { embedTexts } from '@/server/vector/embeddings';
+import {
+  ensureQdrantCollection,
+  upsertPaperChunkVectors,
+  type PaperChunkVectorPoint,
+} from '@/server/vector/qdrant';
 
 import { fetchAr5ivHtml, fetchArxivMetadata, fetchArxivPdf } from './arxiv';
 import { parseAr5ivHtml } from './ar5iv';
@@ -35,8 +41,8 @@ interface BuildChunkResult {
 }
 
 interface IngestOptions {
-  weaviateClient?: WeaviateClient;
   environmentOverrides?: Partial<IngestEnvironmentConfig>;
+  skipVectorIndex?: boolean;
 }
 
 const MIN_TEXT_THRESHOLD_FOR_PDF =
@@ -490,10 +496,7 @@ function attachChunkRefsToReferences(
   });
 }
 
-function toWeaviateFigures(
-  paperId: string,
-  figures: PaperFigure[],
-): Figure[] {
+function toFigureRecords(paperId: string, figures: PaperFigure[]): Figure[] {
   return figures.map((figure) => ({
     paperId,
     figureId: figure.id,
@@ -504,7 +507,7 @@ function toWeaviateFigures(
   }));
 }
 
-function toWeaviateCitations(
+function toCitationRecords(
   paperId: string,
   references: PaperReference[],
 ): Citation[] {
@@ -521,12 +524,53 @@ function toWeaviateCitations(
   }));
 }
 
+async function indexChunkVectors(
+  chunks: PaperChunk[],
+  chunkIds: string[],
+): Promise<void> {
+  if (chunks.length === 0 || chunkIds.length !== chunks.length) {
+    return;
+  }
+
+  if (!process.env.OPENAI_API_KEY) {
+    console.warn(
+      '[ingest] Skipping vector index: OPENAI_API_KEY not configured.',
+    );
+    return;
+  }
+
+  await ensureQdrantCollection();
+
+  const texts = chunks.map((chunk) => chunk.text);
+  const vectors = await embedTexts(texts);
+
+  const points: PaperChunkVectorPoint[] = chunks.map((chunk, index) => ({
+    id: chunkIds[index],
+    vector: vectors[index] ?? [],
+    payload: {
+      paperId: chunk.paperId,
+      chunkId: chunk.chunkId,
+      section: chunk.section,
+      pageNumber: chunk.pageNumber,
+      citations: chunk.citations ?? [],
+      figureIds: chunk.figureIds ?? [],
+    },
+  }));
+
+  const validPoints = points.filter((point) => point.vector.length > 0);
+
+  if (validPoints.length === 0) {
+    return;
+  }
+
+  await upsertPaperChunkVectors(validPoints);
+}
+
 export async function ingestPaper(
   request: IngestRequest,
   options?: IngestOptions,
 ): Promise<IngestResult> {
   const environment = mergeEnvironment(options?.environmentOverrides);
-  const client = options?.weaviateClient ?? getWeaviateClient();
   const arxivId = request.arxivId;
 
   const [metadata, htmlPayload, pdfPayload] = await Promise.all([
@@ -655,22 +699,42 @@ export async function ingestPaper(
     metadata.id,
   );
 
-  await upsertPaperChunks(chunks, client);
+  const pages =
+    teiResult?.pageCount ?? fallbackExtraction?.pages.length;
+
+  await upsertPaper({
+    paperId: metadata.id,
+    title: metadata.title,
+    abstract: metadata.abstract,
+    authors: metadata.authors,
+    primaryCategory: metadata.primaryCategory,
+    categories: metadata.categories,
+    publishedAt: metadata.publishedAt,
+    updatedAt: metadata.updatedAt,
+    pdfUrl: metadata.pdfUrl,
+    pages,
+  });
+
+  const chunkIds = await upsertPaperChunks(chunks);
 
   if (figuresWithChunks.length) {
-    await upsertFigures(toWeaviateFigures(metadata.id, figuresWithChunks), client);
+    await upsertFigures(toFigureRecords(metadata.id, figuresWithChunks));
   }
 
   if (referencesWithChunks.length) {
-    await upsertCitations(
-      toWeaviateCitations(metadata.id, referencesWithChunks),
-      client,
-    );
+    await upsertCitations(toCitationRecords(metadata.id, referencesWithChunks));
   }
 
-  const pages =
-    teiResult?.pageCount ??
-    fallbackExtraction?.pages.length;
+  if (!options?.skipVectorIndex) {
+    try {
+      await indexChunkVectors(chunks, chunkIds);
+    } catch (error) {
+      console.warn(
+        `[ingest] Vector indexing failed for ${arxivId}; chunks remain searchable via Postgres.`,
+        error,
+      );
+    }
+  }
 
   return {
     paperId: metadata.id,

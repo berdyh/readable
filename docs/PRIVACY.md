@@ -4,9 +4,10 @@ Readable is a self-hosted application. You control the environment, the backing 
 
 ## Data the app stores
 
-- **Paper knowledge graph (Weaviate)**
-  - Ingested sections, paragraph text, citation metadata, figure captions, and light PDF analytics.
-  - Persona nodes containing traits, concepts, and interaction history. Personas live only in your Weaviate cluster.
+- **Paper knowledge graph (Postgres + Qdrant)**
+  - Postgres holds ingested sections, paragraph text, citation metadata, figure captions, and light PDF analytics — plus persona concepts, interactions, and the cached `systemPrompt` returned by Kontext.dev.
+  - Qdrant holds embedding vectors for paper chunks (no raw text — only the vector and a small payload referencing the Postgres row).
+  - Both stores live entirely inside the deployment you control.
 - **Runtime metadata**
   - Server-side logs (Next.js `console.*`) stream to stderr. No log shipping is performed by default.
   - PostHog analytics run client-side when `POSTHOG_KEY` is configured; disable the key to opt out.
@@ -26,15 +27,15 @@ If you do not provide API keys for a service, that integration is skipped.
 
 1. When a user connects external data through Kontext, the backend calls `GET /v1/context/get` (configurable via `KONTEXT_SYSTEM_PROMPT_PATH`).
 2. Kontext responds with a tailored system prompt. The prompt is stored in memory for the duration of the request and may be cached transiently in your hosting layer, but it is not written to disk.
-3. Persona traits are persisted in Weaviate (class schema defined in `src/server/weaviate`). You choose the storage tier (managed cluster or self-hosted).
+3. Persona traits are persisted in Postgres (`persona_concepts`, `interactions`, and `kontext_prompts` — schema defined in `src/server/db/schema.ts`). You choose the storage tier (managed Postgres or self-hosted).
 
-No raw mailbox content, document attachments, or OAuth tokens are saved in Readable. Users can remove persona data by deleting the corresponding objects in Weaviate.
+No raw mailbox content, document attachments, or OAuth tokens are saved in Readable. Users can remove persona data by deleting the corresponding rows in `persona_concepts`, `interactions`, and `kontext_prompts`.
 
 ## Your responsibilities
 
 - Provide clear terms of service and privacy disclosures to end-users of your deployment.
-- Configure TLS for Weaviate, Kontext, and any custom ingestion endpoints.
-- Manage retention policies in Weaviate and any object storage you attach for figures.
+- Configure TLS for Postgres, Qdrant, Kontext, and any custom ingestion endpoints.
+- Manage retention policies in Postgres / Qdrant and any object storage you attach for figures.
 - Rotate API keys and secrets in `.env.local` regularly.
 - Ensure compliance with arXiv API usage guidelines and the privacy policies of any connected services.
 

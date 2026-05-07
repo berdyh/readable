@@ -1,6 +1,7 @@
 import { loadPaperSummaryContext } from './context';
 import { fetchKontextSystemPrompt } from './kontext';
 import { generateJson } from '@/server/llm';
+import { recordPersonaSignals } from '@/server/persona/record';
 import type {
   PageSpan,
   SummaryFigure,
@@ -19,7 +20,7 @@ const PROMPT_FIGURE_LIMIT = PROMPT_LIMITS.figure;
 const SUMMARY_SCHEMA: Record<string, unknown> = {
   type: 'object',
   additionalProperties: false,
-  required: ['sections', 'key_findings', 'figures'],
+  required: ['sections', 'key_findings', 'figures', 'concepts'],
   properties: {
     sections: {
       type: 'array',
@@ -86,6 +87,21 @@ const SUMMARY_SCHEMA: Record<string, unknown> = {
         },
       },
     },
+    concepts: {
+      type: 'array',
+      maxItems: 8,
+      description:
+        'Concepts the reader was exposed to. Names should be terse domain phrases (e.g. "attention mechanism", "Bayesian inference"). Drawn only from the paper — do not invent.',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['concept', 'description'],
+        properties: {
+          concept: { type: 'string', minLength: 1, maxLength: 80 },
+          description: { type: 'string', maxLength: 240 },
+        },
+      },
+    },
   },
 };
 
@@ -110,10 +126,16 @@ interface LlmFigure {
   insight: string;
 }
 
+interface LlmConcept {
+  concept: string;
+  description?: string;
+}
+
 interface LlmSummaryPayload {
   sections: LlmSection[];
   key_findings: LlmKeyFinding[];
   figures: LlmFigure[];
+  concepts: LlmConcept[];
 }
 
 interface SummarizeOptions {
@@ -470,11 +492,32 @@ function coerceFigures(input: unknown): LlmFigure[] {
   return figures;
 }
 
+function coerceConcepts(input: unknown): LlmConcept[] {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+  const concepts: LlmConcept[] = [];
+  for (const entry of input) {
+    if (!entry || typeof entry !== 'object') continue;
+    const record = entry as Record<string, unknown>;
+    const concept =
+      typeof record.concept === 'string' ? record.concept.trim() : undefined;
+    if (!concept) continue;
+    const description =
+      typeof record.description === 'string'
+        ? record.description.trim()
+        : undefined;
+    concepts.push({ concept, description: description || undefined });
+  }
+  return concepts.slice(0, 8);
+}
+
 function parseModelSummary(rawContent: string): LlmSummaryPayload {
   const payload = extractJsonPayload(rawContent) as Record<string, unknown>;
   const sections = coerceSections(payload.sections);
   const keyFindings = coerceKeyFindings(payload.key_findings);
   const figures = coerceFigures(payload.figures);
+  const concepts = coerceConcepts(payload.concepts);
 
   if (sections.length < 1) {
     throw new Error('Model response did not include any sections.');
@@ -484,6 +527,7 @@ function parseModelSummary(rawContent: string): LlmSummaryPayload {
     sections,
     key_findings: keyFindings,
     figures,
+    concepts,
   };
 }
 
@@ -628,8 +672,22 @@ export async function summarizePaper(
   });
 
   const llmSummary = parseModelSummary(rawContent);
+  const result = postProcessSummary(llmSummary, context);
 
-  return postProcessSummary(llmSummary, context);
+  // Persona writes are fire-and-forget; never block the summary on them.
+  void recordPersonaSignals({
+    userId: options.userId,
+    paperId,
+    interactionType: 'summarize',
+    prompt: `Summarize paper ${paperId}`,
+    response: result.sections.map((s) => s.summary).join('\n'),
+    chunkIds: [],
+    concepts: llmSummary.concepts,
+  }).catch((error) => {
+    console.warn('[summarize] failed to persist persona signals:', error);
+  });
+
+  return result;
 }
 
 export type {

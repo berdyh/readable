@@ -7,6 +7,46 @@ import { ensureSchema } from './migrate';
 import { withPgClient } from './postgres';
 import type { Interaction, KontextPrompt, PersonaConcept } from './types';
 
+export async function listPersonaConceptsForUser(
+  userId: string,
+  limit = 100,
+): Promise<PersonaConcept[]> {
+  if (!userId.trim()) {
+    return [];
+  }
+
+  await ensureSchema();
+
+  return withPgClient(async (client) => {
+    const { rows } = await client.query<{
+      id: string;
+      user_id: string;
+      concept: string;
+      description: string | null;
+      first_seen_paper_id: string | null;
+      learned_at: Date | null;
+      confidence: number | null;
+    }>(
+      `SELECT id, user_id, concept, description, first_seen_paper_id, learned_at, confidence
+         FROM persona_concepts
+         WHERE user_id = $1
+         ORDER BY learned_at DESC NULLS LAST, concept ASC
+         LIMIT $2`,
+      [userId.trim(), limit],
+    );
+    return rows.map((row) => ({
+      id: row.id,
+      userId: row.user_id,
+      concept: row.concept,
+      description: row.description ?? undefined,
+      firstSeenPaperId: row.first_seen_paper_id ?? undefined,
+      learnedAt: row.learned_at?.toISOString(),
+      confidence:
+        typeof row.confidence === 'number' ? row.confidence : undefined,
+    }));
+  });
+}
+
 export async function upsertPersonaConcepts(
   concepts: PersonaConcept[],
 ): Promise<string[]> {

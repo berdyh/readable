@@ -6,8 +6,13 @@ import { useTheme } from "next-themes";
 
 import { BlockEditor } from "../block-editor/BlockEditor";
 import PdfPanel from "./PdfPanel";
+import { SkillsPanel } from "./SkillsPanel";
+import { ThreePassBar } from "./ThreePassBar";
 import { usePaperContent } from "./usePaperContent";
+import { usePassState } from "./usePassState";
 import { useWorkspaceStatus } from "./useWorkspaceStatus";
+
+const SKILLS_USER_ID = "demo-user";
 
 export interface ReaderWorkspaceProps {
   paperId?: string;
@@ -27,6 +32,8 @@ const ReaderWorkspace = ({ paperId, pdfUrl }: ReaderWorkspaceProps) => {
     initialBlocks,
     htmlError,
   } = usePaperContent({ paperId, pdfUrl });
+
+  const { pass, setPass } = usePassState({ paperId: resolvedPaperId });
 
   const { statusMessage, setStatusMessage, clearStatus } = useWorkspaceStatus();
 
@@ -56,17 +63,25 @@ const ReaderWorkspace = ({ paperId, pdfUrl }: ReaderWorkspaceProps) => {
         isDarkMode ? "bg-neutral-950 text-neutral-100" : "bg-zinc-50 text-zinc-900"
       }`}
     >
-      <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col px-5 py-10">
-        <BlockEditor
-          paperId={resolvedPaperId}
-          initialBlocks={initialBlocks}
-          statusMessage={statusMessage}
-          errorMessage={summaryError}
-          onStatusClear={clearStatus}
-          showChatButton={true}
-          personaEnabled={personaEnabled}
-          onPersonaToggle={setPersonaEnabled}
-        />
+      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-5 py-10">
+        <div className="flex flex-col gap-6 lg:flex-row">
+          <div className="flex-1 min-w-0">
+            <ThreePassBar pass={pass} onPassChange={setPass} isDarkMode={isDarkMode} />
+            <BlockEditor
+              paperId={resolvedPaperId}
+              initialBlocks={initialBlocks}
+              statusMessage={statusMessage}
+              errorMessage={summaryError}
+              onStatusClear={clearStatus}
+              showChatButton={true}
+              personaEnabled={personaEnabled}
+              onPersonaToggle={setPersonaEnabled}
+            />
+          </div>
+          <div className="hidden lg:block">
+            <SkillsPanel userId={SKILLS_USER_ID} isDarkMode={isDarkMode} />
+          </div>
+        </div>
         <div className="mt-4 flex items-center justify-end gap-3">
           <button
             type="button"

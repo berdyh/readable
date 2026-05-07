@@ -44,10 +44,14 @@ const QA_RESPONSE_SCHEMA: Record<string, unknown> = {
       items: {
         type: 'object',
         additionalProperties: false,
+        // Both fields are required so OpenAI's strict json_schema mode
+        // accepts the schema, but description is nullable — non-strict
+        // providers (Anthropic / Gemini / OpenRouter free) often omit
+        // descriptions when none is meaningful. The parser drops nulls.
         required: ['concept', 'description'],
         properties: {
           concept: { type: 'string', minLength: 1, maxLength: 80 },
-          description: { type: 'string', maxLength: 240 },
+          description: { type: ['string', 'null'], maxLength: 240 },
         },
       },
     },

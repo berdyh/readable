@@ -223,9 +223,16 @@ export function applyCooldown(
     cooldownMs = Math.max(retryAfterMs, ladderMs);
   }
 
+  // Defensive: if a stale snapshot or clock skew yields a `now` smaller
+  // than the existing cooldownUntil, never shorten the cooldown — pick
+  // whichever is later. Prevents a buggy upstream from accidentally
+  // releasing a profile we already decided to back off.
+  const proposedUntil = now + cooldownMs;
+  const finalUntil = Math.max(current.cooldownUntil ?? 0, proposedUntil);
+
   const next: ProfileUsageStats = {
     ...current,
-    cooldownUntil: now + cooldownMs,
+    cooldownUntil: finalUntil,
     cooldownLevel: nextLevel,
     cooldownReason: reason,
     errorCount: (current.errorCount ?? 0) + 1,

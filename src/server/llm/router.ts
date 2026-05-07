@@ -9,7 +9,6 @@ import {
   FailoverError,
   hasAnyProviderKey,
   runWithModelFallback,
-  saveUsageStatsOnly,
   type AuthProfileStore,
   type ModelRef,
   type RoutingProviderId,
@@ -99,6 +98,29 @@ function parseAllowedProviders(): LlmProvider[] {
 }
 
 /**
+ * Warn once when the user has authenticated multiple providers but
+ * hasn't opted into the fallback chain. Easy onboarding miss — the
+ * routing layer is silent until LLM_ALLOWED_PROVIDERS is set.
+ */
+let routingHintLogged = false;
+function maybeLogRoutingHint(): void {
+  if (routingHintLogged) return;
+  routingHintLogged = true;
+  if (process.env.LLM_ALLOWED_PROVIDERS?.trim()) return;
+  const configured = SUPPORTED_PROVIDERS.filter((provider) =>
+    hasAnyProviderKey(provider),
+  );
+  if (configured.length >= 2) {
+    console.info(
+      `[llm] You have keys for ${configured.join(', ')} but LLM_ALLOWED_PROVIDERS is unset. ` +
+        'Set it (e.g. `LLM_ALLOWED_PROVIDERS=' +
+        configured.join(',') +
+        '`) to enable OpenClaw-style fallback. Run `pnpm setup` for an interactive picker.',
+    );
+  }
+}
+
+/**
  * Build the candidate ModelRef chain for a request.
  *
  * Primary candidate = explicit options.provider OR LLM_PROVIDER env.
@@ -133,23 +155,27 @@ function buildCandidates(
 }
 
 /**
- * Cached AuthProfileStore — built once per Node process, reused across
- * requests. CLI auth files are mtime-checked on every detection call so
- * a token rotation gets picked up automatically; env keys are static for
- * the process lifetime so we don't pay for re-collection on every call.
+ * Re-build the auth-profile store on every call so cooldown state — which
+ * lives in `usageStats` and is persisted via `persistUsageWrites: true`
+ * inside the loop — is always loaded fresh from disk. CLI auth files are
+ * mtime-cached internally so the rebuild is cheap (one or two JSON reads
+ * per request).
+ *
+ * We deliberately do NOT keep the store as a module-level singleton:
+ * multiple parallel requests need to see each other's most-recent
+ * cooldowns, and a cached promise in module scope would isolate them.
  */
-let cachedStorePromise: Promise<AuthProfileStore> | undefined;
-
 async function getAuthProfileStore(): Promise<AuthProfileStore> {
-  if (!cachedStorePromise) {
-    cachedStorePromise = buildAuthProfileStore({ agentId: 'default' });
-  }
-  return cachedStorePromise;
+  return buildAuthProfileStore({ agentId: 'default' });
 }
 
-/** For tests + setup-CLI flows that change env mid-process. */
+/**
+ * Kept as an exported no-op so existing call sites (setup CLI, tests)
+ * that asked the router to forget cached state continue to compile. The
+ * cache no longer exists; this is now equivalent to "do nothing".
+ */
 export function resetAuthProfileStoreCache(): void {
-  cachedStorePromise = undefined;
+  // Intentionally empty — see getAuthProfileStore comment.
 }
 
 interface RouteRequestOptions {
@@ -196,11 +222,11 @@ async function routeRequest<T>(
       fallbacks,
       store,
       run,
-    });
-    // Persist usage stats best-effort. Don't await — we don't want to
-    // block the response on disk I/O.
-    saveUsageStatsOnly(result.store.usageStats ?? {}, 'default').catch(() => {
-      /* ignore — next request will overwrite */
+      // Persist after every cooldown / success so the next request (and
+      // the next process) sees the up-to-date state. Without this,
+      // FallbackSummaryError loses the cooldowns it accumulated and
+      // identical traffic re-fires the same failed providers.
+      persistUsageWrites: true,
     });
     return result.result;
   } catch (error) {
@@ -243,6 +269,7 @@ export async function generateJson(
   // requested. Skip the routing layer entirely so existing tests + the
   // single-provider deploy stay on the simpler code path.
   if (allowed.length === 0) {
+    maybeLogRoutingHint();
     const config: LlmConfig = {
       provider: primaryProvider,
       ...options?.config,
@@ -280,6 +307,7 @@ export async function generateText(
   const allowed = parseAllowedProviders();
 
   if (allowed.length === 0) {
+    maybeLogRoutingHint();
     const config: LlmConfig = {
       provider: primaryProvider,
       ...options?.config,

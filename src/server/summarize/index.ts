@@ -95,10 +95,12 @@ const SUMMARY_SCHEMA: Record<string, unknown> = {
       items: {
         type: 'object',
         additionalProperties: false,
+        // description is nullable so non-strict providers can omit it
+        // without violating the contract. The parser drops nulls.
         required: ['concept', 'description'],
         properties: {
           concept: { type: 'string', minLength: 1, maxLength: 80 },
-          description: { type: 'string', maxLength: 240 },
+          description: { type: ['string', 'null'], maxLength: 240 },
         },
       },
     },

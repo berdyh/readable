@@ -943,6 +943,14 @@ const hybridSearchMock = vi.fn(
   },
 );
 
+const upsertInteractionsMock = vi.fn(async (rows: unknown[]) =>
+  rows.map((_, index) => `interaction-${index}`),
+);
+const upsertPersonaConceptsMock = vi.fn(async (rows: unknown[]) =>
+  rows.map((_, index) => `concept-${index}`),
+);
+const listPersonaConceptsForUserMock = vi.fn(async () => []);
+
 vi.mock('@/server/db', () => ({
   upsertPaper: storeMock.upsertPaper,
   upsertPaperChunks: storeMock.upsertPaperChunks,
@@ -951,6 +959,9 @@ vi.mock('@/server/db', () => ({
   fetchPaperChunksByPaperId: storeMock.fetchPaperChunksByPaperId,
   fetchPaperFiguresByPaperId: storeMock.fetchPaperFiguresByPaperId,
   fetchPaperCitationsByPaperId: storeMock.fetchPaperCitationsByPaperId,
+  upsertInteractions: upsertInteractionsMock,
+  upsertPersonaConcepts: upsertPersonaConceptsMock,
+  listPersonaConceptsForUser: listPersonaConceptsForUserMock,
   buildPaperChunkUuid: (paperId: string, chunkId: string) =>
     `${paperId}:${chunkId}`,
 }));
@@ -970,6 +981,16 @@ vi.mock('@/server/vector/embeddings', () => ({
     texts.map(() => Array.from({ length: 4 }, () => 0)),
   ),
   embedQuery: vi.fn(async () => Array.from({ length: 4 }, () => 0)),
+  getEmbeddingEnvironment: vi.fn(() => ({
+    providerId: 'openai',
+    apiKey: 'test',
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'text-embedding-3-small',
+    dimensions: 4,
+    timeoutMs: 30_000,
+    collection: 'paper_chunks_test',
+  })),
+  getActiveEmbeddingProvider: vi.fn(() => 'openai'),
 }));
 
 vi.mock('@/server/summarize/kontext', () => ({

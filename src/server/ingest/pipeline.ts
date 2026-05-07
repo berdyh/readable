@@ -8,7 +8,7 @@ import {
   type Figure,
   type PaperChunk,
 } from '@/server/db';
-import { embedTexts } from '@/server/vector/embeddings';
+import { embedTexts, getEmbeddingEnvironment } from '@/server/vector/embeddings';
 import {
   ensureQdrantCollection,
   upsertPaperChunkVectors,
@@ -532,10 +532,15 @@ async function indexChunkVectors(
     return;
   }
 
-  if (!process.env.OPENAI_API_KEY) {
-    console.warn(
-      '[ingest] Skipping vector index: OPENAI_API_KEY not configured.',
-    );
+  // Probe the active embedding provider before doing any work. If its
+  // API key is missing (e.g. a fresh checkout that hasn't run
+  // `pnpm setup` yet), skip vector indexing — the paper stays
+  // retrievable via Postgres FTS and ingest doesn't fail.
+  try {
+    getEmbeddingEnvironment();
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : 'unknown';
+    console.warn(`[ingest] Skipping vector index: ${reason}`);
     return;
   }
 

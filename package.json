@@ -15,7 +15,8 @@
     "lint-staged": "lint-staged",
     "test:stores": "tsx scripts/test-stores.ts",
     "db:migrate": "tsx scripts/db-migrate.ts",
-    "embeddings:probe": "tsx scripts/probe-embedding.ts"
+    "embeddings:probe": "tsx scripts/probe-embedding.ts",
+    "setup": "tsx scripts/setup.ts"
   },
   "dependencies": {
     "@tiptap/core": "^2.6.6",

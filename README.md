@@ -76,7 +76,7 @@ Useful scripts:
 
 ## Data flow overview
 
-1. **Ingest** - fetch arXiv metadata, prefer ar5iv HTML, fall back to PDF (PDF.js or OCR via DeepSeek) and GROBID. Parsed sections, figures, and references are upserted into Postgres; chunk embeddings are written to Qdrant.
+1. **Ingest** - fetch arXiv metadata, prefer ar5iv HTML for structured sections + figures, fall back to plain PDF text via PDF.js (and OCR via DeepSeek/RunPod for image-only PDFs if configured). Parsed records are upserted into Postgres; chunk embeddings are written to Qdrant. Citation metadata is enriched on-demand via Semantic Scholar (configurable).
 2. **Summaries** - gather relevant paper sections from Postgres and prompt the configured LLM for structured JSON. The response includes a list of `concepts` that get upserted to `persona_concepts` for the user.
 3. **Q&A** - run a hybrid retrieval (Qdrant vector search + Postgres `tsvector` full-text search fused via Reciprocal Rank Fusion) constrained to the selected paper, combine chunks/figures/citations, and answer with grounded citations.
 

@@ -18,7 +18,6 @@ import {
 import { fetchAr5ivHtml, fetchArxivMetadata, fetchArxivPdf } from './arxiv';
 import { parseAr5ivHtml } from './ar5iv';
 import { getIngestEnvironment, type IngestEnvironmentConfig } from './config';
-import { fetchGrobidTei, parseGrobidTei } from './grobid';
 import { runDeepSeekOcr } from './ocr';
 import { extractPdfText, shouldUseOcr } from './pdf';
 import type {
@@ -615,17 +614,11 @@ export async function ingestPaper(
       ? parseAr5ivHtml(htmlPayload, { imageBaseUrl: ar5ivImageBase })
       : undefined;
 
-  let teiResult: ParsedTeiResult | undefined;
-  if (pdfPayload) {
-    try {
-      const teiXml = await fetchGrobidTei(pdfPayload, environment);
-      if (teiXml) {
-        teiResult = parseGrobidTei(teiXml);
-      }
-    } catch (error) {
-      console.warn(`[ingest] GROBID processing failed for ${arxivId}`, error);
-    }
-  }
+  // GROBID structured TEI parsing was removed. teiResult is always
+  // undefined; the helper functions below fall through to ar5iv HTML
+  // and plain PDF text extraction. ParsedTeiResult is kept as a type
+  // shape for forward-compat if structured parsing is re-introduced.
+  const teiResult: ParsedTeiResult | undefined = undefined;
 
   let pdfExtraction: PdfExtractionResult | undefined;
   if (pdfPayload) {
@@ -704,8 +697,7 @@ export async function ingestPaper(
     metadata.id,
   );
 
-  const pages =
-    teiResult?.pageCount ?? fallbackExtraction?.pages.length;
+  const pages = fallbackExtraction?.pages.length;
 
   await upsertPaper({
     paperId: metadata.id,

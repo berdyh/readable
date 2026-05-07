@@ -22,7 +22,7 @@ The app does not persist raw PDFs or user-uploaded mailbox/files. Parsed figure 
 ## External services
 
 - **arXiv and ar5iv** - provide paper metadata, abstracts, and HTML renditions. Control access via `ARXIV_CONTACT_EMAIL`, `ARXIV_API_BASE_URL`, and `AR5IV_BASE_URL`.
-- **GROBID / DeepSeek OCR / PDF.js** - optional services used during ingestion for PDF parsing. You supply the endpoints via environment variables.
+- **DeepSeek OCR / PDF.js** - optional OCR services used during ingestion for image-only PDFs. PDF.js runs in-process for text PDFs; OCR endpoints (DeepSeek via RunPod) are only contacted if `ENABLE_OCR_FALLBACK` is set and a text-extraction yields too few characters.
 - **LLM provider** (configurable: OpenAI, Anthropic, Google Gemini, or OpenRouter) - generates summaries, Q&A answers, and the concept lists used to populate `persona_concepts`. Request payloads include paper snippets, persona context, and the user's question. The routing layer auto-detects which providers you've authenticated and picks one; multiple can be configured as a fallback chain via `LLM_ALLOWED_PROVIDERS`. OpenRouter additionally receives `HTTP-Referer` / `X-Title` headers for its attribution accounting.
 - **Embedding provider** (configurable: OpenAI `text-embedding-3-small` or OpenRouter `nvidia/llama-nemotron-embed-vl-1b-v2:free`) - converts paper chunks into vectors for retrieval. The chosen provider sees chunk text but not user metadata.
 - **Semantic Scholar** - optional citation enrichment. The app sends paper identifiers (DOI / arXiv ID / title) and receives metadata (authors, abstract, year, related papers). Works without an API key on the public rate limit.

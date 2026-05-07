@@ -23,14 +23,18 @@ const SUPPORTED_PROVIDERS: LlmProvider[] = [
 ];
 
 /**
- * Get the default LLM provider from environment variables
+ * Get the default LLM provider from environment variables. OpenRouter
+ * is the default because it has a no-cost free tier (Llama 3.3 70B,
+ * DeepSeek v3.1, Qwen3 235B) and an OpenAI-compatible API, so a
+ * brand-new install with just OPENROUTER_API_KEY set works without
+ * additional configuration.
  */
 export function getDefaultProvider(): LlmProvider {
-  const provider = (process.env.LLM_PROVIDER ?? 'openai').toLowerCase() as LlmProvider;
+  const provider = (process.env.LLM_PROVIDER ?? 'openrouter').toLowerCase() as LlmProvider;
 
   if (!SUPPORTED_PROVIDERS.includes(provider)) {
-    console.warn(`[llm] Invalid LLM_PROVIDER "${provider}", falling back to "openai"`);
-    return 'openai';
+    console.warn(`[llm] Invalid LLM_PROVIDER "${provider}", falling back to "openrouter"`);
+    return 'openrouter';
   }
 
   return provider;

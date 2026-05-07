@@ -54,12 +54,17 @@ const PROVIDER_LABELS: Record<RoutingProviderId, string> = {
   openrouter: 'OpenRouter (free + paid models) (openrouter)',
 };
 
-/** Providers we have an SDK class for today. Others are detected but not selectable as primary. */
+/**
+ * Providers we have an SDK class for today. Others are detected but not
+ * selectable as primary. Order is the recommendation order — OpenRouter
+ * leads because it has a no-cost free tier that works without any other
+ * provider configured.
+ */
 const ROUTABLE_PROVIDERS: RoutingProviderId[] = [
+  'openrouter',
   'anthropic',
   'openai',
   'gemini',
-  'openrouter',
 ];
 
 const ENV_KEY_FOR_PROVIDER: Partial<Record<RoutingProviderId, string>> = {

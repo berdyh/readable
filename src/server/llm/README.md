@@ -55,7 +55,7 @@ Two paths, gated by `LLM_ALLOWED_PROVIDERS`:
 If `LLM_ALLOWED_PROVIDERS` is **unset**, the request goes straight to the provider named in `LLM_PROVIDER` (or `options.provider`). No fallback machinery, no auth-profile store touched. Existing single-provider deploys keep their behaviour bit-for-bit.
 
 ```bash
-LLM_PROVIDER=openai            # openai | anthropic | gemini | openrouter
+LLM_PROVIDER=openrouter        # default; also accepts openai | anthropic | gemini
 ```
 
 ### Multi-provider routing (OpenClaw pattern)

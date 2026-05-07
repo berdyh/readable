@@ -1,5 +1,4 @@
 import { loadPaperSummaryContext } from './context';
-import { fetchKontextSystemPrompt } from './kontext';
 import { generateJson } from '@/server/llm';
 import { recordPersonaSignals } from '@/server/persona/record';
 import type {
@@ -142,7 +141,6 @@ interface LlmSummaryPayload {
 
 interface SummarizeOptions {
   userId?: string;
-  personaId?: string;
 }
 
 function truncateText(text: string, maxLength = PROMPT_LIMITS.text_truncate): string {
@@ -319,10 +317,6 @@ function buildUserPrompt(context: Awaited<ReturnType<typeof loadPaperSummaryCont
     '# Task Requirements',
     requirements.map((line) => `- ${line}`).join('\n'),
   ].join('\n');
-}
-
-function mergeSystemPrompt(personaPrompt?: string): string {
-  return getSystemPrompt('paper_summary', personaPrompt);
 }
 
 function extractJsonPayload(content: string): unknown {
@@ -656,14 +650,7 @@ export async function summarizePaper(
 ): Promise<SummaryResult> {
   const context = await loadPaperSummaryContext(paperId);
 
-  const personaPrompt = await fetchKontextSystemPrompt({
-    taskId: 'summarize_research_paper',
-    paperId,
-    userId: options.userId,
-    personaId: options.personaId,
-  }).catch(() => undefined);
-
-  const systemPrompt = mergeSystemPrompt(personaPrompt);
+  const systemPrompt = getSystemPrompt('paper_summary');
   const userPrompt = buildUserPrompt(context);
   const rawContent = await generateJson({
     systemPrompt,

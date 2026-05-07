@@ -11,21 +11,21 @@ export const DEFAULT_TIMEOUTS = {
   openai: 60_000,
   anthropic: 60_000,
   gemini: 60_000,
-  
-  // Kontext.dev timeout (8 seconds for quick persona prompt fetch)
-  kontext: 8_000,
+  openrouter: 60_000,
 
   // Postgres statement timeout (20 seconds for relational queries)
   postgres: 20_000,
 
   // Qdrant request timeout (20 seconds for vector search)
   qdrant: 20_000,
-  
+
+  // Semantic Scholar API (citation enrichment)
+  semanticScholar: 10_000,
+
   // Ingestion timeouts
   ingest: {
     fetch: 20_000,      // General HTTP fetches (arXiv, ar5iv)
     pdf: 20_000,        // PDF downloads
-    grobid: 60_000,     // GROBID parsing (can be slow for large papers)
     ocr: 90_000,        // OCR processing (slowest operation)
   },
 } as const;
@@ -35,15 +35,15 @@ export const DEFAULT_URLS = {
   openai: 'https://api.openai.com/v1',
   anthropic: 'https://api.anthropic.com',
   gemini: 'https://generativelanguage.googleapis.com/v1beta',
-  
-  // Kontext.dev
-  kontext: 'https://api.kontext.dev',
-  kontextPath: '/v1/context/get',
-  
+  openrouter: 'https://openrouter.ai/api/v1',
+
   // arXiv services
   arxiv: 'https://export.arxiv.org/api/query',
   ar5iv: 'https://ar5iv.org/html',
-  
+
+  // Semantic Scholar
+  semanticScholar: 'https://api.semanticscholar.org/graph/v1',
+
   // RunPod (for OCR)
   runpod: 'https://api.runpod.ai/v2',
 } as const;
@@ -52,7 +52,7 @@ export const DEFAULT_URLS = {
  * Get timeout value with environment variable override
  */
 export function getTimeout(
-  service: keyof typeof DEFAULT_TIMEOUTS | 'ingest.fetch' | 'ingest.pdf' | 'ingest.grobid' | 'ingest.ocr',
+  service: keyof typeof DEFAULT_TIMEOUTS | 'ingest.fetch' | 'ingest.pdf' | 'ingest.ocr',
   envVarName: string,
 ): number {
   let defaultValue: number;

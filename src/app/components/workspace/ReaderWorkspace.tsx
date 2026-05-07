@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { SunMedium, MoonStar } from "lucide-react";
 import { useTheme } from "next-themes";
 
@@ -26,7 +26,6 @@ const ReaderWorkspace = ({ paperId, pdfUrl }: ReaderWorkspaceProps) => {
   // theme-switch toggle (which is only operable after mount anyway) and
   // for the legacy isDarkMode prop on PdfPanel.
   const { setTheme, resolvedTheme } = useTheme();
-  const [personaEnabled, setPersonaEnabled] = useState(false);
 
   const {
     resolvedPaperId,
@@ -75,8 +74,6 @@ const ReaderWorkspace = ({ paperId, pdfUrl }: ReaderWorkspaceProps) => {
               errorMessage={summaryError}
               onStatusClear={clearStatus}
               showChatButton={true}
-              personaEnabled={personaEnabled}
-              onPersonaToggle={setPersonaEnabled}
             />
           </div>
           <div className="hidden lg:block">

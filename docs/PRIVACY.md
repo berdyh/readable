@@ -5,7 +5,7 @@ Readable is a self-hosted application. You control the environment, the backing 
 ## Data the app stores
 
 - **Paper knowledge graph (Postgres + Qdrant)**
-  - Postgres holds ingested sections, paragraph text, citation metadata, figure captions, and light PDF analytics — plus persona concepts, interactions, and the cached `systemPrompt` returned by Kontext.dev.
+  - Postgres holds ingested sections, paragraph text, citation metadata, figure captions, and light PDF analytics — plus persona concepts and a log of QA / summarize interactions.
   - Qdrant holds embedding vectors for paper chunks (no raw text — only the vector and a small payload referencing the Postgres row). Each embedding provider gets its own collection sized to that model's native dimension.
   - Both stores live entirely inside the deployment you control.
 - **Skills (`persona_concepts`) + interactions log**
@@ -25,23 +25,22 @@ The app does not persist raw PDFs or user-uploaded mailbox/files. Parsed figure 
 - **GROBID / DeepSeek OCR / PDF.js** - optional services used during ingestion for PDF parsing. You supply the endpoints via environment variables.
 - **LLM provider** (configurable: OpenAI, Anthropic, Google Gemini, or OpenRouter) - generates summaries, Q&A answers, and the concept lists used to populate `persona_concepts`. Request payloads include paper snippets, persona context, and the user's question. The routing layer auto-detects which providers you've authenticated and picks one; multiple can be configured as a fallback chain via `LLM_ALLOWED_PROVIDERS`. OpenRouter additionally receives `HTTP-Referer` / `X-Title` headers for its attribution accounting.
 - **Embedding provider** (configurable: OpenAI `text-embedding-3-small` or OpenRouter `nvidia/llama-nemotron-embed-vl-1b-v2:free`) - converts paper chunks into vectors for retrieval. The chosen provider sees chunk text but not user metadata.
-- **Kontext.dev** - optional persona enrichment. The app sends a user identifier and expects a derived `systemPrompt` string in return. Raw mailbox or document data never enters Readable; Kontext keeps that in its own infrastructure.
+- **Semantic Scholar** - optional citation enrichment. The app sends paper identifiers (DOI / arXiv ID / title) and receives metadata (authors, abstract, year, related papers). Works without an API key on the public rate limit.
 
 If you do not provide API keys for a service, that integration is skipped.
 
 ## Persona handling
 
-1. When a user connects external data through Kontext, the backend calls `GET /v1/context/get` (configurable via `KONTEXT_SYSTEM_PROMPT_PATH`).
-2. Kontext responds with a tailored system prompt. The prompt is cached in the `kontext_prompts` Postgres table (with a TTL) so subsequent requests don't refetch it; raw mailbox/document data never enters this cache.
-3. Persona traits are persisted in Postgres (`persona_concepts`, `interactions`, and `kontext_prompts` — schema defined in `src/server/db/schema.ts`). You choose the storage tier (managed Postgres or self-hosted).
-4. **Concept extraction is automatic**: every Q&A / summarize response is required (by JSON schema) to include a short list of `concepts`, which are upserted to `persona_concepts` and recorded in `interactions` via `recordPersonaSignals` (`src/server/persona/record.ts`). Concept extraction is fire-and-forget — failure to record never blocks the user-facing response. Anonymous interactions (no `userId` plumbed in the request) are NOT tracked.
+Persona traits are persisted in Postgres (`persona_concepts`, `interactions` — schema defined in `src/server/db/schema.ts`). You choose the storage tier (managed Postgres or self-hosted).
 
-OAuth tokens read from local CLIs (Codex / Claude / Gemini) are copied into `~/.readable/agents/<id>/auth-profiles.json` so the routing layer can re-use them across requests; rotating the upstream CLI credential automatically updates the file via mtime detection. No raw mailbox content or document attachments are saved in Readable. Users can remove persona + interaction data by deleting the corresponding rows in `persona_concepts`, `interactions`, and `kontext_prompts`. Routing-layer credentials can be cleared by deleting `~/.readable/`.
+**Concept extraction is automatic**: every Q&A / summarize response is required (by JSON schema) to include a short list of `concepts`, which are upserted to `persona_concepts` and recorded in `interactions` via `recordPersonaSignals` (`src/server/persona/record.ts`). Concept extraction is fire-and-forget — failure to record never blocks the user-facing response. Anonymous interactions (no `userId` plumbed in the request) are NOT tracked.
+
+OAuth tokens read from local CLIs (Codex / Claude / Gemini) are copied into `~/.readable/agents/<id>/auth-profiles.json` so the routing layer can re-use them across requests; rotating the upstream CLI credential automatically updates the file via mtime detection. No raw mailbox content or document attachments are saved in Readable. Users can remove persona + interaction data by deleting the corresponding rows in `persona_concepts` and `interactions`. Routing-layer credentials can be cleared by deleting `~/.readable/`.
 
 ## Your responsibilities
 
 - Provide clear terms of service and privacy disclosures to end-users of your deployment.
-- Configure TLS for Postgres, Qdrant, Kontext, and any custom ingestion endpoints.
+- Configure TLS for Postgres, Qdrant, and any custom ingestion endpoints.
 - Manage retention policies in Postgres / Qdrant and any object storage you attach for figures.
 - Rotate API keys and secrets in `.env.local` regularly.
 - Ensure compliance with arXiv API usage guidelines and the privacy policies of any connected services.

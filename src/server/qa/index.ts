@@ -1,5 +1,3 @@
-import { fetchKontextSystemPrompt } from '@/server/summarize/kontext';
-
 import { loadQuestionEvidence } from './context';
 import { generateJson } from '@/server/llm';
 import { recordPersonaSignals } from '@/server/persona/record';
@@ -73,10 +71,6 @@ interface LlmQaPayload {
   answer?: string;
   citations?: LlmCitationPayload[];
   concepts?: LlmConceptPayload[];
-}
-
-function mergeSystemPrompt(personaPrompt?: string): string {
-  return getSystemPrompt('qa', personaPrompt);
 }
 
 function truncateText(text: string, maxLength = 600): string {
@@ -283,14 +277,7 @@ export async function answerPaperQuestion(
 ): Promise<AnswerResult> {
   const evidence = await loadQuestionEvidence(paperId, question, options);
 
-  const personaPrompt = await fetchKontextSystemPrompt({
-    taskId: 'qa_research_paper',
-    paperId,
-    userId: options.userId,
-    personaId: options.personaId,
-  }).catch(() => undefined);
-
-  const systemPrompt = mergeSystemPrompt(personaPrompt);
+  const systemPrompt = getSystemPrompt('qa');
   const userPrompt = buildQaUserPrompt(question, evidence);
 
   const raw = await generateJson({

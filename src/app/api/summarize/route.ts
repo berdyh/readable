@@ -5,7 +5,6 @@ import { summarizePaper } from '@/server/summarize';
 interface SummarizeRequestPayload {
   paperId: string;
   userId?: string;
-  personaId?: string;
 }
 
 function parseRequestPayload(data: unknown): SummarizeRequestPayload {
@@ -26,10 +25,6 @@ function parseRequestPayload(data: unknown): SummarizeRequestPayload {
 
   if (typeof payload.userId === 'string' && payload.userId.trim()) {
     result.userId = payload.userId.trim();
-  }
-
-  if (typeof payload.personaId === 'string' && payload.personaId.trim()) {
-    result.personaId = payload.personaId.trim();
   }
 
   return result;
@@ -64,7 +59,6 @@ export async function POST(request: NextRequest) {
   try {
     const result = await summarizePaper(payload.paperId, {
       userId: payload.userId,
-      personaId: payload.personaId,
     });
     return NextResponse.json(result, { status: 200 });
   } catch (error) {

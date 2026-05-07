@@ -580,13 +580,6 @@ const CITATION_METADATA: Record<
   },
 };
 
-const kontextRequests: Array<{
-  taskId: string;
-  paperId?: string;
-  userId?: string;
-  personaId?: string;
-}> = [];
-
 const summaryRequests: Array<{
   paperId: string;
   persona: 'base' | 'persona';
@@ -657,21 +650,6 @@ function ensureCitations(paperId: string): MockCitation[] {
   }
   return mockStore.citations.get(paperId)!;
 }
-
-const fetchKontextSystemPromptMock = vi.fn(
-  async (request: {
-    taskId: string;
-    paperId?: string;
-    userId?: string;
-    personaId?: string;
-  }) => {
-    kontextRequests.push(request);
-    if (request.personaId) {
-      return PERSONA_PROMPTS[request.personaId] ?? 'Persona fallback prompt.';
-    }
-    return undefined;
-  },
-);
 
 function extractPaperIdFromPrompt(prompt: string): string | undefined {
   const match = prompt.match(/Paper ID:\s*([^\s]+)/);
@@ -993,10 +971,6 @@ vi.mock('@/server/vector/embeddings', () => ({
   getActiveEmbeddingProvider: vi.fn(() => 'openai'),
 }));
 
-vi.mock('@/server/summarize/kontext', () => ({
-  fetchKontextSystemPrompt: fetchKontextSystemPromptMock,
-}));
-
 vi.mock('@/server/llm', () => ({
   generateJson: vi.fn(
     async (
@@ -1024,10 +998,8 @@ beforeAll(async () => {
 
 beforeEach(() => {
   resetStore();
-  kontextRequests.length = 0;
   summaryRequests.length = 0;
   qaRequests.length = 0;
-  fetchKontextSystemPromptMock.mockClear();
   generateJsonSummaryMock.mockClear();
   generateQaResponseMock.mockClear();
 });
@@ -1056,8 +1028,6 @@ describe('ingest → summarize → QA pipeline', () => {
     expect(summary.figures[0]?.page_anchor).toBe('(page 3)');
     expect(summary.key_findings[0]?.page_anchors).toContain('(page 3)');
 
-    expect(fetchKontextSystemPromptMock).toHaveBeenCalledTimes(1);
-
     const question = 'How does self-attention improve efficiency?';
     const answer = await answerPaperQuestion(paperId, question);
 
@@ -1065,53 +1035,10 @@ describe('ingest → summarize → QA pipeline', () => {
     expect(answer.cites[0]?.chunkId).toBe('S1-p1');
     expect(answer.cites[0]?.page).toBe(1);
     expect(answer.cites[1]?.chunkId).toBe('S2-p1');
-
-    expect(fetchKontextSystemPromptMock).toHaveBeenCalledTimes(2);
-  });
-
-  it('applies persona guidance when enabled and alters summary and QA phrasing', async () => {
-    const paperId = '1810.04805';
-    await ingestPaper({ arxivId: paperId });
-
-    const baselineSummary = await summarizePaper(paperId);
-    const personaSummary = await summarizePaper(paperId, {
-      personaId: 'demo-persona',
-      userId: 'reader-1',
-    });
-
-    expect(personaSummary.sections[0].summary).not.toBe(
-      baselineSummary.sections[0].summary,
-    );
-    expect(personaSummary.sections[0].summary).toContain('reusable language foundation');
-
-    const personaSummaryCall = summaryRequests.find(
-      (request) => request.paperId === paperId && request.persona === 'persona',
-    );
-    expect(personaSummaryCall?.systemPrompt.startsWith(PERSONA_PROMPTS['demo-persona'])).toBe(
-      true,
-    );
-
-    const question = 'Which corpora power BERT pre-training?';
-    const baselineAnswer = await answerPaperQuestion(paperId, question);
-    const personaAnswer = await answerPaperQuestion(paperId, question, {
-      personaId: 'demo-persona',
-      userId: 'reader-1',
-    });
-
-    expect(personaAnswer.answer).not.toBe(baselineAnswer.answer);
-    expect(personaAnswer.answer).toContain('teams');
-    expect(personaAnswer.cites[0]?.page).toBe(3);
-
-    const personaQaCall = qaRequests.find(
-      (request) => request.paperId === paperId && request.persona === 'persona',
-    );
-    expect(personaQaCall?.systemPrompt).toContain('Persona guidance:');
-
-    const personaKontextCalls = kontextRequests.filter(
-      (call) => call.paperId === paperId && call.personaId === 'demo-persona',
-    );
-    expect(personaKontextCalls).toHaveLength(2);
-    expect(personaKontextCalls[0]?.taskId).toBe('summarize_research_paper');
-    expect(personaKontextCalls[1]?.taskId).toBe('qa_research_paper');
   });
 });
+
+// The persona-guidance test that lived here was removed along with the
+// Kontext.dev integration: persona-tuned system prompts no longer exist.
+// Skills tracking (persona_concepts) is still exercised indirectly via
+// recordPersonaSignals' fire-and-forget path inside the first test.

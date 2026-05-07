@@ -86,17 +86,4 @@ CREATE TABLE IF NOT EXISTS interactions (
 );
 CREATE INDEX IF NOT EXISTS interactions_user_paper_idx
   ON interactions(user_id, paper_id);
-
-CREATE TABLE IF NOT EXISTS kontext_prompts (
-  id UUID PRIMARY KEY,
-  user_id TEXT,
-  persona_id TEXT,
-  task_id TEXT NOT NULL,
-  paper_id TEXT,
-  system_prompt TEXT NOT NULL,
-  fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  expires_at TIMESTAMPTZ
-);
-CREATE INDEX IF NOT EXISTS kontext_prompts_lookup_idx
-  ON kontext_prompts(user_id, persona_id, task_id, paper_id);
 `;

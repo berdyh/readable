@@ -26,7 +26,6 @@ export interface ApiHandlerContext {
   onInsertBlocks: (blocks: Block[], insertIndex?: number) => void;
   selection?: QuestionSelection;
   userId?: string;
-  personaId?: string;
   target?: string;
 }
 
@@ -49,20 +48,13 @@ export async function executeApiCommand(
     onInsertBlocks,
     selection,
     userId,
-    personaId,
     target,
   } = context;
 
   try {
     switch (command) {
       case "summary":
-        await executeSummary(
-          paperId,
-          blockIndex,
-          onInsertBlocks,
-          userId,
-          personaId,
-        );
+        await executeSummary(paperId, blockIndex, onInsertBlocks, userId);
         break;
       case "figure":
         await executeFigures(paperId, blockIndex, onInsertBlocks, selection);
@@ -77,7 +69,6 @@ export async function executeApiCommand(
           onInsertBlocks,
           selection,
           userId,
-          personaId,
         );
         break;
       case "arxiv":
@@ -129,12 +120,11 @@ async function executeSummary(
   blockIndex: number,
   onInsertBlocks: (blocks: Block[], insertIndex?: number) => void,
   userId?: string,
-  personaId?: string,
 ): Promise<void> {
   const response = await fetch("/api/summarize", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ paperId, userId, personaId }),
+    body: JSON.stringify({ paperId, userId }),
   });
 
   if (!response.ok) {
@@ -292,7 +282,6 @@ async function executeSelectionSummary(
   onInsertBlocks: (blocks: Block[], insertIndex?: number) => void,
   selection?: QuestionSelection,
   userId?: string,
-  personaId?: string,
 ): Promise<void> {
   if (!selection?.text) {
     throw new Error("Text selection is required to summarize a selection");
@@ -301,7 +290,7 @@ async function executeSelectionSummary(
   const response = await fetch("/api/editor/selection/summary", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ paperId, selection, userId, personaId }),
+    body: JSON.stringify({ paperId, selection, userId }),
   });
 
   if (!response.ok) {

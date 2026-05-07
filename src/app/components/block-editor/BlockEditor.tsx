@@ -17,8 +17,6 @@ interface BlockEditorProps {
   errorMessage?: string | null;
   onStatusClear?: () => void;
   showChatButton?: boolean;
-  personaEnabled?: boolean;
-  onPersonaToggle?: (enabled: boolean) => void;
   userId?: string;
 }
 
@@ -30,8 +28,6 @@ export function BlockEditor({
   errorMessage,
   onStatusClear,
   showChatButton = true,
-  personaEnabled = false,
-  onPersonaToggle,
   userId,
 }: BlockEditorProps) {
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -50,8 +46,6 @@ export function BlockEditor({
         onChatSelectionClear={() => setChatSelection(undefined)}
         showChatButton={showChatButton}
         paperId={paperId}
-        personaEnabled={personaEnabled}
-        onPersonaToggle={onPersonaToggle}
         userId={userId}
       />
     </EditorProvider>
@@ -69,8 +63,6 @@ function BlockEditorContent({
   onChatSelectionClear,
   showChatButton,
   paperId,
-  personaEnabled,
-  onPersonaToggle,
   userId,
 }: {
   onSlashCommand?: (query: string, blockIndex: number) => void;
@@ -83,8 +75,6 @@ function BlockEditorContent({
   onChatSelectionClear?: () => void;
   showChatButton: boolean;
   paperId: string;
-  personaEnabled?: boolean;
-  onPersonaToggle?: (enabled: boolean) => void;
   userId?: string;
 }) {
   const { state, insertBlock } = useEditorStore();
@@ -297,8 +287,6 @@ function BlockEditorContent({
         onToggle={onChatToggle}
         selection={chatSelection}
         onSelectionClear={onChatSelectionClear}
-        personaEnabled={personaEnabled}
-        onPersonaToggle={onPersonaToggle}
         userId={userId}
         onInsertBlocks={(blocks) => {
           // Insert blocks after the last block

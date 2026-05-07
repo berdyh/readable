@@ -34,18 +34,3 @@ export const buildInteractionUuid = (
   buildNamespacedId(
     `interaction:${userId}:${paperId}:${interactionType}:${prompt}`,
   );
-
-export const buildKontextPromptUuid = (
-  userId: string | undefined,
-  personaId: string | undefined,
-  taskId: string,
-  paperId: string | undefined,
-): string | null => {
-  if (!userId || !paperId) {
-    return null;
-  }
-
-  return buildNamespacedId(
-    `kontext-prompt:${userId}:${personaId ?? 'default'}:${taskId}:${paperId}`,
-  );
-};

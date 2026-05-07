@@ -8,7 +8,6 @@ interface QaRequestPayload {
   paperId: string;
   question: string;
   userId?: string;
-  personaId?: string;
   selection?: QuestionSelection;
 }
 
@@ -36,10 +35,6 @@ function parseRequestPayload(data: unknown): QaRequestPayload {
 
   if (typeof payload.userId === 'string' && payload.userId.trim()) {
     result.userId = payload.userId.trim();
-  }
-
-  if (typeof payload.personaId === 'string' && payload.personaId.trim()) {
-    result.personaId = payload.personaId.trim();
   }
 
   const selection = parseQuestionSelection(payload.selection);
@@ -76,7 +71,6 @@ export async function POST(request: NextRequest) {
   try {
     const result = await answerPaperQuestion(payload.paperId, payload.question, {
       userId: payload.userId,
-      personaId: payload.personaId,
       selection: payload.selection,
     });
 

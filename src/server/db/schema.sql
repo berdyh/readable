@@ -1,7 +1,7 @@
 -- Readable schema for Postgres.
--- Source of truth for paper content, citations, figures, persona state, and
--- prompt cache. Vector retrieval lives in Qdrant; text-search ranking uses
--- the GIN index on the generated tsvector column below.
+-- Source of truth for paper content, citations, figures, and persona state.
+-- Vector retrieval lives in Qdrant; text-search ranking uses the GIN index
+-- on the generated tsvector column below.
 
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
@@ -91,15 +91,7 @@ CREATE TABLE IF NOT EXISTS interactions (
 CREATE INDEX IF NOT EXISTS interactions_user_paper_idx
   ON interactions(user_id, paper_id);
 
-CREATE TABLE IF NOT EXISTS kontext_prompts (
-  id UUID PRIMARY KEY,
-  user_id TEXT,
-  persona_id TEXT,
-  task_id TEXT NOT NULL,
-  paper_id TEXT,
-  system_prompt TEXT NOT NULL,
-  fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  expires_at TIMESTAMPTZ
-);
-CREATE INDEX IF NOT EXISTS kontext_prompts_lookup_idx
-  ON kontext_prompts(user_id, persona_id, task_id, paper_id);
+-- Kontext prompt cache was removed when the Kontext.dev integration was
+-- dropped. Existing deployments can drop the table:
+--   DROP TABLE IF EXISTS kontext_prompts;
+-- The schema bootstrap below is idempotent and won't recreate it.

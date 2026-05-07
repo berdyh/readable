@@ -4,7 +4,6 @@ export interface SelectionCommandContext {
   paperId: string;
   selection: QuestionSelection;
   userId?: string;
-  personaId?: string;
 }
 
 export interface SelectionSummaryBullet {

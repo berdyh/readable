@@ -7,7 +7,6 @@ import type {
   QaChunkContext,
 } from '@/server/qa/types';
 import { generateJson } from '@/server/llm';
-import { fetchKontextSystemPrompt } from '@/server/summarize/kontext';
 
 import type {
   SelectionCalloutResult,
@@ -370,7 +369,7 @@ function buildCalloutResult(
 export async function summarizeSelection(
   paperId: string,
   selectionInput: QuestionSelection,
-  options: { userId?: string; personaId?: string } = {},
+  options: { userId?: string } = {},
 ): Promise<SelectionSummaryResult> {
   const selection = parseQuestionSelection(selectionInput);
   if (!selection?.text) {
@@ -385,16 +384,7 @@ export async function summarizeSelection(
     },
   );
 
-  // Use 'selection_summary' consistently across all function calls for task identification
-  // This ensures model selection and Kontext prompt fetching use the same task identifier
-  const personaPrompt = await fetchKontextSystemPrompt({
-    taskId: 'selection_summary',
-    paperId,
-    userId: options.userId,
-    personaId: options.personaId,
-  }).catch(() => undefined);
-
-  const systemPrompt = getSystemPrompt('selection_summary', personaPrompt);
+  const systemPrompt = getSystemPrompt('selection_summary');
 
   const userPrompt = buildSelectionUserPrompt(paperId, selection, evidence);
 

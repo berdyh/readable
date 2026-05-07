@@ -8,14 +8,9 @@ vi.mock('@/server/llm', () => ({
   generateJson: vi.fn(),
 }));
 
-vi.mock('@/server/summarize/kontext', () => ({
-  fetchKontextSystemPrompt: vi.fn(),
-}));
-
 import { answerPaperQuestion } from '@/server/qa';
 import { loadQuestionEvidence } from '@/server/qa/context';
 import { generateJson } from '@/server/llm';
-import { fetchKontextSystemPrompt } from '@/server/summarize/kontext';
 import type { QuestionEvidenceContext } from '@/server/qa/types';
 
 const mockEvidence = (overrides: Partial<QuestionEvidenceContext> = {}): QuestionEvidenceContext => ({
@@ -44,7 +39,6 @@ const mockEvidence = (overrides: Partial<QuestionEvidenceContext> = {}): Questio
 describe('answerPaperQuestion', () => {
   const mockedEvidence = vi.mocked(loadQuestionEvidence);
   const mockedGenerate = vi.mocked(generateJson);
-  const mockedKontext = vi.mocked(fetchKontextSystemPrompt);
 
   it('returns answer and cites from the language model payload', async () => {
     mockedEvidence.mockResolvedValue(mockEvidence());
@@ -54,7 +48,6 @@ describe('answerPaperQuestion', () => {
         citations: [{ chunk_id: 'chunk-1', page: 3, quote: 'Self-attention mechanism' }],
       }),
     );
-    mockedKontext.mockResolvedValue('Tailor explanations for graduate-level ML audience.');
 
     const result = await answerPaperQuestion('paper-1', 'What is self-attention?');
 
@@ -87,7 +80,6 @@ describe('answerPaperQuestion', () => {
     mockedGenerate.mockResolvedValue(
       JSON.stringify({ answer: 'The encoder stacks multi-head attention layers (page 4).' }),
     );
-    mockedKontext.mockResolvedValue(undefined);
 
     const result = await answerPaperQuestion('paper-1', 'How does the encoder operate?');
 
@@ -103,7 +95,6 @@ describe('answerPaperQuestion', () => {
   it('throws when the OpenAI payload cannot be parsed', async () => {
     mockedEvidence.mockResolvedValue(mockEvidence());
     mockedGenerate.mockResolvedValue('not-json');
-    mockedKontext.mockResolvedValue(undefined);
 
     await expect(
       answerPaperQuestion('paper-1', 'Explain positional encodings'),

@@ -28,8 +28,5 @@ export type {
 export {
   upsertPersonaConcepts,
   upsertInteractions,
-  upsertKontextPrompt,
-  getCachedKontextPrompt,
   listPersonaConceptsForUser,
 } from './persona';
-export type { KontextPromptLookup } from './persona';

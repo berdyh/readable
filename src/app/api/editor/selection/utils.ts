@@ -5,7 +5,6 @@ export interface SelectionRequestPayload {
   paperId: string;
   selection: QuestionSelection;
   userId?: string;
-  personaId?: string;
 }
 
 export function parseSelectionRequest(data: unknown): SelectionRequestPayload {
@@ -34,10 +33,6 @@ export function parseSelectionRequest(data: unknown): SelectionRequestPayload {
 
   if (typeof record.userId === 'string' && record.userId.trim()) {
     payload.userId = record.userId.trim();
-  }
-
-  if (typeof record.personaId === 'string' && record.personaId.trim()) {
-    payload.personaId = record.personaId.trim();
   }
 
   return payload;

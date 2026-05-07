@@ -6,7 +6,6 @@ export interface QuestionSelection {
 
 export interface QuestionOptions {
   userId?: string;
-  personaId?: string;
   selection?: QuestionSelection;
   alpha?: number;
   limit?: number;

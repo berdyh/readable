@@ -1,6 +1,6 @@
 # Readable
 
-Readable is a Next.js application that ingests arXiv papers, persists structured records in Postgres, indexes embeddings in Qdrant for hybrid retrieval, and serves persona-aware summaries plus question answering. The system can enrich responses with persona context fetched from Kontext.dev while keeping raw mailbox data out of the runtime.
+Readable is a Next.js application that ingests arXiv papers, persists structured records in Postgres, indexes embeddings in Qdrant for hybrid retrieval, and serves summaries plus question answering. Concepts encountered during reading are tracked per user in `persona_concepts` and surfaced as a skills sidebar. The LLM layer routes across OpenAI / Anthropic / Gemini / OpenRouter with cooldowns + automatic fallback.
 
 ## Prerequisites
 
@@ -10,10 +10,9 @@ Readable is a Next.js application that ingests arXiv papers, persists structured
 - Access to:
   - **At least one** LLM provider — OpenAI, Anthropic Claude, Google Gemini, or OpenRouter (free tier available). The router auto-detects whichever you've authenticated.
   - Embedding provider — OpenAI `text-embedding-3-small` (default) **or** OpenRouter (`nvidia/llama-nemotron-embed-vl-1b-v2:free`)
-  - Postgres 14+ (paper/figure/reference store, persona state, kontext prompt cache)
+  - Postgres 14+ (paper/figure/reference store, persona concepts, interaction log)
   - Qdrant (vector index for paper-chunk embeddings)
-  - Kontext.dev API (optional persona enrichment)
-  - arXiv and Semantic Scholar APIs for metadata
+  - arXiv and (optionally) Semantic Scholar APIs for metadata
 
 ## Setup
 
@@ -35,14 +34,13 @@ Readable is a Next.js application that ingests arXiv papers, persists structured
      - `OPENAI_API_KEY` (used for both LLM calls and `text-embedding-3-small` embeddings)
      - `DATABASE_URL` (defaults to the docker compose stack: `postgresql://readable:readable@localhost:5432/readable`)
      - `QDRANT_URL` (defaults to `http://localhost:6333`)
-     - `SEMANTIC_SCHOLAR_KEY`
    - **Recommended**
-     - `KONTEXT_API_KEY` and `KONTEXT_API_URL` for persona-aware prompts
-     - `POSTHOG_KEY` for analytics
+     - `SEMANTIC_SCHOLAR_KEY` for higher-quota citation enrichment (works without it on the public rate limit)
+     - `ARXIV_CONTACT_EMAIL` per arXiv API guidelines
    - **Model + pipeline switches**
-     - `OPENAI_SUMMARY_MODEL` (defaults to `gpt-4o-mini`)
-     - `ENABLE_OCR_FALLBACK`, `DEEPSEEK_OCR_URL`, `GROBID_URL` to tune the ingestion pipeline
-     - `ARXIV_API_BASE_URL`, `AR5IV_BASE_URL`, and `ARXIV_CONTACT_EMAIL` to match your arXiv integration policy
+     - `OPENROUTER_QA_MODEL` / `OPENAI_SUMMARY_MODEL` per-task overrides
+     - `ENABLE_OCR_FALLBACK`, `DEEPSEEK_OCR_URL` for image-only PDFs (text PDFs work without OCR)
+     - `ARXIV_API_BASE_URL`, `AR5IV_BASE_URL` to point at proxies / mirrors
      - Timeouts such as `INGEST_*_TIMEOUT_MS` for long-running PDF work
 5. Apply the Postgres schema (idempotent — also runs automatically on first request):
    ```bash
@@ -53,7 +51,7 @@ Readable is a Next.js application that ingests arXiv papers, persists structured
    pnpm setup
    ```
 
-Environment values can point to managed services or local Docker containers. The repo ships a certificate authority placeholder at `certs/kontext-ca.crt` for contexts where Kontext requires a custom CA chain (`NODE_EXTRA_CA_CERTS`).
+Environment values can point to managed services or local Docker containers.
 
 ## Run the app
 
@@ -79,14 +77,13 @@ Useful scripts:
 ## Data flow overview
 
 1. **Ingest** - fetch arXiv metadata, prefer ar5iv HTML, fall back to PDF (PDF.js or OCR via DeepSeek) and GROBID. Parsed sections, figures, and references are upserted into Postgres; chunk embeddings are written to Qdrant.
-2. **Summaries** - load persona context (`systemPrompt`) from Kontext or the persona graph, gather relevant paper sections from Postgres, and prompt OpenAI for structured JSON.
+2. **Summaries** - gather relevant paper sections from Postgres and prompt the configured LLM for structured JSON. The response includes a list of `concepts` that get upserted to `persona_concepts` for the user.
 3. **Q&A** - run a hybrid retrieval (Qdrant vector search + Postgres `tsvector` full-text search fused via Reciprocal Rank Fusion) constrained to the selected paper, combine chunks/figures/citations, and answer with grounded citations.
 
 See `docs/API_ANALYSIS.md` and `docs/API_TESTING.md` for API documentation and testing information.
 
 ## Working with personas & models
 
-- Personas are stored in Postgres as the primary source of truth. Kontext is queried per request when an external account is linked, and only a derived system prompt is retained (cached in the `kontext_prompts` table).
 - The reader's **skills** (concepts encountered) are accumulated automatically: every Q&A and summary call asks the model for a short list of `concepts` and upserts them to `persona_concepts`. The right-rail `SkillsPanel` shows them as chips. Anonymous interactions (no `userId`) are not tracked.
 - To switch LLMs, set `LLM_PROVIDER=openai|anthropic|gemini|openrouter` and (optionally) `LLM_ALLOWED_PROVIDERS=openrouter,openai,anthropic` for an OpenClaw-style fallback chain. See [Multi-provider routing](#multi-provider-routing).
 - Per-task model overrides via env: `OPENAI_QA_MODEL`, `ANTHROPIC_PAPER_SUMMARY_MODEL`, `OPENROUTER_QA_MODEL`, etc.
@@ -138,7 +135,7 @@ Use `pnpm embeddings:probe` to discover a remote model's native dim if the API i
 
 Readable pulls metadata and PDFs from arXiv. Make sure your deployment complies with the [arXiv API access guidelines](https://info.arxiv.org/help/api/index.html) and sets an identifying `ARXIV_CONTACT_EMAIL`. The ingestion pipeline may download PDFs directly from arXiv mirrors; review their terms before production use.
 
-Kontext API usage follows their [Get Context](https://docs.kontext.dev/api-reference/get-context) contract. Persona data remains in your Postgres database; no raw emails or documents leave Kontext.
+Persona data is stored in your own Postgres database (`persona_concepts`, `interactions`). Nothing leaves your deployment except the LLM / embedding requests, which only contain paper text + the question or summarization task.
 
 ## BlockEditor architecture
 

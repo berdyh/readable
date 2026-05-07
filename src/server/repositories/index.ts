@@ -15,10 +15,8 @@ export {
 export {
   upsertPersonaConcepts,
   upsertInteractions,
-  upsertKontextPrompt,
-  getCachedKontextPrompt,
+  listPersonaConceptsForUser,
 } from '@/server/db';
-export type { KontextPromptLookup } from '@/server/db';
 
 export {
   hybridPaperChunkSearch,

@@ -60,7 +60,10 @@ function parseKeyList(raw: string | undefined): string[] {
     .filter((entry) => entry.length > 0);
 }
 
-function readSingleKey(name: string, env: NodeJS.ProcessEnv): string | undefined {
+function readSingleKey(
+  name: string,
+  env: Record<string, string | undefined>,
+): string | undefined {
   const raw = env[name];
   if (typeof raw !== 'string') {
     return undefined;
@@ -69,7 +72,10 @@ function readSingleKey(name: string, env: NodeJS.ProcessEnv): string | undefined
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-function readNumberedKeys(prefix: string, env: NodeJS.ProcessEnv): string[] {
+function readNumberedKeys(
+  prefix: string,
+  env: Record<string, string | undefined>,
+): string[] {
   const namePrefix = `${prefix}_API_KEY_`;
   const matches: Array<{ name: string; value: string }> = [];
   for (const name of Object.keys(env)) {
@@ -109,7 +115,7 @@ export interface ResolvedProviderKey {
 
 export interface CollectKeysOptions {
   /** Inject env for tests. Defaults to process.env. */
-  env?: NodeJS.ProcessEnv;
+  env?: Record<string, string | undefined>;
 }
 
 /**

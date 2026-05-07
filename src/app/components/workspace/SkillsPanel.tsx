@@ -19,7 +19,6 @@ interface SkillsApiResponse {
 
 export interface SkillsPanelProps {
   userId?: string;
-  isDarkMode: boolean;
   /**
    * When this counter changes, refetch. Caller bumps it after a QA /
    * summary call so newly-extracted concepts show up without a hard
@@ -38,7 +37,7 @@ function formatLearnedAt(value?: string): string {
   });
 }
 
-export function SkillsPanel({ userId, isDarkMode, refreshKey }: SkillsPanelProps) {
+export function SkillsPanel({ userId, refreshKey }: SkillsPanelProps) {
   const [concepts, setConcepts] = useState<SkillsConcept[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -46,9 +45,6 @@ export function SkillsPanel({ userId, isDarkMode, refreshKey }: SkillsPanelProps
   useEffect(() => {
     let cancelled = false;
     if (!userId) {
-      // Defer to a microtask so setState doesn't run synchronously
-      // inside the effect body — keeps the React Compiler / Next 16
-      // lint rule happy without changing observable behaviour.
       queueMicrotask(() => {
         if (!cancelled) {
           setConcepts([]);
@@ -95,18 +91,10 @@ export function SkillsPanel({ userId, isDarkMode, refreshKey }: SkillsPanelProps
     };
   }, [userId, refreshKey]);
 
-  const containerBase = isDarkMode
-    ? "border-neutral-800 bg-neutral-900/60 text-neutral-300"
-    : "border-neutral-200 bg-white text-neutral-700";
-
-  const chipBase = isDarkMode
-    ? "border-neutral-700 bg-neutral-800/80 text-neutral-200"
-    : "border-neutral-200 bg-neutral-100 text-neutral-700";
-
   return (
     <aside
       data-testid="skills-panel"
-      className={`flex w-72 flex-col gap-2 rounded-xl border p-4 ${containerBase}`}
+      className="flex w-72 flex-col gap-2 rounded-xl border border-neutral-200 bg-white p-4 text-neutral-700 dark:border-neutral-800 dark:bg-neutral-900/60 dark:text-neutral-300"
       aria-label="Skills panel"
     >
       <header className="flex items-center justify-between">
@@ -140,7 +128,7 @@ export function SkillsPanel({ userId, isDarkMode, refreshKey }: SkillsPanelProps
           {concepts.slice(0, 30).map((entry) => (
             <li
               key={entry.concept}
-              className={`flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${chipBase}`}
+              className="flex max-w-full items-center gap-1.5 rounded-full border border-neutral-200 bg-neutral-100 px-2.5 py-1 text-xs text-neutral-700 dark:border-neutral-700 dark:bg-neutral-800/80 dark:text-neutral-200"
               title={
                 entry.description
                   ? `${entry.description}\nFirst seen: ${formatLearnedAt(entry.learnedAt)}`

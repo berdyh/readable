@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 /**
  * Adler's "How to read a paper" three-pass method, as a piece of UI
@@ -68,7 +68,7 @@ function storageKey(paperId: string | undefined): string | undefined {
   return `${STORAGE_PREFIX}${paperId}`;
 }
 
-function readInitialPass(paperId: string | undefined): ThreePass {
+function readPersistedPass(paperId: string | undefined): ThreePass {
   if (typeof window === "undefined") return "skim";
   const key = storageKey(paperId);
   if (!key) return "skim";
@@ -102,11 +102,28 @@ export function usePassState(
   options: UsePassStateOptions = {},
 ): UsePassStateResult {
   const { paperId } = options;
-  // We rely on Next.js remounting the workspace whenever the routed
-  // paperId changes, so a lazy initializer is enough to hydrate from
-  // localStorage. If a parent ever needs to reuse this hook across
-  // paperIds without remounting, key the consumer on paperId.
-  const [pass, setPassRaw] = useState<ThreePass>(() => readInitialPass(paperId));
+  // SSR-safe default. Hydration from localStorage happens in a
+  // post-mount effect so the initial server + client render match.
+  const [pass, setPassRaw] = useState<ThreePass>("skim");
+
+  // Hydrate from localStorage once, post-mount. queueMicrotask defers
+  // the setState off the synchronous-effect path so the React Compiler
+  // / Next 16 set-state-in-effect rule doesn't fire. Consumers that
+  // care about the localStorage-flash race can render the bar inside a
+  // section with `suppressHydrationWarning`.
+  useEffect(() => {
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      const persisted = readPersistedPass(paperId);
+      if (persisted !== "skim") {
+        setPassRaw(persisted);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [paperId]);
 
   const setPass = useCallback(
     (next: ThreePass) => {

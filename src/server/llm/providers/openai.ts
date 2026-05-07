@@ -26,19 +26,26 @@ function requireEnvVar(name: string, purpose: string): string {
 }
 
 function getDefaultModel(taskType?: string): string {
-  // Use model config from llm-config, with env var override support
-  const modelFromConfig = getModel('openai', taskType);
-  
-  // Check for legacy env vars or new override
-  const envModel = process.env.OPENAI_MODEL || 
-                   (taskType === 'summary' || taskType === 'summarize' 
-                     ? process.env.OPENAI_SUMMARY_MODEL 
-                     : undefined) ||
-                   (taskType === 'qa' || taskType === 'question' 
-                     ? process.env.OPENAI_QA_MODEL 
-                     : undefined);
-  
-  return envModel || modelFromConfig;
+  // Priority: task-specific env > general OPENAI_MODEL > catalog. Same
+  // shape as `getModel()` so the documented OPENAI_QA_MODEL override
+  // actually wins when both it and OPENAI_MODEL are set.
+  const taskEnv = (() => {
+    if (taskType === 'summary' || taskType === 'summarize' || taskType === 'paper_summary') {
+      return process.env.OPENAI_SUMMARY_MODEL;
+    }
+    if (taskType === 'qa' || taskType === 'question') {
+      return process.env.OPENAI_QA_MODEL;
+    }
+    if (taskType === 'selection_summary' || taskType === 'inline_summary') {
+      return process.env.OPENAI_SELECTION_SUMMARY_MODEL;
+    }
+    return undefined;
+  })();
+
+  if (taskEnv && taskEnv.trim()) return taskEnv.trim();
+  if (process.env.OPENAI_MODEL?.trim()) return process.env.OPENAI_MODEL.trim();
+
+  return getModel('openai', taskType);
 }
 
 function getOpenAiConfig(config?: LlmConfig, taskType?: string): OpenAiProviderConfig {
@@ -77,8 +84,13 @@ export class OpenAiProvider implements LlmProviderInterface {
     request: LlmRequest,
     options?: { taskName?: string },
   ): Promise<string> {
-    const taskName = options?.taskName ?? this.taskType;
-    const model = taskName ? getDefaultModel(taskName) : this.config.model;
+    // The constructor already resolved this.config.model with proper
+    // priority (explicit config.model > task-specific env > general env
+    // > catalog). Re-deriving here would discard the routing layer's
+    // explicit per-request model selection. See Devin review on PR #16.
+    // (options.taskName is still consumed below for the json_schema
+    // name field.)
+    const model = this.config.model;
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.config.timeoutMs);

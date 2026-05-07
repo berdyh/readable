@@ -30,21 +30,25 @@ function requireEnvVar(name: string, purpose: string): string {
 }
 
 function getDefaultModel(taskType?: string): string {
-  const envModel =
-    process.env.OPENROUTER_MODEL ||
-    (taskType === 'summary' || taskType === 'summarize' || taskType === 'paper_summary'
-      ? process.env.OPENROUTER_SUMMARY_MODEL
-      : undefined) ||
-    (taskType === 'qa' || taskType === 'question'
-      ? process.env.OPENROUTER_QA_MODEL
-      : undefined) ||
-    (taskType === 'selection_summary' || taskType === 'inline_summary'
-      ? process.env.OPENROUTER_INLINE_MODEL
-      : undefined);
+  // Priority: task-specific env > general OPENROUTER_MODEL > catalog
+  // (models.json). Task-specific must win — `OPENROUTER_MODEL` is the
+  // catch-all and shouldn't shadow `OPENROUTER_QA_MODEL` etc. (Same
+  // shape as `getModel()` in llm-config/models.ts.)
+  const taskEnv = (() => {
+    if (taskType === 'summary' || taskType === 'summarize' || taskType === 'paper_summary') {
+      return process.env.OPENROUTER_SUMMARY_MODEL;
+    }
+    if (taskType === 'qa' || taskType === 'question') {
+      return process.env.OPENROUTER_QA_MODEL;
+    }
+    if (taskType === 'selection_summary' || taskType === 'inline_summary') {
+      return process.env.OPENROUTER_INLINE_MODEL;
+    }
+    return undefined;
+  })();
 
-  if (envModel) {
-    return envModel;
-  }
+  if (taskEnv && taskEnv.trim()) return taskEnv.trim();
+  if (process.env.OPENROUTER_MODEL?.trim()) return process.env.OPENROUTER_MODEL.trim();
 
   try {
     return getModel('openrouter' as 'openai', taskType);
@@ -107,10 +111,15 @@ export class OpenRouterProvider implements LlmProviderInterface {
 
   async generateJson(
     request: LlmRequest,
-    options?: { taskName?: string },
+    _options?: { taskName?: string },
   ): Promise<string> {
-    const taskName = options?.taskName ?? this.taskType;
-    const model = taskName ? getDefaultModel(taskName) : this.config.model;
+    // Use the model the constructor resolved (which already honors
+    // explicit config.model from the routing layer plus task-specific
+    // env vars). Re-deriving here used to ignore the routing layer's
+    // selected model whenever a taskName was present — see Devin
+    // review on PR #16. If the caller wants a different model per call,
+    // pass `provider: <id>` + `model: <id>` via createLlmProvider.
+    const model = this.config.model;
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.config.timeoutMs);

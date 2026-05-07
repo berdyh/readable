@@ -162,25 +162,37 @@ Bibliographic citations. Unique on `(paper_id, citation_id)`. Citations may be e
 
 User knowledge graph. Unique on `(user_id, concept)`.
 
+> **Status (2026-05):** Actively written. Every Q&A and summarize call asks the LLM for a short list of `concepts` and upserts them via `recordPersonaSignals` (`src/server/persona/record.ts`). The `SkillsPanel` UI surfaces them as chips in the workspace sidebar; the read API is `GET /api/skills/[userId]`.
+
 #### `interactions`
 
 Append-only log of QA / summary / feedback events.
+
+> **Status (2026-05):** Actively written. `recordPersonaSignals` writes one row per QA / summarize call (when `userId` is set), capturing prompt, response, the chunk_ids that grounded the answer, and the persona_concept_ids that were extracted. Read-side surface (e.g. "history" view) is not yet wired.
 
 #### `kontext_prompts`
 
 Cache for system prompts fetched from kontext.dev. UUID is `userId:personaId:taskId:paperId` (hashed via UUID v5). Lookups use `IS NOT DISTINCT FROM` for nullable equality and `(expires_at IS NULL OR expires_at > NOW())` for freshness.
 
-## Qdrant Collection
+## Qdrant Collections
 
-A single collection, `paper_chunks`, holds chunk embeddings.
+The collection is selected per active embedding provider (`EMBEDDING_PROVIDER=openai|openrouter`) — each provider has its own collection sized to that model's native dimension. Switching providers points the runtime at a different collection; vector spaces never mix. Re-ingest a paper after switching providers.
 
-- **Vector size**: 1536 (matches `text-embedding-3-small`)
-- **Distance**: `Cosine`
+| Provider config | Collection name (auto-derived) | Vector size |
+|---|---|---|
+| `EMBEDDING_PROVIDER=openai` + `text-embedding-3-small` | `paper_chunks_openai_text_embedding_3_small` | 1536 |
+| `EMBEDDING_PROVIDER=openrouter` + `nvidia/llama-nemotron-embed-vl-1b-v2:free` | `paper_chunks_openrouter_nvidia_llama_nemotron_embed_vl_1b_v2_free` | 2048 (probe to confirm) |
+
+Override the auto-derived name with `QDRANT_COLLECTION` for stable single-provider deploys.
+
+- **Distance**: `Cosine` (override via `QDRANT_DISTANCE`)
 - **Point ID**: same UUID v5 as the corresponding `paper_chunks.id` row in Postgres
 - **Payload**: `{ paperId, chunkId, section?, pageNumber?, citations?, figureIds? }`
 - **Indexed payload fields**: keyword index on `paperId`, integer index on `pageNumber`
 
 The collection is created on demand by `ensureQdrantCollection()` (in `src/server/vector/qdrant.ts`). A vector-size mismatch is treated as a fatal configuration error.
+
+Use `pnpm embeddings:probe` to discover a remote model's native vector size when in doubt.
 
 ## UUID strategy
 

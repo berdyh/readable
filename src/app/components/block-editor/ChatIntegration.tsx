@@ -33,8 +33,6 @@ interface ChatIntegrationProps {
   onInsertBlocks?: (blocks: Block[], insertIndex?: number) => void;
   selection?: QuestionSelection;
   onSelectionClear?: () => void;
-  personaEnabled?: boolean;
-  onPersonaToggle?: (enabled: boolean) => void;
   userId?: string;
 }
 
@@ -79,9 +77,6 @@ export function ChatSidePanel({
   onToggle,
   onInsertBlocks,
   selection,
-  onSelectionClear,
-  personaEnabled = false,
-  onPersonaToggle,
   userId,
 }: ChatIntegrationProps) {
   const { resolvedTheme } = useTheme();
@@ -356,7 +351,6 @@ export function ChatSidePanel({
             paperId,
             question: question.trim(),
             userId: userId ?? "default",
-            personaId: personaEnabled ? "demo" : undefined,
             selection: mentionQuery ? { text: mentionQuery } : selection,
           }),
         });
@@ -471,7 +465,6 @@ export function ChatSidePanel({
       isSubmitting,
       paperId,
       userId,
-      personaEnabled,
       selection,
       mentionQuery,
       onInsertBlocks,

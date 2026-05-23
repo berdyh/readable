@@ -1,555 +1,312 @@
 # Database Structure Documentation
 
-This document provides a comprehensive overview of the Weaviate database structure used in the Readable application, including all classes, relationships, and data flows.
+This document describes the storage layer used by Readable: a Postgres relational store as the source of truth and a Qdrant vector index for embedding-based retrieval. They are kept in sync by deterministic UUID v5 identifiers shared across both systems.
 
 ## Overview
 
-Readable uses **Weaviate** as a vector database to store:
+Readable uses two stores:
 
-- Research paper content (chunks, figures, citations)
-- User personalization data (persona concepts, kontext.dev prompts)
-- User interactions (questions, summaries, feedback)
+- **Postgres** — source of truth for papers, paper chunks, figures, citations, persona concepts, user interactions, and the Kontext.dev prompt cache. Postgres also provides BM25-style full-text search via a generated `tsvector` column with a GIN index.
+- **Qdrant** — vector index for paper-chunk embeddings (`text-embedding-3-small`, 1536 dimensions). Each Qdrant point shares its UUID with the corresponding row in `paper_chunks`, allowing the hybrid retriever to fuse results from both stores.
 
-All classes use **hybrid search** (BM25 keyword + vector semantic search) for optimal retrieval.
+Hybrid retrieval combines Postgres FTS results and Qdrant vector results using **Reciprocal Rank Fusion (k=60)** with a configurable `alpha` weighting (default `0.65`, biased toward semantic search).
 
-## Complete Entity Relationship Diagram
+## Schema (Postgres)
+
+Authoritative DDL lives at `src/server/db/schema.ts` (exported as the `READABLE_SCHEMA_SQL` template literal) and is applied via `pnpm db:migrate` or automatically on first request through `ensureSchema()`.
+
+### Entity Relationship Diagram
 
 ```mermaid
 erDiagram
-    Paper ||--o{ PaperChunk : "contains"
-    Paper ||--o{ Figure : "contains"
-    Paper ||--o{ Citation : "contains"
-    Paper ||--o{ Interaction : "associated with"
+    papers ||--o{ paper_chunks : "contains"
+    papers ||--o{ paper_figures : "contains"
+    papers ||--o{ paper_citations : "contains"
+    papers ||--o{ interactions : "associated with"
 
-    PaperChunk ||--o{ Citation : "references"
-    PaperChunk ||--o{ Figure : "references"
-    PaperChunk ||--o{ Interaction : "used in"
+    paper_chunks ||--o{ interactions : "used in"
+    paper_figures ||--o{ paper_chunks : "referenced by ID"
+    paper_citations ||--o{ paper_chunks : "referenced by ID"
 
-    Figure ||--o{ PaperChunk : "referenced by"
-    Citation ||--o{ PaperChunk : "referenced by"
+    persona_concepts ||--o{ interactions : "referenced in"
+    kontext_prompts }o--|| papers : "optional paper scope"
 
-    User ||--o{ PersonaConcept : "owns"
-    User ||--o{ Interaction : "creates"
-    User ||--o{ KontextPrompt : "has"
-
-    PersonaConcept ||--o{ Interaction : "referenced in"
-    KontextPrompt ||--o{ Interaction : "used in"
-
-    PaperChunk {
-        string id PK
-        string paperId FK
-        string chunkId UK
-        string text "Vectorized"
-        string section
-        int pageNumber
-        int tokenStart
-        int tokenEnd
-        string[] citations "Citation IDs"
-        string[] figureIds "Figure IDs"
+    papers {
+        text id PK
+        text title
+        text abstract
+        text[] authors
+        text primary_category
+        text[] categories
+        timestamptz published_at
+        timestamptz updated_at
+        text pdf_url
+        int pages
     }
 
-    Figure {
-        string id PK
-        string paperId FK
-        string figureId UK
-        string caption "Vectorized"
-        int pageNumber
-        string imageUrl
+    paper_chunks {
+        uuid id PK
+        text paper_id FK
+        text chunk_id
+        text text
+        text section
+        int page_number
+        int token_start
+        int token_end
+        text[] citations
+        text[] figure_ids
+        tsvector text_search "GENERATED, GIN-indexed"
     }
 
-    Citation {
-        string id PK
-        string paperId FK
-        string citationId UK
-        string title "Vectorized"
-        string[] authors
+    paper_figures {
+        uuid id PK
+        text paper_id FK
+        text figure_id
+        text caption
+        int page_number
+        text image_url
+    }
+
+    paper_citations {
+        uuid id PK
+        text paper_id FK
+        text citation_id
+        text title
+        text[] authors
         int year
-        string source
-        string doi
-        string url
+        text source
+        text doi
+        text url
     }
 
-    PersonaConcept {
-        string id PK
-        string userId FK
-        string concept "Vectorized"
-        string description
-        string firstSeenPaperId
-        date learnedAt
-        number confidence "0-1"
+    persona_concepts {
+        uuid id PK
+        text user_id
+        text concept
+        text description
+        text first_seen_paper_id
+        timestamptz learned_at
+        numeric confidence
     }
 
-    KontextPrompt {
-        string id PK
-        string userId FK "Optional"
-        string personaId "Optional"
-        string taskId UK
-        string paperId FK "Optional"
-        string systemPrompt "Vectorized"
-        date fetchedAt
-        date expiresAt "Optional"
+    interactions {
+        uuid id PK
+        text user_id
+        text paper_id
+        text interaction_type
+        text prompt
+        text response
+        timestamptz created_at
     }
 
-    Interaction {
-        string id PK
-        string userId FK
-        string paperId FK
-        string interactionType
-        string prompt "Vectorized"
-        string response
-        date createdAt
+    kontext_prompts {
+        uuid id PK
+        text user_id
+        text persona_id
+        text task_id
+        text paper_id
+        text system_prompt
+        timestamptz fetched_at
+        timestamptz expires_at
     }
 ```
 
-## Class Details
+### Tables
 
-### PaperChunk
+#### `papers`
 
-**Purpose**: Semantic chunks of research papers for RAG (Retrieval-Augmented Generation).
+Source of truth for paper metadata. Cascading deletes propagate to all child tables.
 
-**Properties**:
-| Property | Type | Description | Indexed |
-|----------|------|-------------|---------|
-| `id` | string (UUID) | Unique identifier | Primary Key |
-| `paperId` | string | Paper identifier | Indexed |
-| `chunkId` | string | Chunk identifier within paper | Unique Key |
-| `text` | string | Full chunk text content | **Vectorized** |
-| `section` | string | Section/heading name | BM25 |
-| `pageNumber` | int | Page where chunk originates | Indexed |
-| `tokenStart` | int | Token start index | - |
-| `tokenEnd` | int | Token end index | - |
-| `citations` | string[] | Array of citation IDs | - |
-| `figureIds` | string[] | Array of figure IDs | - |
+| Column             | Type            | Notes                            |
+| ------------------ | --------------- | -------------------------------- |
+| `id`               | `text` (PK)     | arXiv ID or canonical identifier |
+| `title`            | `text`          |                                  |
+| `abstract`         | `text`          |                                  |
+| `authors`          | `text[]`        |                                  |
+| `primary_category` | `text`          |                                  |
+| `categories`       | `text[]`        |                                  |
+| `published_at`     | `timestamptz`   |                                  |
+| `updated_at`       | `timestamptz`   | Auto-updated on upsert           |
+| `pdf_url`          | `text`          |                                  |
+| `pages`            | `int`           | Optional page count              |
 
-**Search Configuration**:
+#### `paper_chunks`
 
-- Vectorizer: `text2vec-openai`
-- Distance: `cosine`
-- BM25: k1=1.2, b=0.75
-- Alpha: 0.65 (weighted toward semantic search)
+Semantic chunks used for retrieval. The `text_search` column is a generated `tsvector` (English stemming) with a GIN index, giving us BM25-style ranking via `ts_rank_cd` over `websearch_to_tsquery`.
 
-**Relationships**:
+| Column        | Type        | Notes                                              |
+| ------------- | ----------- | -------------------------------------------------- |
+| `id`          | `uuid` (PK) | UUID v5 of `paper_id:chunk_id` (matches Qdrant ID) |
+| `paper_id`    | `text` (FK) | `papers(id)` ON DELETE CASCADE                     |
+| `chunk_id`    | `text`      | Stable chunk key inside the paper                  |
+| `text`        | `text`      | Chunk body                                         |
+| `section`     | `text`      | Heading/section name                               |
+| `page_number` | `int`       |                                                    |
+| `token_start` | `int`       |                                                    |
+| `token_end`   | `int`       |                                                    |
+| `citations`   | `text[]`    | Citation IDs referenced inline                     |
+| `figure_ids`  | `text[]`    | Figure IDs referenced inline                       |
+| `text_search` | `tsvector`  | `GENERATED ALWAYS AS to_tsvector('english', text)` |
 
-- Referenced by: `Figure.chunks`, `Citation.chunks`, `Interaction.chunks`
-- References: `Citation` (via IDs), `Figure` (via IDs)
+Unique constraint on `(paper_id, chunk_id)`. GIN index on `text_search`. B-tree index on `(paper_id, page_number)` for page-window expansion.
 
----
+#### `paper_figures`
 
-### Figure
+Figures and tables with captions. Unique on `(paper_id, figure_id)`.
 
-**Purpose**: Figures, tables, and visual elements extracted from papers with captions.
+#### `paper_citations`
 
-**Properties**:
-| Property | Type | Description | Indexed |
-|----------|------|-------------|---------|
-| `id` | string (UUID) | Unique identifier | Primary Key |
-| `paperId` | string | Paper identifier | Indexed |
-| `figureId` | string | Figure identifier within paper | Unique Key |
-| `caption` | string | Text caption describing figure | **Vectorized** |
-| `pageNumber` | int | Page where figure appears | Indexed |
-| `imageUrl` | string | URL to rendered figure image | - |
-| `chunks` | PaperChunk[] | Reverse references to chunks | Cross-ref |
+Bibliographic citations. Unique on `(paper_id, citation_id)`. Citations may be enriched with arXiv metadata at query time; the enriched form is not persisted.
 
-**Relationships**:
+#### `persona_concepts`
 
-- Referenced by: `PaperChunk.figureIds` (array)
-- References: `PaperChunk` (via `chunks` property)
+User knowledge graph. Unique on `(user_id, concept)`.
 
----
+> **Status (2026-05):** Actively written. Every Q&A and summarize call asks the LLM for a short list of `concepts` and upserts them via `recordPersonaSignals` (`src/server/persona/record.ts`). The `SkillsPanel` UI surfaces them as chips in the workspace sidebar; the read API is `GET /api/skills/[userId]`.
 
-### Citation
+#### `interactions`
 
-**Purpose**: Bibliographic citations extracted from papers for reference lookup.
+Append-only log of QA / summary / feedback events.
 
-**Properties**:
-| Property | Type | Description | Indexed |
-|----------|------|-------------|---------|
-| `id` | string (UUID) | Unique identifier | Primary Key |
-| `paperId` | string | Paper identifier | Indexed |
-| `citationId` | string | Citation identifier within paper | Unique Key |
-| `title` | string | Title of cited work | **Vectorized** |
-| `authors` | string[] | Array of author names | - |
-| `year` | int | Publication year | Indexed |
-| `source` | string | Publication venue | BM25 |
-| `doi` | string | Digital Object Identifier | - |
-| `url` | string | Canonical URL (may contain arXiv links) | - |
-| `chunks` | PaperChunk[] | Reverse references to chunks | Cross-ref |
+> **Status (2026-05):** Actively written. `recordPersonaSignals` writes one row per QA / summarize call (when `userId` is set), capturing prompt, response, the chunk_ids that grounded the answer, and the persona_concept_ids that were extracted. Read-side surface (e.g. "history" view) is not yet wired.
 
-**Enrichment**:
+#### `kontext_prompts`
 
-- Citations can be enriched with arXiv metadata during QA context loading
-- ArXiv IDs extracted from URL/DOI using regex patterns
-- Enrichment cache prevents duplicate API calls
+Cache for system prompts fetched from kontext.dev. UUID is `userId:personaId:taskId:paperId` (hashed via UUID v5). Lookups use `IS NOT DISTINCT FROM` for nullable equality and `(expires_at IS NULL OR expires_at > NOW())` for freshness.
 
-**Relationships**:
+## Qdrant Collections
 
-- Referenced by: `PaperChunk.citations` (array)
-- References: `PaperChunk` (via `chunks` property)
+The collection is selected per active embedding provider (`EMBEDDING_PROVIDER=openai|openrouter`) — each provider has its own collection sized to that model's native dimension. Switching providers points the runtime at a different collection; vector spaces never mix. Re-ingest a paper after switching providers.
 
----
+| Provider config | Collection name (auto-derived) | Vector size |
+|---|---|---|
+| `EMBEDDING_PROVIDER=openai` + `text-embedding-3-small` | `paper_chunks_openai_text_embedding_3_small` | 1536 |
+| `EMBEDDING_PROVIDER=openrouter` + `nvidia/llama-nemotron-embed-vl-1b-v2:free` | `paper_chunks_openrouter_nvidia_llama_nemotron_embed_vl_1b_v2_free` | 2048 (probe to confirm) |
 
-### PersonaConcept
+Override the auto-derived name with `QDRANT_COLLECTION` for stable single-provider deploys.
 
-**Purpose**: User knowledge concepts learned from interactions, enabling personalization.
+- **Distance**: `Cosine` (override via `QDRANT_DISTANCE`)
+- **Point ID**: same UUID v5 as the corresponding `paper_chunks.id` row in Postgres
+- **Payload**: `{ paperId, chunkId, section?, pageNumber?, citations?, figureIds? }`
+- **Indexed payload fields**: keyword index on `paperId`, integer index on `pageNumber`
 
-**Properties**:
-| Property | Type | Description | Indexed |
-|----------|------|-------------|---------|
-| `id` | string (UUID) | Unique identifier | Primary Key |
-| `userId` | string | User identifier | Indexed |
-| `concept` | string | Concept name | **Vectorized** |
-| `description` | string | Notes about the concept | BM25 |
-| `firstSeenPaperId` | string | Paper where concept first appeared | - |
-| `learnedAt` | date | Timestamp when concept was learned | Indexed |
-| `confidence` | number | Knowledge level (0-1) | - |
+The collection is created on demand by `ensureQdrantCollection()` (in `src/server/vector/qdrant.ts`). A vector-size mismatch is treated as a fatal configuration error.
 
-**Relationships**:
+Use `pnpm embeddings:probe` to discover a remote model's native vector size when in doubt.
 
-- Referenced by: `Interaction.personaConcepts`
+## UUID strategy
 
-**Use Cases**:
+All cross-store IDs are UUID v5 derived from `READABLE_NAMESPACE_UUID` so the same logical record has the same UUID in Postgres and Qdrant.
 
-- Tracks what a user knows/learns from papers
-- Used to personalize explanations and adjust complexity
-- Referenced in interactions for context
+| Entity            | UUID input                                     |
+| ----------------- | ---------------------------------------------- |
+| `paper_chunks`    | `paperId:chunkId`                              |
+| `paper_figures`   | `paperId:figureId`                             |
+| `paper_citations` | `paperId:citationId`                           |
+| `persona_concepts`| `userId:concept`                               |
+| `interactions`    | `userId:paperId:interactionType:prompt` (hashed) |
+| `kontext_prompts` | `userId:personaId:taskId:paperId` (with fallbacks) |
 
----
+Helpers live in `src/server/db/ids.ts`.
 
-### KontextPrompt
+## Hybrid retrieval
 
-**Purpose**: System prompts fetched from kontext.dev API for persona-based personalization.
+`hybridPaperChunkSearch({ paperId, query, limit, alpha = 0.65, pageWindow, vector })` in `src/server/search/hybrid.ts`:
 
-**Properties**:
-| Property | Type | Description | Indexed |
-|----------|------|-------------|---------|
-| `id` | string (UUID) | Unique identifier | Primary Key |
-| `userId` | string | User identifier (optional) | Indexed |
-| `personaId` | string | Persona identifier (optional) | Indexed |
-| `taskId` | string | Task type (e.g., "summarize_research_paper", "qa_research_paper") | Unique Key |
-| `paperId` | string | Paper identifier (optional, for paper-specific prompts) | Indexed |
-| `systemPrompt` | string | The system prompt text from kontext.dev | **Vectorized** |
-| `fetchedAt` | date | Timestamp when prompt was fetched | Indexed |
-| `expiresAt` | date | Expiration timestamp for cache invalidation | Indexed |
+1. Embed `query` (skipped if a precomputed `vector` is supplied) via `embedQuery` and run a Qdrant `search` filtered by `paperId`.
+2. Run a Postgres FTS query: `WHERE text_search @@ websearch_to_tsquery('english', $2) ORDER BY ts_rank_cd(text_search, ...) DESC`.
+3. Combine the two ranked lists using **Reciprocal Rank Fusion** with `k = 60`, weighting Qdrant by `alpha` and Postgres by `1 - alpha`.
+4. Hydrate hits from Postgres (`fetchChunksByIds`) and optionally expand the window around top hits with `fetchChunksByPageWindow`.
+5. Falls back gracefully — if embeddings or Qdrant fail, returns the FTS-only ranking.
 
-**Cache Strategy**:
+Fetch limit is `max(limit * 3, limit + 5)` to give RRF enough candidates.
 
-- Prompts cached for 24 hours (default)
-- Deterministic UUID based on userId + personaId + taskId + paperId
-- Subsequent requests with same parameters use cached version
+## Data flows
 
-**Relationships**:
-
-- Linked to: `User` (via userId), `Paper` (optionally via paperId)
-
----
-
-### Interaction
-
-**Purpose**: User interactions (questions, summaries, feedback) tied to papers and persona state.
-
-**Properties**:
-| Property | Type | Description | Indexed |
-|----------|------|-------------|---------|
-| `id` | string (UUID) | Unique identifier | Primary Key |
-| `userId` | string | User identifier | Indexed |
-| `paperId` | string | Paper identifier | Indexed |
-| `interactionType` | string | Type (e.g., "question", "summary", "feedback") | **Vectorized** |
-| `prompt` | string | User input/question | **Vectorized** |
-| `response` | string | LLM response | BM25 |
-| `createdAt` | date | Timestamp when interaction occurred | Indexed |
-| `chunks` | PaperChunk[] | Chunks used to answer | Cross-ref |
-| `personaConcepts` | PersonaConcept[] | Concepts referenced during interaction | Cross-ref |
-
-**Relationships**:
-
-- References: `PaperChunk` (via `chunks`), `PersonaConcept` (via `personaConcepts`)
-- Linked to: `User` (via userId), `Paper` (via paperId)
-
----
-
-## Data Flow Diagrams
-
-### Paper Ingestion Flow
+### Ingestion
 
 ```mermaid
 flowchart TD
-    A[Paper PDF/HTML] --> B[GROBID Parsing]
-    B --> C[Extract Citations]
-    B --> D[Extract Figures]
-    B --> E[Chunk Text]
+    A[Paper PDF / HTML] --> B[ar5iv -> PDF.js -> OCR -> GROBID]
+    B --> C[Extract chunks, figures, citations]
+    C --> D[upsertPaper into papers]
+    D --> E[upsertPaperChunks into paper_chunks]
+    D --> F[upsertFigures into paper_figures]
+    D --> G[upsertCitations into paper_citations]
+    E --> H[embedTexts via OpenAI]
+    H --> I[upsertPaperChunkVectors into Qdrant]
 
-    C --> F[Store Citations in Weaviate]
-    D --> G[Store Figures in Weaviate]
-    E --> H[Store PaperChunks in Weaviate]
-
-    H --> I[Link Chunks to Citations]
-    H --> J[Link Chunks to Figures]
-    F --> I
-    G --> J
-
-    I --> K[Update Citation.chunks]
-    J --> L[Update Figure.chunks]
-
-    style A fill:#e1f5ff
-    style K fill:#c8e6c9
-    style L fill:#c8e6c9
+    style D fill:#c8e6c9
+    style E fill:#c8e6c9
+    style I fill:#fff9c4
 ```
 
-### QA/Summarization Flow
+Vector indexing is wrapped in `try/catch` — a Qdrant or embedding failure does not fail the ingest; the paper remains queryable via Postgres FTS only.
+
+### QA / Summarization
 
 ```mermaid
 flowchart TD
-    A[User Question/Request] --> B{Fetch Kontext Prompt}
-    B -->|Cache Hit| C[Use Cached Prompt]
-    B -->|Cache Miss| D[Fetch from kontext.dev API]
-    D --> E[Save to Weaviate KontextPrompt]
+    A[User question] --> B{Cached kontext prompt?}
+    B -->|hit| C[Use cached system prompt]
+    B -->|miss| D[Fetch kontext.dev]
+    D --> E[upsertKontextPrompt]
     D --> C
 
-    C --> F[Load Persona Concepts]
-    F --> G[Hybrid Search PaperChunks]
-    G --> H[Collect Citation IDs]
-    H --> I[Fetch Citation Objects]
-    I --> J{Enrich with ArXiv?}
-    J -->|Yes| K[Fetch ArXiv Metadata]
-    J -->|No| L[Use Basic Citation]
-    K --> M[Enriched Citations]
-    L --> M
+    C --> F[Hybrid retrieval over paper_chunks]
+    F --> G[Collect citation + figure IDs from hits]
+    G --> H[fetchPaperCitationsByPaperId / fetchPaperFiguresByPaperId]
+    H --> I{Enrich with arXiv metadata?}
+    I -->|yes| J[Fetch + cache]
+    I -->|no| K[Use stored citation]
+    J --> L[Build LLM context]
+    K --> L
+    F --> L
 
-    G --> N[Collect Figure IDs]
-    N --> O[Fetch Figure Objects]
-
-    C --> P[Build System Prompt]
-    F --> P
-    M --> Q[Build User Prompt]
-    O --> Q
-
-    P --> R[Call LLM]
-    Q --> R
-    R --> S[Save Interaction to Weaviate]
-    S --> T[Return Response]
-
-    style A fill:#e1f5ff
-    style E fill:#fff9c4
-    style S fill:#fff9c4
-    style T fill:#c8e6c9
+    L --> M[Call LLM]
+    M --> N[upsertInteractions]
+    M --> O[Return answer with citations]
 ```
 
-### Kontext.dev Integration Flow
+### Kontext.dev cache
 
 ```mermaid
 sequenceDiagram
-    participant User
     participant App
+    participant Postgres
     participant KontextAPI
-    participant Weaviate
 
-    User->>App: Request Summary/QA
-    App->>Weaviate: Check KontextPrompt cache
-    alt Cache Hit (not expired)
-        Weaviate-->>App: Return cached prompt
-    else Cache Miss or Expired
+    App->>Postgres: getCachedKontextPrompt(userId, personaId, taskId, paperId)
+    alt fresh row
+        Postgres-->>App: systemPrompt
+    else miss / expired
         App->>KontextAPI: POST /v1/context/get
-        KontextAPI-->>App: Return systemPrompt
-        App->>Weaviate: Upsert KontextPrompt
-        Weaviate-->>App: Confirm saved
+        KontextAPI-->>App: systemPrompt
+        App-->>App: respond using prompt
+        App->>Postgres: upsertKontextPrompt (background)
     end
-    App->>App: Use prompt in LLM request
-    App-->>User: Return personalized response
 ```
 
-### Citation Enrichment Flow
+The lookup uses `IS NOT DISTINCT FROM` for the nullable `user_id`/`persona_id`/`paper_id` columns and respects `expires_at`.
 
-```mermaid
-flowchart LR
-    A[PaperChunk Search] --> B[Extract Citation IDs]
-    B --> C[Group by Frequency]
-    C --> D[Select Top 4 Citations]
-    D --> E{Has ArXiv ID?}
-    E -->|Yes| F[Fetch ArXiv Metadata]
-    E -->|No| G[Return Basic Citation]
-    F --> H[Cache Metadata]
-    H --> I[Enrich Citation]
-    I --> J[Return to LLM Context]
-    G --> J
+## Operational notes
 
-    style F fill:#fff9c4
-    style H fill:#fff9c4
-    style J fill:#c8e6c9
-```
+- **Schema migration**: `pnpm db:migrate` (idempotent). Also runs lazily on first DB access via memoized `ensureSchema()`.
+- **Health check**: `pnpm test:stores` pings Postgres + Qdrant and ensures both the schema and the collection exist.
+- **Local dev**: `docker compose up -d` starts both stores on default ports.
+- **Connection pooling**: `pg.Pool` is cached on `globalThis` to survive Next.js dev hot reload; `statement_timeout` and `idle_timeout` are configurable via env (`POSTGRES_STATEMENT_TIMEOUT_MS`, `POSTGRES_IDLE_TIMEOUT_MS`).
+- **Resilience**: Hybrid search degrades to FTS-only when embeddings or Qdrant are unreachable; ingest still records the paper in Postgres even if vector indexing fails.
 
-## Search Strategy
+## File map
 
-### Hybrid Search Configuration
-
-All classes use **hybrid search** which combines:
-
-- **BM25 (Keyword Search)**: Exact term matching, good for specific concepts
-- **Vector Search (Semantic)**: Semantic similarity, good for conceptual understanding
-
-**Parameters**:
-
-- Alpha: **0.65** (65% semantic, 35% keyword)
-- Distance Metric: **Cosine**
-- BM25: k1=1.2, b=0.75
-- Vectorizer: **text2vec-openai**
-
-### Search Example
-
-```typescript
-// Hybrid search combines keyword and semantic search
-const results = await client.graphql
-  .get()
-  .withClassName("PaperChunk")
-  .withHybrid({
-    query: "attention mechanism in transformers",
-    alpha: 0.65, // 65% semantic, 35% keyword
-    fusionType: FusionType.rankedFusion,
-  })
-  .do();
-```
-
-## UUID Generation Strategy
-
-UUIDs are **deterministic** (UUID5) based on:
-
-- `PaperChunk`: `paperId:chunkId`
-- `Figure`: `paperId:figureId`
-- `Citation`: `paperId:citationId`
-- `PersonaConcept`: `userId:concept`
-- `Interaction`: `userId:paperId:interactionType:prompt` (hashed)
-- `KontextPrompt`: `userId:personaId:taskId:paperId` (with fallbacks)
-
-**Benefits**:
-
-- Idempotent operations (same input = same UUID)
-- No duplicate objects on re-runs
-- Easy to look up by composite key
-
-**Code Location**: `src/server/weaviate/ids.ts`
-
-## Indexing Details
-
-### Text Properties
-
-- **Tokenization**: Word-level
-- **Vectorization**: All vectorized fields use OpenAI embeddings
-- **BM25**: Enabled for all text fields for keyword search
-
-### Date Properties
-
-- **Indexed**: Yes (for time-range queries)
-- **Format**: ISO 8601 timestamps
-
-### Array Properties
-
-- **Citations/FigureIds**: Stored as string arrays
-- **Not directly searchable** (reference via cross-references)
-
-### Cross-References
-
-- Implemented via Weaviate beacons: `weaviate://localhost/ClassName/uuid`
-- Allows bidirectional relationships
-- Used for: `Figure.chunks`, `Citation.chunks`, `Interaction.chunks`
-
-## Storage Optimization
-
-### Caching Strategy
-
-1. **KontextPrompt Caching**:
-   - Default TTL: 24 hours
-   - Key: `userId:personaId:taskId:paperId`
-   - Automatically refreshed on fetch
-
-2. **Citation Enrichment Caching**:
-   - In-memory Map cache
-   - Key: ArXiv ID
-   - Prevents duplicate API calls within request
-
-3. **Query Result Caching**:
-   - Handled by Weaviate internal cache
-   - Hybrid search results cached at database level
-
-### Cleanup Strategy
-
-- **Expired KontextPrompt**: Can be queried by `expiresAt < now()` for cleanup
-- **Stale Interactions**: Consider retention policy based on `createdAt`
-- **Old PaperChunks**: Retain indefinitely (paper archive)
-
-## Query Patterns
-
-### Common Queries
-
-```typescript
-// 1. Find chunks for a paper
-GET PaperChunk WHERE paperId = "arxiv:1234.5678"
-
-// 2. Hybrid search with paper filter
-HYBRID SEARCH PaperChunk
-  WHERE paperId = "arxiv:1234.5678"
-  QUERY "transformer architecture"
-
-// 3. Find user's persona concepts
-GET PersonaConcept WHERE userId = "user123"
-
-// 4. Find cached kontext prompt
-GET KontextPrompt
-  WHERE userId = "user123"
-    AND taskId = "qa_research_paper"
-    AND expiresAt > now()
-
-// 5. Find interactions for a paper
-GET Interaction
-  WHERE paperId = "arxiv:1234.5678"
-    AND userId = "user123"
-```
-
-## Data Volume Estimates
-
-Typical paper storage:
-
-- **PaperChunks**: 50-200 chunks per paper
-- **Figures**: 5-20 figures per paper
-- **Citations**: 20-100 citations per paper
-- **Interactions**: Variable (user-dependent)
-- **KontextPrompts**: 1-2 prompts per user per task type
-
-## Migration and Schema Updates
-
-Schema is automatically created on startup via `ensureWeaviateSchema()`.
-
-- Checks if classes exist
-- Creates missing classes
-- Does not modify existing schemas (manual migration required)
-
-**Code Location**: `src/server/weaviate/schema.ts`
-
-## Security Considerations
-
-- **Access Control**: Managed at Weaviate cluster level
-- **API Keys**: Stored in environment variables
-- **User Data Isolation**: Queries filtered by `userId`
-- **PII Handling**: User IDs are opaque identifiers, no PII in prompts
-
-## Monitoring and Maintenance
-
-### Key Metrics
-
-- Document count per class
-- Query latency
-- Cache hit rates (KontextPrompt)
-- Storage growth
-
-### Maintenance Tasks
-
-- Cleanup expired KontextPrompt objects
-- Archive old Interactions (if needed)
-- Monitor Weaviate cluster health
-- Review indexing performance
-
-## References
-
-- **Schema Definition**: `src/server/weaviate/schema.ts`
-- **Type Definitions**: `src/server/weaviate/types.ts`
-- **Upsert Functions**: `src/server/weaviate/upsert.ts`
-- **Search Functions**: `src/server/weaviate/search.ts`
-- **UUID Generation**: `src/server/weaviate/ids.ts`
+- Schema (DDL): `src/server/db/schema.ts`
+- Migration runner: `src/server/db/migrate.ts`, CLI `scripts/db-migrate.ts`
+- Postgres client + pool: `src/server/db/postgres.ts`
+- Repository functions: `src/server/db/papers.ts`, `src/server/db/persona.ts`
+- Shared types: `src/server/db/types.ts`
+- UUID helpers: `src/server/db/ids.ts`
+- Qdrant client: `src/server/vector/qdrant.ts`
+- Embeddings: `src/server/vector/embeddings.ts`
+- Hybrid retriever: `src/server/search/hybrid.ts`
+- Public facade: `src/server/repositories/index.ts`
+- Health-check CLI: `scripts/test-stores.ts`

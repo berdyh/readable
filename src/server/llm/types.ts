@@ -2,7 +2,7 @@
  * Common types and interfaces for LLM providers
  */
 
-export type LlmProvider = 'openai' | 'anthropic' | 'gemini';
+export type LlmProvider = 'openai' | 'anthropic' | 'gemini' | 'openrouter';
 
 export interface LlmRequest {
   systemPrompt: string;

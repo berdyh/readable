@@ -580,13 +580,6 @@ const CITATION_METADATA: Record<
   },
 };
 
-const kontextRequests: Array<{
-  taskId: string;
-  paperId?: string;
-  userId?: string;
-  personaId?: string;
-}> = [];
-
 const summaryRequests: Array<{
   paperId: string;
   persona: 'base' | 'persona';
@@ -657,21 +650,6 @@ function ensureCitations(paperId: string): MockCitation[] {
   }
   return mockStore.citations.get(paperId)!;
 }
-
-const fetchKontextSystemPromptMock = vi.fn(
-  async (request: {
-    taskId: string;
-    paperId?: string;
-    userId?: string;
-    personaId?: string;
-  }) => {
-    kontextRequests.push(request);
-    if (request.personaId) {
-      return PERSONA_PROMPTS[request.personaId] ?? 'Persona fallback prompt.';
-    }
-    return undefined;
-  },
-);
 
 function extractPaperIdFromPrompt(prompt: string): string | undefined {
   const match = prompt.match(/Paper ID:\s*([^\s]+)/);
@@ -788,39 +766,31 @@ vi.mock('@/server/ingest/arxiv', () => ({
       return undefined;
     },
   ),
-  fetchAr5ivHtml: vi.fn(async () => ''),
+  fetchAr5ivHtml: vi.fn(async (arxivId: string) => `ar5iv:${arxivId}`),
   fetchArxivPdf: vi.fn(async (arxivId: string) =>
     new TextEncoder().encode(arxivId).buffer,
   ),
 }));
 
 vi.mock('@/server/ingest/ar5iv', () => ({
-  parseAr5ivHtml: vi.fn(() => ({
-    sections: [],
-    figures: [],
-  })),
-}));
-
-vi.mock('@/server/ingest/grobid', () => ({
-  fetchGrobidTei: vi.fn(async (pdfBuffer: ArrayBuffer) => {
-    const decoder = new TextDecoder();
-    const id = decoder.decode(pdfBuffer);
-    return `tei:${id}`;
-  }),
-  parseGrobidTei: vi.fn((teiPayload: string) => {
-    const [, paperId] = teiPayload.split(':');
+  parseAr5ivHtml: vi.fn((htmlPayload: string) => {
+    // The fetchAr5ivHtml mock above returns `ar5iv:<arxivId>` so we can
+    // route the fixture's structured sections + figures (originally
+    // sourced from the TEI fixture) into the now-primary ar5iv parse
+    // path. References are not produced by ar5iv parsing in real life,
+    // so we drop them — the test stays meaningful for sections/figures.
+    const [, paperId] = htmlPayload.split(':');
     const fixture = PAPER_FIXTURES[paperId];
     if (!fixture) {
-      return {
-        sections: [],
-        references: [],
-        figures: [],
-      };
+      return { sections: [], figures: [] };
     }
-
-    return fixture.tei;
+    return {
+      sections: fixture.tei.sections,
+      figures: fixture.tei.figures,
+    };
   }),
 }));
+
 
 vi.mock('@/server/ingest/pdf', () => ({
   extractPdfText: vi.fn(async () => undefined),
@@ -831,8 +801,8 @@ vi.mock('@/server/ingest/ocr', () => ({
   runDeepSeekOcr: vi.fn(async () => undefined),
 }));
 
-const weaviateMock = {
-  getWeaviateClient: vi.fn(() => ({ kind: 'mock-client' })),
+const storeMock = {
+  upsertPaper: vi.fn(async () => undefined),
 
   upsertPaperChunks: vi.fn(async (chunks: Array<Omit<MockChunk, 'id'>>) => {
     for (const chunk of chunks) {
@@ -843,8 +813,8 @@ const weaviateMock = {
       filtered.push({
         ...chunk,
         id: `${chunk.paperId}:${chunk.chunkId}`,
-        citations: [...chunk.citations],
-        figureIds: [...chunk.figureIds],
+        citations: [...(chunk.citations ?? [])],
+        figureIds: [...(chunk.figureIds ?? [])],
       });
       mockStore.chunks.set(chunk.paperId, filtered);
     }
@@ -903,64 +873,109 @@ const weaviateMock = {
     const citations = mockStore.citations.get(paperId) ?? [];
     return citations.map(cloneCitation);
   }),
-
-  hybridPaperChunkSearch: vi.fn(
-    async (options: {
-      paperId: string;
-      query: string;
-      limit?: number;
-    }) => {
-      const chunks = mockStore.chunks.get(options.paperId) ?? [];
-      const normalizedQuery = options.query.toLowerCase();
-
-      const matching = chunks.filter((chunk) => {
-        const haystack = `${chunk.text} ${chunk.section ?? ''}`.toLowerCase();
-        return haystack.includes(normalizedQuery);
-      });
-
-      const selected =
-        matching.length > 0 ? matching : chunks.slice(0, options.limit ?? 5);
-
-      const hits = selected.slice(0, options.limit ?? 5).map((chunk, index) => ({
-        id: `${chunk.paperId}:${chunk.chunkId}:${index}`,
-        paperId: chunk.paperId,
-        chunkId: chunk.chunkId,
-        text: chunk.text,
-        section: chunk.section,
-        pageNumber: chunk.pageNumber,
-        score: 1 - index * 0.05,
-        distance: index * 0.05,
-        citations: chunk.citations,
-        figureIds: chunk.figureIds,
-        additional: {},
-      }));
-
-      return {
-        hits,
-        expandedWindow: [],
-      };
-    },
-  ),
 };
 
-vi.mock('@/server/weaviate', () => weaviateMock);
+const hybridSearchMock = vi.fn(
+  async (options: {
+    paperId: string;
+    query: string;
+    limit?: number;
+  }) => {
+    const chunks = mockStore.chunks.get(options.paperId) ?? [];
+    const normalizedQuery = options.query.toLowerCase();
 
-vi.mock('@/server/weaviate/paper', () => ({
-  fetchPaperChunksByPaperId: weaviateMock.fetchPaperChunksByPaperId,
-  fetchPaperFiguresByPaperId: weaviateMock.fetchPaperFiguresByPaperId,
-  fetchPaperCitationsByPaperId: weaviateMock.fetchPaperCitationsByPaperId,
+    const matching = chunks.filter((chunk) => {
+      const haystack = `${chunk.text} ${chunk.section ?? ''}`.toLowerCase();
+      return haystack.includes(normalizedQuery);
+    });
+
+    const selected =
+      matching.length > 0 ? matching : chunks.slice(0, options.limit ?? 5);
+
+    const hits = selected.slice(0, options.limit ?? 5).map((chunk, index) => ({
+      id: `${chunk.paperId}:${chunk.chunkId}:${index}`,
+      paperId: chunk.paperId,
+      chunkId: chunk.chunkId,
+      text: chunk.text,
+      section: chunk.section,
+      pageNumber: chunk.pageNumber,
+      score: 1 - index * 0.05,
+      distance: index * 0.05,
+      citations: chunk.citations,
+      figureIds: chunk.figureIds,
+      additional: {},
+    }));
+
+    return {
+      hits,
+      expandedWindow: [],
+    };
+  },
+);
+
+const upsertInteractionsMock = vi.fn(async (rows: unknown[]) =>
+  rows.map((_, index) => `interaction-${index}`),
+);
+const upsertPersonaConceptsMock = vi.fn(async (rows: unknown[]) =>
+  rows.map((_, index) => `concept-${index}`),
+);
+const listPersonaConceptsForUserMock = vi.fn(async () => []);
+
+vi.mock('@/server/db', () => ({
+  upsertPaper: storeMock.upsertPaper,
+  upsertPaperChunks: storeMock.upsertPaperChunks,
+  upsertFigures: storeMock.upsertFigures,
+  upsertCitations: storeMock.upsertCitations,
+  fetchPaperChunksByPaperId: storeMock.fetchPaperChunksByPaperId,
+  fetchPaperFiguresByPaperId: storeMock.fetchPaperFiguresByPaperId,
+  fetchPaperCitationsByPaperId: storeMock.fetchPaperCitationsByPaperId,
+  upsertInteractions: upsertInteractionsMock,
+  upsertPersonaConcepts: upsertPersonaConceptsMock,
+  listPersonaConceptsForUser: listPersonaConceptsForUserMock,
+  buildPaperChunkUuid: (paperId: string, chunkId: string) =>
+    `${paperId}:${chunkId}`,
 }));
 
-vi.mock('@/server/summarize/kontext', () => ({
-  fetchKontextSystemPrompt: fetchKontextSystemPromptMock,
+vi.mock('@/server/search/hybrid', () => ({
+  hybridPaperChunkSearch: hybridSearchMock,
 }));
 
-vi.mock('@/server/summarize/openai', () => ({
-  generateJsonSummary: generateJsonSummaryMock,
+vi.mock('@/server/vector/qdrant', () => ({
+  ensureQdrantCollection: vi.fn(async () => undefined),
+  upsertPaperChunkVectors: vi.fn(async () => undefined),
+  deletePaperChunkVectorsByPaper: vi.fn(async () => undefined),
 }));
 
-vi.mock('@/server/qa/openai', () => ({
-  generateQaResponse: generateQaResponseMock,
+vi.mock('@/server/vector/embeddings', () => ({
+  embedTexts: vi.fn(async (texts: string[]) =>
+    texts.map(() => Array.from({ length: 4 }, () => 0)),
+  ),
+  embedQuery: vi.fn(async () => Array.from({ length: 4 }, () => 0)),
+  getEmbeddingEnvironment: vi.fn(() => ({
+    providerId: 'openai',
+    apiKey: 'test',
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'text-embedding-3-small',
+    dimensions: 4,
+    timeoutMs: 30_000,
+    collection: 'paper_chunks_test',
+  })),
+  getActiveEmbeddingProvider: vi.fn(() => 'openai'),
+}));
+
+vi.mock('@/server/llm', () => ({
+  generateJson: vi.fn(
+    async (
+      params: { systemPrompt: string; userPrompt: string },
+      ctx?: { taskName?: string },
+    ) => {
+      if (ctx?.taskName === 'qa') {
+        return generateQaResponseMock(params);
+      }
+      return generateJsonSummaryMock(params);
+    },
+  ),
+  generateText: vi.fn(async () => ''),
 }));
 
 let ingestPaper: typeof import('@/server/ingest').ingestPaper;
@@ -975,10 +990,8 @@ beforeAll(async () => {
 
 beforeEach(() => {
   resetStore();
-  kontextRequests.length = 0;
   summaryRequests.length = 0;
   qaRequests.length = 0;
-  fetchKontextSystemPromptMock.mockClear();
   generateJsonSummaryMock.mockClear();
   generateQaResponseMock.mockClear();
 });
@@ -993,7 +1006,11 @@ describe('ingest → summarize → QA pipeline', () => {
     expect(mockStore.chunks.get(paperId)).toHaveLength(4);
     expect(ingestResult.sections).toHaveLength(3);
     expect(ingestResult.figures).toHaveLength(2);
-    expect(ingestResult.refs[0]?.chunkIds?.length).toBeGreaterThan(0);
+    // Reference assertion removed: structured reference extraction came
+    // from GROBID TEI; ar5iv HTML doesn't reliably produce them. This
+    // is a known regression of dropping GROBID — references in
+    // paper_citations come from the LLM's citation map post-summary
+    // instead, exercised end-to-end in real deployments.
 
     const summary = await summarizePaper(paperId);
 
@@ -1007,8 +1024,6 @@ describe('ingest → summarize → QA pipeline', () => {
     expect(summary.figures[0]?.page_anchor).toBe('(page 3)');
     expect(summary.key_findings[0]?.page_anchors).toContain('(page 3)');
 
-    expect(fetchKontextSystemPromptMock).toHaveBeenCalledTimes(1);
-
     const question = 'How does self-attention improve efficiency?';
     const answer = await answerPaperQuestion(paperId, question);
 
@@ -1016,53 +1031,10 @@ describe('ingest → summarize → QA pipeline', () => {
     expect(answer.cites[0]?.chunkId).toBe('S1-p1');
     expect(answer.cites[0]?.page).toBe(1);
     expect(answer.cites[1]?.chunkId).toBe('S2-p1');
-
-    expect(fetchKontextSystemPromptMock).toHaveBeenCalledTimes(2);
-  });
-
-  it('applies persona guidance when enabled and alters summary and QA phrasing', async () => {
-    const paperId = '1810.04805';
-    await ingestPaper({ arxivId: paperId });
-
-    const baselineSummary = await summarizePaper(paperId);
-    const personaSummary = await summarizePaper(paperId, {
-      personaId: 'demo-persona',
-      userId: 'reader-1',
-    });
-
-    expect(personaSummary.sections[0].summary).not.toBe(
-      baselineSummary.sections[0].summary,
-    );
-    expect(personaSummary.sections[0].summary).toContain('reusable language foundation');
-
-    const personaSummaryCall = summaryRequests.find(
-      (request) => request.paperId === paperId && request.persona === 'persona',
-    );
-    expect(personaSummaryCall?.systemPrompt.startsWith(PERSONA_PROMPTS['demo-persona'])).toBe(
-      true,
-    );
-
-    const question = 'Which corpora power BERT pre-training?';
-    const baselineAnswer = await answerPaperQuestion(paperId, question);
-    const personaAnswer = await answerPaperQuestion(paperId, question, {
-      personaId: 'demo-persona',
-      userId: 'reader-1',
-    });
-
-    expect(personaAnswer.answer).not.toBe(baselineAnswer.answer);
-    expect(personaAnswer.answer).toContain('teams');
-    expect(personaAnswer.cites[0]?.page).toBe(3);
-
-    const personaQaCall = qaRequests.find(
-      (request) => request.paperId === paperId && request.persona === 'persona',
-    );
-    expect(personaQaCall?.systemPrompt).toContain('Persona guidance:');
-
-    const personaKontextCalls = kontextRequests.filter(
-      (call) => call.paperId === paperId && call.personaId === 'demo-persona',
-    );
-    expect(personaKontextCalls).toHaveLength(2);
-    expect(personaKontextCalls[0]?.taskId).toBe('summarize_research_paper');
-    expect(personaKontextCalls[1]?.taskId).toBe('qa_research_paper');
   });
 });
+
+// The persona-guidance test that lived here was removed along with the
+// Kontext.dev integration: persona-tuned system prompts no longer exist.
+// Skills tracking (persona_concepts) is still exercised indirectly via
+// recordPersonaSignals' fire-and-forget path inside the first test.

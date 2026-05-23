@@ -3,11 +3,17 @@ import type { ArxivMetadata } from '@/server/ingest/types';
 import {
   fetchPaperCitationsByPaperId,
   fetchPaperFiguresByPaperId,
-  hybridPaperChunkSearch,
   type Citation,
   type Figure,
+} from '@/server/db';
+import {
+  enrichCitation as enrichWithSemanticScholar,
+  type SemanticScholarPaper,
+} from '@/server/external/semantic-scholar';
+import {
+  hybridPaperChunkSearch,
   type HybridPaperChunkHit,
-} from '@/server/weaviate';
+} from '@/server/search/hybrid';
 
 import type {
   NormalizedSelection,
@@ -184,10 +190,61 @@ function extractArxivIdFromCitation(citation: Citation | undefined): string | un
   return undefined;
 }
 
+function applyArxivMetadata(
+  context: QaCitationContext,
+  metadata: ArxivMetadata,
+  arxivId: string,
+): void {
+  context.arxivId = metadata.id ?? arxivId;
+  context.abstract = metadata.abstract ?? context.abstract;
+  if (!context.title && metadata.title) {
+    context.title = metadata.title;
+  }
+  if (!context.authors?.length && metadata.authors?.length) {
+    context.authors = metadata.authors;
+  }
+  if (!context.year && metadata.publishedAt) {
+    const year = new Date(metadata.publishedAt).getUTCFullYear();
+    if (!Number.isNaN(year)) {
+      context.year = year;
+    }
+  }
+}
+
+function applySemanticScholarMetadata(
+  context: QaCitationContext,
+  metadata: SemanticScholarPaper,
+): void {
+  if (!context.abstract && metadata.abstract) {
+    context.abstract = metadata.abstract;
+  }
+  if (!context.title && metadata.title) {
+    context.title = metadata.title;
+  }
+  if (!context.authors?.length && metadata.authors?.length) {
+    context.authors = metadata.authors;
+  }
+  if (!context.year && metadata.year) {
+    context.year = metadata.year;
+  }
+  if (!context.doi && metadata.doi) {
+    context.doi = metadata.doi;
+  }
+  if (!context.arxivId && metadata.arxivId) {
+    context.arxivId = metadata.arxivId;
+  }
+  if (!context.url && (metadata.openAccessPdfUrl || metadata.url)) {
+    context.url = metadata.openAccessPdfUrl ?? metadata.url;
+  }
+  if (!context.source && metadata.venue) {
+    context.source = metadata.venue;
+  }
+}
+
 async function enrichCitation(
   citationId: string,
   citation: Citation | undefined,
-  cache: Map<string, ArxivMetadata | null>,
+  arxivCache: Map<string, ArxivMetadata | null>,
 ): Promise<QaCitationContext> {
   const context: QaCitationContext = {
     citationId,
@@ -199,31 +256,43 @@ async function enrichCitation(
     url: citation?.url,
   };
 
+  // arXiv enrichment — most precise when available.
   const arxivId = extractArxivIdFromCitation(citation);
-  if (!arxivId) {
-    return context;
+  if (arxivId) {
+    if (!arxivCache.has(arxivId)) {
+      const metadata = await fetchArxivMetadata(arxivId).catch(() => undefined);
+      arxivCache.set(arxivId, metadata ?? null);
+    }
+    const metadata = arxivCache.get(arxivId);
+    if (metadata) {
+      applyArxivMetadata(context, metadata, arxivId);
+    }
   }
 
-  if (!cache.has(arxivId)) {
-    const metadata = await fetchArxivMetadata(arxivId).catch(() => undefined);
-    cache.set(arxivId, metadata ?? null);
+  // Semantic Scholar enrichment — fills gaps for citations without an
+  // arXiv id, or backfills abstracts/venues/openAccessPdf URLs the
+  // arXiv path doesn't provide. Best-effort; module handles its own
+  // caching + error swallowing.
+  const ssEnrichInput: {
+    arxivId?: string;
+    doi?: string;
+    title?: string;
+    year?: number;
+  } = {};
+  if (context.arxivId) ssEnrichInput.arxivId = context.arxivId;
+  if (context.doi) ssEnrichInput.doi = context.doi;
+  if (!context.abstract && context.title) {
+    ssEnrichInput.title = context.title;
+    ssEnrichInput.year = context.year;
   }
-
-  const metadata = cache.get(arxivId);
-  if (metadata) {
-    context.arxivId = metadata.id ?? arxivId;
-    context.abstract = metadata.abstract ?? context.abstract;
-    if (!context.title && metadata.title) {
-      context.title = metadata.title;
-    }
-    if (!context.authors?.length && metadata.authors?.length) {
-      context.authors = metadata.authors;
-    }
-    if (!context.year && metadata.publishedAt) {
-      const year = new Date(metadata.publishedAt).getUTCFullYear();
-      if (!Number.isNaN(year)) {
-        context.year = year;
-      }
+  if (
+    ssEnrichInput.arxivId ||
+    ssEnrichInput.doi ||
+    ssEnrichInput.title
+  ) {
+    const ss = await enrichWithSemanticScholar(ssEnrichInput).catch(() => undefined);
+    if (ss) {
+      applySemanticScholarMetadata(context, ss);
     }
   }
 

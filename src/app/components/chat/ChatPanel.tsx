@@ -35,8 +35,6 @@ export interface ChatPanelProps {
   onDraftChange: (value: string) => void;
   selection?: QuestionSelection;
   onSelectionClear?: () => void;
-  personaEnabled: boolean;
-  onPersonaToggle: (enabled: boolean) => void;
   userId?: string;
   onQuestionSent?: (question: string) => void;
   onAnswerReceived?: (answer: string) => void;
@@ -47,7 +45,6 @@ interface SlashCommandDefinition {
   option: SlashCommandOption;
   buildQuestion: (context: {
     selection?: QuestionSelection;
-    personaEnabled: boolean;
     draft: string;
   }) => {
     question: string;
@@ -57,9 +54,7 @@ interface SlashCommandDefinition {
 }
 
 const DEFAULT_USER_ID =
-  process.env.NEXT_PUBLIC_KONTEXT_DEMO_USER_ID ?? "demo-user";
-
-const DemoPersonaId = "demo-researcher";
+  process.env.NEXT_PUBLIC_DEMO_USER_ID ?? "demo-user";
 
 function createMessageId() {
   return `msg_${Math.random().toString(36).slice(2, 10)}_${Date.now()}`;
@@ -191,27 +186,6 @@ const slashCommandDefinitions: SlashCommandDefinition[] = [
   },
 ];
 
-const PersonaToggle = ({
-  enabled,
-  onToggle,
-}: {
-  enabled: boolean;
-  onToggle: (next: boolean) => void;
-}) => {
-  return (
-    <button
-      type="button"
-      onClick={() => onToggle(!enabled)}
-      className="inline-flex items-center gap-2 rounded-full border border-zinc-300 px-3 py-1 text-xs font-medium text-zinc-600 transition hover:border-zinc-400 hover:text-zinc-900"
-    >
-      <span
-        className={`flex h-2.5 w-2.5 items-center justify-center rounded-full ${enabled ? "bg-emerald-500" : "bg-zinc-300"}`}
-      />
-      Persona {enabled ? "on" : "off"}
-    </button>
-  );
-};
-
 const MessageBubble = ({ message }: { message: ChatMessage }) => {
   const isUser = message.role === "user";
 
@@ -285,8 +259,6 @@ const ChatPanel = ({
   onDraftChange,
   selection,
   onSelectionClear,
-  personaEnabled,
-  onPersonaToggle,
   userId,
   onQuestionSent,
   onAnswerReceived,
@@ -299,11 +271,6 @@ const ChatPanel = ({
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const textareaId = useId();
-
-  const personaLabel = useMemo(
-    () => (personaEnabled ? "Persona tuning enabled" : "Persona tuning off"),
-    [personaEnabled],
-  );
 
   const trimmedDraft = draft.trimStart();
   const commandSpaceIndex = trimmedDraft.indexOf(" ");
@@ -421,7 +388,6 @@ const ChatPanel = ({
             paperId,
             question,
             userId: userId ?? DEFAULT_USER_ID,
-            personaId: personaEnabled ? DemoPersonaId : undefined,
             selection: payloadSelection,
           }),
         });
@@ -470,7 +436,6 @@ const ChatPanel = ({
       onQuestionSent,
       onSelectionClear,
       paperId,
-      personaEnabled,
       reportError,
       selection,
       userId,
@@ -489,7 +454,6 @@ const ChatPanel = ({
     (definition: SlashCommandDefinition) => {
       const result = definition.buildQuestion({
         selection,
-        personaEnabled,
         draft,
       });
       onDraftChange(result.question);
@@ -500,7 +464,7 @@ const ChatPanel = ({
         textareaRef.current?.focus();
       }
     },
-    [draft, onDraftChange, personaEnabled, selection, sendQuestion],
+    [draft, onDraftChange, selection, sendQuestion],
   );
 
   const onKeyDown = useCallback(
@@ -566,7 +530,6 @@ const ChatPanel = ({
             Ask grounded questions about this paper.
           </p>
         </div>
-        <PersonaToggle enabled={personaEnabled} onToggle={onPersonaToggle} />
       </div>
 
       <div
@@ -611,11 +574,7 @@ const ChatPanel = ({
             value={draft}
             onChange={(event) => onDraftChange(event.target.value)}
             onKeyDown={onKeyDown}
-            placeholder={
-              personaEnabled
-                ? "e.g., /eli5 what the self-attention block is doing"
-                : "Ask how self-attention compares to recurrence…"
-            }
+            placeholder="Ask how self-attention compares to recurrence…"
             className="min-h-[96px] w-full resize-y rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm leading-relaxed text-zinc-800 outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200"
           />
           {showSlashMenu && filteredCommands.length > 0 && (
@@ -634,8 +593,7 @@ const ChatPanel = ({
             />
           )}
         </div>
-        <div className="flex items-center justify-between text-xs text-zinc-500">
-          <span>{personaLabel}</span>
+        <div className="flex items-center justify-end text-xs text-zinc-500">
           <button
             type="submit"
             disabled={isSubmitting || !draft.trim()}

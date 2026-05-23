@@ -31,8 +31,8 @@ pnpm exec tsx scripts/test-api-endpoints.ts
 
 **Endpoint:** `POST /api/summarize`
 
-- **Required:** `paperId` (must exist in Weaviate)
-- **Dependencies:** Weaviate, OpenAI API
+- **Required:** `paperId` (must exist in Postgres `papers` table)
+- **Dependencies:** Postgres, Qdrant, OpenAI API
 - **Test:**
   ```bash
   curl -X POST http://localhost:3000/api/summarize \
@@ -45,7 +45,7 @@ pnpm exec tsx scripts/test-api-endpoints.ts
 **Endpoint:** `POST /api/qa`
 
 - **Required:** `paperId`, `question`
-- **Dependencies:** Weaviate, OpenAI API
+- **Dependencies:** Postgres, Qdrant, OpenAI API
 - **Test:**
   ```bash
   curl -X POST http://localhost:3000/api/qa \
@@ -58,7 +58,7 @@ pnpm exec tsx scripts/test-api-endpoints.ts
 **Endpoint:** `POST /api/ingest`
 
 - **Required:** `arxivId`
-- **Dependencies:** arXiv API, Weaviate, OpenAI (optional), GROBID (optional), OCR service (optional)
+- **Dependencies:** arXiv API, Postgres, Qdrant, OpenAI, OpenAI (for embeddings + LLM), GROBID (optional), OCR service (optional)
 - **Test:**
   ```bash
   curl -X POST http://localhost:3000/api/ingest \
@@ -84,7 +84,7 @@ pnpm exec tsx scripts/test-api-endpoints.ts
 **Endpoint:** `POST /api/editor/selection/summary`
 
 - **Required:** `paperId`, `selection` (with `text`)
-- **Dependencies:** Weaviate, OpenAI API
+- **Dependencies:** Postgres, Qdrant, OpenAI API
 - **Test:**
   ```bash
   curl -X POST http://localhost:3000/api/editor/selection/summary \
@@ -97,7 +97,7 @@ pnpm exec tsx scripts/test-api-endpoints.ts
 **Endpoint:** `POST /api/editor/selection/figures`
 
 - **Required:** `paperId`, `selection`
-- **Dependencies:** Weaviate
+- **Dependencies:** Postgres, Qdrant
 - **Test:**
   ```bash
   curl -X POST http://localhost:3000/api/editor/selection/figures \
@@ -110,7 +110,7 @@ pnpm exec tsx scripts/test-api-endpoints.ts
 **Endpoint:** `POST /api/editor/selection/citations`
 
 - **Required:** `paperId`, `selection`
-- **Dependencies:** Weaviate
+- **Dependencies:** Postgres, Qdrant
 - **Test:**
   ```bash
   curl -X POST http://localhost:3000/api/editor/selection/citations \
@@ -123,7 +123,7 @@ pnpm exec tsx scripts/test-api-endpoints.ts
 **Endpoint:** `POST /api/editor/ingest/arxiv`
 
 - **Required:** `target` (arXiv ID or URL)
-- **Dependencies:** arXiv API, Weaviate
+- **Dependencies:** arXiv API, Postgres, Qdrant, OpenAI embeddings
 - **Test:**
   ```bash
   curl -X POST http://localhost:3000/api/editor/ingest/arxiv \
@@ -180,8 +180,9 @@ pnpm exec tsx scripts/test-api-endpoints.ts
 
 All other endpoints require:
 
-- **Weaviate** - For paper data storage and retrieval
-- **OpenAI API** - For summarization and Q&A
+- **Postgres** - Source of truth for papers, chunks, figures, citations, persona state
+- **Qdrant** - Vector index for paper-chunk embeddings
+- **OpenAI API** - For summarization, Q&A, and chunk embeddings
 - **arXiv API** - For paper ingestion
 - **Optional:** GROBID, OCR services, Semantic Scholar API
 

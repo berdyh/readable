@@ -1,3 +1,16 @@
+export interface PaperRecord {
+  paperId: string;
+  title?: string;
+  abstract?: string;
+  authors: string[];
+  primaryCategory?: string;
+  categories: string[];
+  publishedAt?: string;
+  updatedAt?: string;
+  pdfUrl?: string;
+  pages?: number;
+}
+
 export interface PaperChunk {
   id?: string;
   paperId: string;
@@ -54,15 +67,4 @@ export interface Interaction {
   createdAt?: string;
   chunkIds?: string[];
   personaConceptIds?: string[];
-}
-
-export interface KontextPrompt {
-  id?: string;
-  userId?: string;
-  personaId?: string;
-  taskId: string;
-  paperId?: string;
-  systemPrompt: string;
-  fetchedAt?: string;
-  expiresAt?: string;
 }

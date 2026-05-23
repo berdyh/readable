@@ -42,4 +42,5 @@ export {
 export { OpenAiProvider } from './providers/openai';
 export { AnthropicProvider } from './providers/anthropic';
 export { GeminiProvider } from './providers/gemini';
+export { OpenRouterProvider } from './providers/openrouter';
 

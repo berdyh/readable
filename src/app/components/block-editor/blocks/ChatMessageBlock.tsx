@@ -173,8 +173,6 @@ export function ChatMessageBlock({
             paperId={paperId}
             draft={chatDraft}
             onDraftChange={setChatDraft}
-            personaEnabled={false}
-            onPersonaToggle={() => {}}
             onQuestionSent={handleQuestionSent}
             onAnswerReceived={handleAnswerReceived}
             onError={handleError}

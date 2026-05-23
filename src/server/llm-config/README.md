@@ -72,6 +72,11 @@ Models are chosen based on:
 - **Q&A**: `gemini-1.5-pro` - Better reasoning quality ($1.25/$5 per 1M tokens)
 - **Inline Summary**: `gemini-1.5-flash` - Fastest and cheapest
 
+#### OpenRouter (free tier)
+- **Summarization**: `deepseek/deepseek-chat-v3.1:free` - Long-context summaries with no per-token cost
+- **Q&A**: `meta-llama/llama-3.3-70b-instruct:free` - Strongest free reasoning model on OpenRouter
+- **Inline Summary**: `qwen/qwen3-235b-a22b:free` - Strong fluency for short summaries
+
 ## Overriding Models
 
 You can override models via environment variables:
@@ -81,11 +86,13 @@ You can override models via environment variables:
 OPENAI_QA_MODEL=gpt-4o
 ANTHROPIC_SUMMARY_MODEL=claude-3-5-sonnet-20241022
 GEMINI_QA_MODEL=gemini-1.5-flash
+OPENROUTER_QA_MODEL=meta-llama/llama-3.3-70b-instruct:free
 
 # General provider defaults (fallback)
 OPENAI_MODEL=gpt-4o
 ANTHROPIC_MODEL=claude-3-5-sonnet-20241022
 GEMINI_MODEL=gemini-1.5-pro
+OPENROUTER_MODEL=meta-llama/llama-3.3-70b-instruct:free
 ```
 
 ## Environment Variables
@@ -97,15 +104,25 @@ GEMINI_MODEL=gemini-1.5-pro
 OPENAI_API_KEY=sk-...
 ANTHROPIC_API_KEY=sk-ant-...
 GEMINI_API_KEY=...
+OPENROUTER_API_KEY=sk-or-v1-...
+
+# Default + fallback chain (engaging the OpenClaw routing layer)
+LLM_PROVIDER=openai
+LLM_ALLOWED_PROVIDERS=openai,anthropic,openrouter
 
 # Optional: API Base URLs (for custom endpoints)
 OPENAI_API_BASE_URL=https://api.openai.com/v1
 ANTHROPIC_API_BASE_URL=https://api.anthropic.com
 GEMINI_API_BASE_URL=https://generativelanguage.googleapis.com/v1beta
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
 
 # Optional: Organization/Project (OpenAI only)
 OPENAI_ORGANIZATION=org-...
 OPENAI_PROJECT=proj-...
+
+# Optional: OpenRouter attribution headers
+OPENROUTER_HTTP_REFERER=https://github.com/your-org/your-fork
+OPENROUTER_X_TITLE=Readable
 
 # Model selection is handled in models.json (override with env vars above)
 ```

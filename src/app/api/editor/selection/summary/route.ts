@@ -32,7 +32,6 @@ export async function POST(request: NextRequest) {
       payload.selection,
       {
         userId: payload.userId,
-        personaId: payload.personaId,
       },
     );
 

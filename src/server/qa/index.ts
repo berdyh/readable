@@ -1,7 +1,6 @@
-import { fetchKontextSystemPrompt } from '@/server/summarize/kontext';
-
 import { loadQuestionEvidence } from './context';
 import { generateJson } from '@/server/llm';
+import { recordPersonaSignals } from '@/server/persona/record';
 import type {
   AnswerCitation,
   AnswerResult,
@@ -15,7 +14,7 @@ import { getSystemPrompt } from '@/server/llm-config';
 const QA_RESPONSE_SCHEMA: Record<string, unknown> = {
   type: 'object',
   additionalProperties: false,
-  required: ['answer', 'citations'],
+  required: ['answer', 'citations', 'concepts'],
   properties: {
     answer: {
       type: 'string',
@@ -35,6 +34,25 @@ const QA_RESPONSE_SCHEMA: Record<string, unknown> = {
         },
       },
     },
+    concepts: {
+      type: 'array',
+      maxItems: 6,
+      description:
+        'Concepts the reader was exposed to while answering. Names should be terse domain phrases (e.g. "attention mechanism", "Bayesian inference"). Drawn only from the paper or its cited prerequisites — do not invent.',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        // Both fields are required so OpenAI's strict json_schema mode
+        // accepts the schema, but description is nullable — non-strict
+        // providers (Anthropic / Gemini / OpenRouter free) often omit
+        // descriptions when none is meaningful. The parser drops nulls.
+        required: ['concept', 'description'],
+        properties: {
+          concept: { type: 'string', minLength: 1, maxLength: 80 },
+          description: { type: ['string', 'null'], maxLength: 240 },
+        },
+      },
+    },
   },
 };
 
@@ -44,13 +62,15 @@ interface LlmCitationPayload {
   quote: string;
 }
 
+interface LlmConceptPayload {
+  concept: string;
+  description?: string;
+}
+
 interface LlmQaPayload {
   answer?: string;
   citations?: LlmCitationPayload[];
-}
-
-function mergeSystemPrompt(personaPrompt?: string): string {
-  return getSystemPrompt('qa', personaPrompt);
+  concepts?: LlmConceptPayload[];
 }
 
 function truncateText(text: string, maxLength = 600): string {
@@ -230,7 +250,7 @@ function buildQaUserPrompt(
   }
 
   lines.push(
-    '\nInstructions: Use the evidence above to answer the question. Reference specific chunk_ids and include page numbers in the answer (e.g., "(page 4)"). If the evidence is insufficient, respond that the paper does not address the question. Return JSON that matches the provided schema.',
+    '\nInstructions: Use the evidence above to answer the question. Reference specific chunk_ids and include page numbers in the answer (e.g., "(page 4)"). If the evidence is insufficient, respond that the paper does not address the question. After answering, list up to 6 *concepts* (terse domain phrases — never names of people, never paper titles) that the reader was exposed to while resolving this question. Return JSON that matches the provided schema.',
   );
 
   return lines.join('\n');
@@ -257,14 +277,7 @@ export async function answerPaperQuestion(
 ): Promise<AnswerResult> {
   const evidence = await loadQuestionEvidence(paperId, question, options);
 
-  const personaPrompt = await fetchKontextSystemPrompt({
-    taskId: 'qa_research_paper',
-    paperId,
-    userId: options.userId,
-    personaId: options.personaId,
-  }).catch(() => undefined);
-
-  const systemPrompt = mergeSystemPrompt(personaPrompt);
+  const systemPrompt = getSystemPrompt('qa');
   const userPrompt = buildQaUserPrompt(question, evidence);
 
   const raw = await generateJson({
@@ -306,6 +319,20 @@ export async function answerPaperQuestion(
       quote: fallbackChunk.text?.slice(0, 240).trim() || undefined,
     });
   }
+
+  // Persona writes — fire and forget so we never block the answer on
+  // disk I/O. A failure here is just a missed skill update.
+  void recordPersonaSignals({
+    userId: options.userId,
+    paperId,
+    interactionType: 'qa',
+    prompt: question,
+    response: answer,
+    chunkIds: citations.map((c) => c.chunkId),
+    concepts: payload.concepts ?? [],
+  }).catch((error) => {
+    console.warn('[qa] failed to persist persona signals:', error);
+  });
 
   return {
     answer,

@@ -111,4 +111,4 @@ pnpm dev
 pnpm exec tsx scripts/test-api-endpoints.ts
 ```
 
-Note: Some endpoints require environment variables (OpenAI, Weaviate, etc.) to function fully. The test script will verify routing and error handling even without full configuration.
+Note: Some endpoints require environment variables (OpenAI, Postgres `DATABASE_URL`, `QDRANT_URL`, etc.) to function fully. The test script will verify routing and error handling even without full configuration.

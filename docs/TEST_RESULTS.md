@@ -55,7 +55,7 @@
 
 1. **POST /api/summarize** - ⚠️ Status: 404
    - Error: "No content found for paper test-paper-id. Ingest the paper before summarizing."
-   - **Status:** Expected - requires a real paper ID that exists in Weaviate
+   - **Status:** Expected - requires a real paper ID that exists in Postgres
    - **Action:** No fix needed - this is proper error handling
 
 ### ❌ Errors Found (2)

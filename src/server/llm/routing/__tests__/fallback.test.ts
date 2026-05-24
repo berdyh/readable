@@ -133,6 +133,40 @@ describe('runWithModelFallback failover behavior', () => {
     expect(result.attempts[0].reason).toBe('rate_limit');
   });
 
+  it('tries a second model on the same provider within the same request', async () => {
+    const tries: string[] = [];
+    const run: RunFn<string> = async (ctx) => {
+      tries.push(`${ctx.provider}/${ctx.model}/${ctx.profile.id}`);
+      if (ctx.model === 'primary-model') {
+        throw new MockHttpError(402, 'insufficient_quota');
+      }
+      return 'same-provider-fallback-success';
+    };
+
+    const store = makeStore({
+      profiles: [profile({ id: 'openrouter:env', provider: 'openrouter' })],
+    });
+
+    const result = await runWithModelFallback({
+      primary: 'openrouter/primary-model',
+      fallbacks: ['openrouter/fallback-model'],
+      store,
+      run,
+    });
+
+    expect(result.result).toBe('same-provider-fallback-success');
+    expect(result.candidate).toMatchObject({
+      provider: 'openrouter',
+      model: 'fallback-model',
+    });
+    expect(tries).toEqual([
+      'openrouter/primary-model/openrouter:env',
+      'openrouter/fallback-model/openrouter:env',
+    ]);
+    expect(result.attempts).toHaveLength(1);
+    expect(result.attempts[0].reason).toBe('billing');
+  });
+
   it('tries every profile within a provider before advancing', async () => {
     const tries: string[] = [];
     const run: RunFn<string> = async (ctx) => {

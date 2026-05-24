@@ -22,6 +22,9 @@ const SUPPORTED_PROVIDERS: LlmProvider[] = [
   'openrouter',
 ];
 
+const OPENROUTER_DEFAULT_FALLBACK_MODEL =
+  'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free';
+
 /**
  * Get the default LLM provider from environment variables. OpenRouter
  * is the default because it has a no-cost free tier (Llama 3.3 70B,
@@ -101,6 +104,105 @@ function parseAllowedProviders(): LlmProvider[] {
     );
 }
 
+function taskSpecificModelEnvKeys(
+  provider: LlmProvider,
+  taskType: string | undefined,
+  suffix = 'MODEL',
+): string[] {
+  const providerUpper = provider.toUpperCase();
+  const normalized = taskType?.toLowerCase().replace(/-/g, '_');
+
+  if (
+    normalized === 'paper_summary' ||
+    normalized === 'summary' ||
+    normalized === 'summarize'
+  ) {
+    return [
+      `${providerUpper}_SUMMARY_${suffix}`,
+      `${providerUpper}_PAPER_SUMMARY_${suffix}`,
+    ];
+  }
+
+  if (normalized === 'selection_summary' || normalized === 'inline_summary') {
+    return [
+      `${providerUpper}_INLINE_${suffix}`,
+      `${providerUpper}_SELECTION_SUMMARY_${suffix}`,
+    ];
+  }
+
+  if (normalized === 'qa' || normalized === 'question') {
+    return [`${providerUpper}_QA_${suffix}`];
+  }
+
+  return [];
+}
+
+function getFirstEnvValue(keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = process.env[key]?.trim();
+    if (value) return value;
+  }
+  return undefined;
+}
+
+function splitModelList(value: string | undefined): string[] {
+  if (!value) return [];
+  return value
+    .split(/[\s,;]+/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function getRoutingModel(provider: LlmProvider, taskType: string | undefined): string {
+  const providerUpper = provider.toUpperCase();
+  const taskOverride = getFirstEnvValue(
+    taskSpecificModelEnvKeys(provider, taskType),
+  );
+  if (taskOverride) return taskOverride;
+
+  const providerDefault = process.env[`${providerUpper}_MODEL`]?.trim();
+  if (providerDefault) return providerDefault;
+
+  return getModel(provider, taskType);
+}
+
+function getProviderFallbackModels(
+  provider: LlmProvider,
+  taskType: string | undefined,
+  primaryModel: string,
+): string[] {
+  const providerUpper = provider.toUpperCase();
+  const configured = [
+    ...taskSpecificModelEnvKeys(provider, taskType, 'FALLBACK_MODELS'),
+    ...taskSpecificModelEnvKeys(provider, taskType, 'FALLBACK_MODEL'),
+    `${providerUpper}_FALLBACK_MODELS`,
+    `${providerUpper}_FALLBACK_MODEL`,
+  ].flatMap((key) => splitModelList(process.env[key]));
+
+  const defaults =
+    provider === 'openrouter' ? [OPENROUTER_DEFAULT_FALLBACK_MODEL] : [];
+
+  const seen = new Set<string>([primaryModel]);
+  const result: string[] = [];
+  for (const model of [...configured, ...defaults]) {
+    if (seen.has(model)) continue;
+    seen.add(model);
+    result.push(model);
+  }
+  return result;
+}
+
+function shouldUseFallbackRouting(
+  primaryProvider: LlmProvider,
+  taskType: string | undefined,
+): boolean {
+  if (parseAllowedProviders().length > 0) return true;
+  const primaryModel = getRoutingModel(primaryProvider, taskType);
+  return (
+    getProviderFallbackModels(primaryProvider, taskType, primaryModel).length > 0
+  );
+}
+
 /**
  * Warn once when the user has authenticated multiple providers but
  * hasn't opted into the fallback chain. Easy onboarding miss — the
@@ -136,20 +238,25 @@ function buildCandidates(
   primaryProvider: LlmProvider,
   taskType: string | undefined,
 ): { primary: ModelRef; fallbacks: ModelRef[] } {
-  const primaryModel = getModel(primaryProvider, taskType);
+  const primaryModel = getRoutingModel(primaryProvider, taskType);
   const primary = `${primaryProvider}/${primaryModel}` as ModelRef;
 
   const allowed = parseAllowedProviders();
-  if (allowed.length === 0) {
-    return { primary, fallbacks: [] };
+  const seen = new Set<string>([primary]);
+  const fallbacks = getProviderFallbackModels(
+    primaryProvider,
+    taskType,
+    primaryModel,
+  ).map((model) => `${primaryProvider}/${model}` as ModelRef);
+
+  for (const fallback of fallbacks) {
+    seen.add(fallback);
   }
 
-  const seen = new Set<string>([primary]);
-  const fallbacks: ModelRef[] = [];
   for (const provider of allowed) {
     if (provider === primaryProvider) continue;
     if (!hasAnyProviderKey(provider)) continue;
-    const modelName = getModel(provider, taskType);
+    const modelName = getRoutingModel(provider, taskType);
     const ref = `${provider}/${modelName}` as ModelRef;
     if (seen.has(ref)) continue;
     seen.add(ref);
@@ -267,12 +374,11 @@ export async function generateJson(
   };
 
   const primaryProvider = options?.provider ?? getDefaultProvider();
-  const allowed = parseAllowedProviders();
 
-  // Legacy fast path: no LLM_ALLOWED_PROVIDERS env set, no fallback
-  // requested. Skip the routing layer entirely so existing tests + the
-  // single-provider deploy stay on the simpler code path.
-  if (allowed.length === 0) {
+  // Legacy fast path: no provider or same-provider model fallback requested.
+  // Skip the routing layer entirely so existing no-fallback deploys stay on
+  // the simpler code path.
+  if (!shouldUseFallbackRouting(primaryProvider, options?.taskName)) {
     maybeLogRoutingHint();
     const config: LlmConfig = {
       provider: primaryProvider,
@@ -308,9 +414,8 @@ export async function generateText(
   },
 ): Promise<string> {
   const primaryProvider = options?.provider ?? getDefaultProvider();
-  const allowed = parseAllowedProviders();
 
-  if (allowed.length === 0) {
+  if (!shouldUseFallbackRouting(primaryProvider, options?.taskName)) {
     maybeLogRoutingHint();
     const config: LlmConfig = {
       provider: primaryProvider,

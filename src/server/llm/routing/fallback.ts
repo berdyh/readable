@@ -239,18 +239,28 @@ export async function runWithModelFallback<T>(
   let store = options.store;
   const attempts: FallbackAttempt[] = [];
   let attemptIndex = 0;
+  const profileIdsTriedInRun = new Map<RoutingProviderId, Set<string>>();
 
   for (const candidate of candidates) {
     const decision = decideCooldownAction(store, candidate, agentId, now());
+    const triedForProvider =
+      profileIdsTriedInRun.get(candidate.provider) ?? new Set<string>();
     if (decision.skip) {
-      continue;
+      if (triedForProvider.size === 0) {
+        continue;
+      }
     }
 
     const orderedIds = resolveAuthProfileOrder(store, candidate.provider, {
       now: now(),
     });
     let attemptList: string[];
-    if (decision.probeProfileId) {
+    if (decision.skip && triedForProvider.size > 0) {
+      // A different model on the same provider may still be viable even
+      // after the provider profile was put into cooldown by the previous
+      // candidate in this same request.
+      attemptList = Array.from(triedForProvider);
+    } else if (decision.probeProfileId) {
       attemptList = [decision.probeProfileId];
       getProbeMap(agentId).set(candidate.provider, now());
     } else {
@@ -262,6 +272,10 @@ export async function runWithModelFallback<T>(
     for (const profileId of attemptList) {
       const profile = store.profiles.find((p) => p.id === profileId);
       if (!profile) continue;
+      if (!profileIdsTriedInRun.has(candidate.provider)) {
+        profileIdsTriedInRun.set(candidate.provider, new Set());
+      }
+      profileIdsTriedInRun.get(candidate.provider)?.add(profileId);
 
       const isProbe = decision.probeProfileId === profileId;
 

@@ -52,11 +52,22 @@ Two paths, gated by `LLM_ALLOWED_PROVIDERS`:
 
 ### Single-provider fast path (legacy, default)
 
-If `LLM_ALLOWED_PROVIDERS` is **unset**, the request goes straight to the provider named in `LLM_PROVIDER` (or `options.provider`). No fallback machinery, no auth-profile store touched. Existing single-provider deploys keep their behaviour bit-for-bit.
+If `LLM_ALLOWED_PROVIDERS` is **unset**, the request goes straight to the provider named in `LLM_PROVIDER` (or `options.provider`) unless same-provider model fallbacks are configured for that provider. Existing single-provider deploys without model fallbacks keep their simpler path.
 
 ```bash
 LLM_PROVIDER=openrouter        # default; also accepts openai | anthropic | gemini
 ```
+
+OpenRouter also ships with a same-provider model fallback. If the primary
+OpenRouter model fails with quota/rate-limit/timeout/provider errors, the router
+tries:
+
+```bash
+OPENROUTER_FALLBACK_MODELS=nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+```
+
+Override the fallback chain with `OPENROUTER_FALLBACK_MODELS` or a task-specific
+variant such as `OPENROUTER_QA_FALLBACK_MODELS`.
 
 ### Multi-provider routing (OpenClaw pattern)
 

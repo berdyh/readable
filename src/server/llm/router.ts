@@ -22,9 +22,6 @@ const SUPPORTED_PROVIDERS: LlmProvider[] = [
   'openrouter',
 ];
 
-const OPENROUTER_DEFAULT_FALLBACK_MODEL =
-  'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free';
-
 /**
  * Get the default LLM provider from environment variables. OpenRouter
  * is the default because it has a no-cost free tier (Llama 3.3 70B,
@@ -179,12 +176,9 @@ function getProviderFallbackModels(
     `${providerUpper}_FALLBACK_MODEL`,
   ].flatMap((key) => splitModelList(process.env[key]));
 
-  const defaults =
-    provider === 'openrouter' ? [OPENROUTER_DEFAULT_FALLBACK_MODEL] : [];
-
   const seen = new Set<string>([primaryModel]);
   const result: string[] = [];
-  for (const model of [...configured, ...defaults]) {
+  for (const model of configured) {
     if (seen.has(model)) continue;
     seen.add(model);
     result.push(model);

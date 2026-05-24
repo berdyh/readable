@@ -58,16 +58,15 @@ If `LLM_ALLOWED_PROVIDERS` is **unset**, the request goes straight to the provid
 LLM_PROVIDER=openrouter        # default; also accepts openai | anthropic | gemini
 ```
 
-OpenRouter also ships with a same-provider model fallback. If the primary
-OpenRouter model fails with quota/rate-limit/timeout/provider errors, the router
-tries:
+OpenRouter can also use same-provider model fallback. If the primary OpenRouter
+model fails with quota/rate-limit/timeout/provider errors, set a fallback chain:
 
 ```bash
 OPENROUTER_FALLBACK_MODELS=nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
 ```
 
-Override the fallback chain with `OPENROUTER_FALLBACK_MODELS` or a task-specific
-variant such as `OPENROUTER_QA_FALLBACK_MODELS`.
+Configure the fallback chain with `OPENROUTER_FALLBACK_MODELS` or a
+task-specific variant such as `OPENROUTER_QA_FALLBACK_MODELS`.
 
 ### Multi-provider routing (OpenClaw pattern)
 

@@ -19,6 +19,7 @@
     "setup": "tsx scripts/setup.ts"
   },
   "dependencies": {
+    "@clerk/nextjs": "^7.4.1",
     "@tiptap/core": "^2.6.6",
     "@tiptap/extension-bubble-menu": "^2.6.6",
     "@tiptap/extension-character-count": "^2.6.6",

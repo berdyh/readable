@@ -172,6 +172,16 @@
             <code>/tmp/readable-vercel-ea706f9-chat-open-mobile.png</code>.
           </li>
           <li>
+            Chatbot answers use the shared <code>/api/qa</code> path, so they inherit
+            <code>LLM_ALLOWED_PROVIDERS</code> provider fallback and
+            <code>OPENROUTER_FALLBACK_MODELS</code> same-provider fallback from the LLM router.
+          </li>
+          <li>
+            The research chat side panel now has a draggable and keyboard-accessible vertical
+            separator. Width is clamped to sensible viewport bounds and saved in local browser
+            storage.
+          </li>
+          <li>
             Local Clerk keyless mode created a <code>.clerk/</code> directory during dev-server
             verification and shows Clerk's local setup prompt over the app. I kept the generated
             <code>.gitignore</code> guard because that directory can contain local auth

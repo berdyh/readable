@@ -272,6 +272,55 @@
           </li>
         </ul>
       </section>
+
+      <section>
+        <h2>2026-05-25 Chat Layout Resize Follow-up</h2>
+        <p>
+          The chatbot already uses the shared QA route and therefore inherits the configured LLM
+          routing and fallback behavior. I added an adjustable separator to the right-side research
+          chat panel so the reader can change the panel width without changing server behavior.
+        </p>
+
+        <h2>Design Decisions</h2>
+        <ul>
+          <li>
+            Implement the left edge of the fixed chat panel as a focusable vertical
+            <code>separator</code> with drag support and keyboard controls.
+          </li>
+          <li>
+            Persist the preferred chat width in <code>localStorage</code> so the panel stays at the
+            reader's chosen size across page reloads.
+          </li>
+          <li>
+            Clamp panel width to viewport-aware bounds: mobile keeps a full-screen panel, while
+            desktop allows a wider panel without covering the entire page.
+          </li>
+        </ul>
+
+        <h2>Deviations</h2>
+        <ul>
+          <li>
+            I did not expose a separate settings control for width. The visible divider itself is
+            the control, matching the user's request for the vertical line to be adjustable.
+          </li>
+        </ul>
+
+        <h2>Tradeoffs</h2>
+        <ul>
+          <li>
+            A local-only width preference avoids adding profile settings or server persistence for a
+            purely layout-level preference.
+          </li>
+        </ul>
+
+        <h2>Open Questions</h2>
+        <ul>
+          <li>
+            Confirm whether the width preference should eventually sync per signed-in user instead
+            of staying device-local.
+          </li>
+        </ul>
+      </section>
     </main>
   </body>
 </html>

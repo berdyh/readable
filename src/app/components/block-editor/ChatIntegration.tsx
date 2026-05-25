@@ -5,6 +5,7 @@ import { SignInButton, SignUpButton, useUser } from "@clerk/nextjs";
 import { useTheme } from "next-themes";
 import {
   BookOpenText,
+  GripVertical,
   Loader2,
   MessageSquare,
   MessageSquarePlus,
@@ -74,6 +75,40 @@ const QUICK_PROMPTS = [
   "What are the key findings?",
   "What are the main limitations?",
 ];
+const CHAT_PANEL_WIDTH_STORAGE_KEY = "readable:chat-panel-width";
+const DEFAULT_CHAT_PANEL_WIDTH = 460;
+const MIN_CHAT_PANEL_WIDTH = 360;
+const MAX_CHAT_PANEL_WIDTH = 760;
+const DESKTOP_PANEL_MARGIN = 80;
+
+function getPanelWidthBounds(): { min: number; max: number } {
+  if (typeof window === "undefined") {
+    return {
+      min: MIN_CHAT_PANEL_WIDTH,
+      max: MAX_CHAT_PANEL_WIDTH,
+    };
+  }
+
+  const viewportWidth = window.innerWidth;
+  if (viewportWidth < 640) {
+    return {
+      min: viewportWidth,
+      max: viewportWidth,
+    };
+  }
+
+  const max = Math.min(MAX_CHAT_PANEL_WIDTH, viewportWidth - DESKTOP_PANEL_MARGIN);
+  const min = Math.min(MIN_CHAT_PANEL_WIDTH, max);
+  return { min, max: Math.max(min, max) };
+}
+
+function clampChatPanelWidth(width: number): number {
+  const { min, max } = getPanelWidthBounds();
+  if (!Number.isFinite(width)) {
+    return Math.min(DEFAULT_CHAT_PANEL_WIDTH, max);
+  }
+  return Math.min(Math.max(width, min), max);
+}
 
 function createLocalId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -269,10 +304,47 @@ export function ChatSidePanel({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [panelError, setPanelError] = useState<string | null>(null);
+  const [panelWidth, setPanelWidth] = useState(DEFAULT_CHAT_PANEL_WIDTH);
+  const [isResizing, setIsResizing] = useState(false);
 
   useEffect(() => {
+    const savedWidth = Number(window.localStorage.getItem(CHAT_PANEL_WIDTH_STORAGE_KEY));
+    setPanelWidth(clampChatPanelWidth(savedWidth || DEFAULT_CHAT_PANEL_WIDTH));
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (!mounted) {
+      return;
+    }
+
+    window.localStorage.setItem(CHAT_PANEL_WIDTH_STORAGE_KEY, String(panelWidth));
+  }, [mounted, panelWidth]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setPanelWidth((current) => clampChatPanelWidth(current));
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  useEffect(() => {
+    if (!isResizing) {
+      return;
+    }
+
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    return () => {
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+    };
+  }, [isResizing]);
 
   useEffect(() => {
     if (!isOpen || !paperId || !mounted || !isLoaded) {
@@ -353,6 +425,57 @@ export function ChatSidePanel({
     .slice()
     .reverse()
     .find((message) => message.role === "assistant" && message.status !== "error");
+
+  const updatePanelWidthFromClientX = useCallback((clientX: number) => {
+    setPanelWidth(clampChatPanelWidth(window.innerWidth - clientX));
+  }, []);
+
+  const handleResizePointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (event.button !== 0) {
+        return;
+      }
+
+      event.preventDefault();
+      event.currentTarget.setPointerCapture(event.pointerId);
+      setIsResizing(true);
+      updatePanelWidthFromClientX(event.clientX);
+
+      const handlePointerMove = (moveEvent: PointerEvent) => {
+        updatePanelWidthFromClientX(moveEvent.clientX);
+      };
+
+      const stopResize = () => {
+        setIsResizing(false);
+        window.removeEventListener("pointermove", handlePointerMove);
+        window.removeEventListener("pointerup", stopResize);
+        window.removeEventListener("pointercancel", stopResize);
+      };
+
+      window.addEventListener("pointermove", handlePointerMove);
+      window.addEventListener("pointerup", stopResize);
+      window.addEventListener("pointercancel", stopResize);
+    },
+    [updatePanelWidthFromClientX],
+  );
+
+  const handleResizeKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    const step = event.shiftKey ? 48 : 16;
+
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      setPanelWidth((current) => clampChatPanelWidth(current + step));
+    } else if (event.key === "ArrowRight") {
+      event.preventDefault();
+      setPanelWidth((current) => clampChatPanelWidth(current - step));
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      setPanelWidth(getPanelWidthBounds().max);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      setPanelWidth(getPanelWidthBounds().min);
+    }
+  }, []);
 
   const handleNewChat = useCallback(async () => {
     if (!isSignedIn) {
@@ -548,13 +671,36 @@ export function ChatSidePanel({
   return (
     <aside
       className={clsx(
-        "fixed inset-y-0 right-0 z-50 flex h-dvh w-full max-w-[460px] flex-col border-l shadow-2xl",
+        "fixed inset-y-0 right-0 z-50 flex h-dvh flex-col border-l shadow-2xl",
+        isResizing && "select-none",
         isDarkMode
           ? "border-zinc-800 bg-zinc-950 text-zinc-100"
           : "border-zinc-200 bg-zinc-50 text-zinc-950",
       )}
+      style={{ width: `${panelWidth}px` }}
       aria-label="Research chat"
     >
+      <div
+        role="separator"
+        aria-label="Resize chat panel"
+        aria-orientation="vertical"
+        aria-valuemin={getPanelWidthBounds().min}
+        aria-valuemax={getPanelWidthBounds().max}
+        aria-valuenow={Math.round(panelWidth)}
+        tabIndex={0}
+        title="Resize chat panel"
+        onPointerDown={handleResizePointerDown}
+        onKeyDown={handleResizeKeyDown}
+        className={clsx(
+          "group absolute inset-y-0 left-0 z-20 flex w-3 -translate-x-1.5 cursor-col-resize touch-none items-center justify-center outline-none",
+          "after:absolute after:inset-y-0 after:left-1/2 after:w-px after:-translate-x-1/2 after:bg-zinc-300 after:transition after:content-['']",
+          "hover:after:w-1 hover:after:bg-emerald-500 focus-visible:after:w-1 focus-visible:after:bg-emerald-500",
+          "dark:after:bg-zinc-700 dark:hover:after:bg-emerald-400 dark:focus-visible:after:bg-emerald-400",
+          isResizing && "after:w-1 after:bg-emerald-500 dark:after:bg-emerald-400",
+        )}
+      >
+        <GripVertical className="pointer-events-none h-5 w-5 rounded bg-white/80 p-0.5 text-zinc-400 opacity-0 shadow-sm transition group-hover:opacity-100 group-focus-visible:opacity-100 dark:bg-zinc-950/80 dark:text-zinc-500" />
+      </div>
       {!isLoaded ? (
         <div className="flex h-full items-center justify-center">
           <Loader2 className="h-5 w-5 animate-spin text-zinc-400" />

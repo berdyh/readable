@@ -45,4 +45,7 @@ yarn-error.log*
 next-env.d.ts
 
 
-LOG.md 
+LOG.md
+# clerk configuration (can include secrets)
+/.clerk/
+.gstack/

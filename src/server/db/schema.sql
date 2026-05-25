@@ -91,6 +91,35 @@ CREATE TABLE IF NOT EXISTS interactions (
 CREATE INDEX IF NOT EXISTS interactions_user_paper_idx
   ON interactions(user_id, paper_id);
 
+CREATE TABLE IF NOT EXISTS chat_sessions (
+  session_id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  paper_id TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (session_id, user_id, paper_id)
+);
+CREATE INDEX IF NOT EXISTS chat_sessions_user_paper_idx
+  ON chat_sessions(user_id, paper_id, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS chat_messages (
+  session_id TEXT NOT NULL,
+  id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  paper_id TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+  content TEXT NOT NULL,
+  citations JSONB,
+  reasoning TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (session_id, id),
+  FOREIGN KEY (session_id, user_id, paper_id)
+    REFERENCES chat_sessions(session_id, user_id, paper_id)
+    ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS chat_messages_session_created_idx
+  ON chat_messages(session_id, created_at);
+
 -- Kontext prompt cache was removed when the Kontext.dev integration was
 -- dropped. Existing deployments can drop the table:
 --   DROP TABLE IF EXISTS kontext_prompts;

@@ -17,7 +17,6 @@ interface BlockEditorProps {
   errorMessage?: string | null;
   onStatusClear?: () => void;
   showChatButton?: boolean;
-  userId?: string;
 }
 
 export function BlockEditor({
@@ -28,7 +27,6 @@ export function BlockEditor({
   errorMessage,
   onStatusClear,
   showChatButton = true,
-  userId,
 }: BlockEditorProps) {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatSelection, setChatSelection] = useState<QuestionSelection | undefined>(undefined);
@@ -46,7 +44,6 @@ export function BlockEditor({
         onChatSelectionClear={() => setChatSelection(undefined)}
         showChatButton={showChatButton}
         paperId={paperId}
-        userId={userId}
       />
     </EditorProvider>
   );
@@ -63,7 +60,6 @@ function BlockEditorContent({
   onChatSelectionClear,
   showChatButton,
   paperId,
-  userId,
 }: {
   onSlashCommand?: (query: string, blockIndex: number) => void;
   statusMessage?: string | null;
@@ -75,7 +71,6 @@ function BlockEditorContent({
   onChatSelectionClear?: () => void;
   showChatButton: boolean;
   paperId: string;
-  userId?: string;
 }) {
   const { state, insertBlock } = useEditorStore();
 
@@ -92,21 +87,23 @@ function BlockEditorContent({
   // Handle block navigation from source clicks
   useEffect(() => {
     const handler = (event: Event) => {
-      const detail = (event as CustomEvent<{ page?: number; chunkId?: string; quote?: string; paperId: string }>).detail;
+      const detail = (
+        event as CustomEvent<{ page?: number; chunkId?: string; quote?: string; paperId: string }>
+      ).detail;
       if (!detail || detail.paperId !== paperId) {
         return;
       }
 
       // Helper to extract plain text from HTML
       const getPlainText = (html: string): string => {
-        const div = document.createElement('div');
+        const div = document.createElement("div");
         div.innerHTML = html;
-        return div.textContent || div.innerText || '';
+        return div.textContent || div.innerText || "";
       };
 
       // Helper to normalize text for comparison
       const normalizeText = (text: string): string => {
-        return text.toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 200);
+        return text.toLowerCase().replace(/\s+/g, " ").trim().slice(0, 200);
       };
 
       // Filter out divider blocks - they're not actual content blocks and shouldn't be navigated to
@@ -122,7 +119,7 @@ function BlockEditorContent({
       // Strategy 2: Try to match by quote text
       if (!targetBlock && detail.quote) {
         const normalizedQuote = normalizeText(detail.quote);
-        
+
         // Try exact match first
         targetBlock = contentBlocks.find((block) => {
           const blockText = normalizeText(getPlainText(block.content));
@@ -131,18 +128,18 @@ function BlockEditorContent({
 
         // If no exact match, try fuzzy match (check if quote contains key words from block)
         if (!targetBlock && normalizedQuote.length > 20) {
-          const quoteWords = normalizedQuote.split(' ').filter(w => w.length > 3);
-          
+          const quoteWords = normalizedQuote.split(" ").filter((w) => w.length > 3);
+
           // Only attempt fuzzy matching if we have qualifying words (length > 3)
           // If all words are 3 chars or less, skip fuzzy matching to avoid false positives
           if (quoteWords.length > 0) {
             // Require matching: 1 word if 1-2 words, up to 3 words if 3+ words available
             const minMatches = Math.min(3, quoteWords.length);
-            
+
             targetBlock = contentBlocks.find((block) => {
               const blockText = normalizeText(getPlainText(block.content));
               // Check if required number of words from quote appear in block
-              const matchingWords = quoteWords.filter(word => blockText.includes(word));
+              const matchingWords = quoteWords.filter((word) => blockText.includes(word));
               return matchingWords.length >= minMatches;
             });
           }
@@ -153,7 +150,7 @@ function BlockEditorContent({
       if (!targetBlock && detail.page) {
         // Find exact page match
         targetBlock = contentBlocks.find((block) => block.metadata?.page === detail.page);
-        
+
         // If no exact match, find closest page (within ±1)
         if (!targetBlock) {
           targetBlock = contentBlocks.find((block) => {
@@ -177,27 +174,40 @@ function BlockEditorContent({
         const sectionMatch = detail.chunkId.match(/^[A-Z]?\d+/);
         if (sectionMatch) {
           const sectionId = sectionMatch[0];
-          targetBlock = contentBlocks.find((block) => 
-            block.metadata?.section?.includes(sectionId) || 
-            block.content.toLowerCase().includes(sectionId.toLowerCase())
+          targetBlock = contentBlocks.find(
+            (block) =>
+              block.metadata?.section?.includes(sectionId) ||
+              block.content.toLowerCase().includes(sectionId.toLowerCase()),
           );
         }
       }
-      
+
       if (targetBlock) {
         // Find the block element and scroll to it
         const blockElement = document.querySelector(`[data-block-id="${targetBlock.id}"]`);
         if (blockElement) {
-          blockElement.scrollIntoView({ 
-            behavior: "smooth", 
+          blockElement.scrollIntoView({
+            behavior: "smooth",
             block: "center",
-            inline: "nearest"
+            inline: "nearest",
           });
-          
+
           // Add a temporary highlight effect
-          blockElement.classList.add("ring-2", "ring-blue-500", "dark:ring-blue-400", "bg-blue-50/50", "dark:bg-blue-950/30");
+          blockElement.classList.add(
+            "ring-2",
+            "ring-blue-500",
+            "dark:ring-blue-400",
+            "bg-blue-50/50",
+            "dark:bg-blue-950/30",
+          );
           setTimeout(() => {
-            blockElement.classList.remove("ring-2", "ring-blue-500", "dark:ring-blue-400", "bg-blue-50/50", "dark:bg-blue-950/30");
+            blockElement.classList.remove(
+              "ring-2",
+              "ring-blue-500",
+              "dark:ring-blue-400",
+              "bg-blue-50/50",
+              "dark:bg-blue-950/30",
+            );
           }, 2000);
         }
       }
@@ -208,9 +218,10 @@ function BlockEditorContent({
   }, [state.blocks, paperId]);
 
   // Always ensure there's at least one block
-  const blocksToRender = state.blocks.length === 0 
-    ? [{ id: "placeholder", type: "paragraph" as const, content: "" }]
-    : state.blocks;
+  const blocksToRender =
+    state.blocks.length === 0
+      ? [{ id: "placeholder", type: "paragraph" as const, content: "" }]
+      : state.blocks;
 
   return (
     <div className="w-full max-w-4xl mx-auto p-8">
@@ -264,21 +275,19 @@ function BlockEditorContent({
       )}
 
       {/* Block Editor */}
-      <div className={clsx("min-h-[400px] space-y-1 transition-opacity duration-200", state.loading && "opacity-50")}>
+      <div
+        className={clsx(
+          "min-h-[400px] space-y-1 transition-opacity duration-200",
+          state.loading && "opacity-50",
+        )}
+      >
         {blocksToRender.map((block, index) => (
-          <Block
-            key={block.id}
-            block={block}
-            index={index}
-            onSlashCommand={onSlashCommand}
-          />
+          <Block key={block.id} block={block} index={index} onSlashCommand={onSlashCommand} />
         ))}
       </div>
 
       {/* Floating Chat Button */}
-      {showChatButton && !isChatOpen && (
-        <ChatButton onClick={() => onChatToggle(true)} />
-      )}
+      {showChatButton && !isChatOpen && <ChatButton onClick={() => onChatToggle(true)} />}
 
       {/* Side Chat Panel */}
       <ChatSidePanel
@@ -287,7 +296,6 @@ function BlockEditorContent({
         onToggle={onChatToggle}
         selection={chatSelection}
         onSelectionClear={onChatSelectionClear}
-        userId={userId}
         onInsertBlocks={(blocks) => {
           // Insert blocks after the last block
           blocks.forEach((block, i) => {

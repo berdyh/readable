@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chat Bot Update Notes</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        line-height: 1.5;
+      }
+
+      body {
+        margin: 0;
+        background: Canvas;
+        color: CanvasText;
+      }
+
+      main {
+        max-width: 880px;
+        margin: 0 auto;
+        padding: 40px 24px 56px;
+      }
+
+      h1,
+      h2 {
+        line-height: 1.15;
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: 2rem;
+      }
+
+      h2 {
+        margin: 32px 0 12px;
+        font-size: 1.25rem;
+      }
+
+      p,
+      li {
+        max-width: 74ch;
+      }
+
+      .meta {
+        margin: 0 0 28px;
+        color: color-mix(in srgb, CanvasText 68%, Canvas 32%);
+      }
+
+      section {
+        border-top: 1px solid color-mix(in srgb, CanvasText 18%, Canvas 82%);
+        padding-top: 20px;
+      }
+
+      code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.95em;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Chat Bot Update Notes</h1>
+      <p class="meta">
+        Running notes for chatbot behavior, UI decisions, spec interpretation, and follow-up
+        questions.
+      </p>
+
+      <section>
+        <h2>2026-05-25 Chatbot Repair Pass</h2>
+        <p>
+          The chatbot work builds on the Clerk-user data isolation branch. The chat APIs are
+          authenticated and persisted through Postgres, so the UI must make signed-in state explicit
+          instead of allowing anonymous requests that fail later.
+        </p>
+
+        <h2>Design Decisions</h2>
+        <ul>
+          <li>
+            Treat the block-editor side panel as the primary chatbot surface because it owns saved
+            sessions, tabbed history, source navigation, and editor insertion.
+          </li>
+          <li>
+            Keep the inline chat block as a lighter embedded surface that writes answers back into
+            the block content rather than duplicating session tabs.
+          </li>
+          <li>
+            Make the chatbot authenticated-only in the UI to match the server routes that now derive
+            the user from Clerk.
+          </li>
+          <li>
+            Treat the tab delete control as session deletion because the existing API exposes
+            <code>DELETE /api/chat/history</code> rather than a hide/archive state.
+          </li>
+          <li>
+            Keep a tab visible if session deletion fails, and disable new-chat/tab-delete controls
+            while an answer is being saved so the active session cannot be removed mid-request.
+          </li>
+          <li>
+            Insert assistant answers into the editor only when the user clicks
+            <code>Insert answer</code>; successful answers are no longer auto-inserted.
+          </li>
+        </ul>
+
+        <h2>Deviations</h2>
+        <ul>
+          <li>
+            The unfinished <code>@</code> mention flow is not being kept as a pseudo-context picker.
+            It currently turns arbitrary typed text into a selection payload, which is misleading.
+          </li>
+          <li>
+            The side panel now shows selected PDF text as explicit context instead of using the
+            removed mention query state.
+          </li>
+        </ul>
+
+        <h2>Tradeoffs</h2>
+        <ul>
+          <li>
+            I am prioritizing a reliable saved-chat flow over anonymous temporary chat. Guest mode
+            can be added later, but it needs a separate persistence and account-merge policy.
+          </li>
+          <li>
+            Failed assistant answers remain local error messages when the answer request fails after
+            a user message is saved. Persisting failures would make history more complete, but it
+            risks storing transient provider or quota errors as durable chat content.
+          </li>
+        </ul>
+
+        <h2>Open Questions</h2>
+        <ul>
+          <li>
+            Confirm whether closed chat tabs should permanently delete their saved session, or only
+            hide it from the current panel.
+          </li>
+        </ul>
+
+        <h2>Verification Notes</h2>
+        <ul>
+          <li>
+            <code>next build --webpack</code> passes with network access for Google font fetching.
+            The default Turbopack build hung locally before producing an actionable error, so I used
+            the supported webpack build path for verification.
+          </li>
+          <li>
+            The local dev server started on <code>localhost:3001</code> because port 3000 was
+            occupied. <code>/</code>, <code>/test-block-editor</code>, and
+            <code>/papers/test-paper</code> each returned HTTP 200 while signed out.
+          </li>
+          <li>
+            After <code>gstack browse</code> became available, the Vercel preview rendered the
+            signed-out paper route on desktop and mobile. Opening the research chat showed the
+            sign-in guard with <code>Sign in</code> and <code>Sign up</code> actions.
+          </li>
+          <li>
+            Browser QA exposed avoidable signed-out <code>401</code> console entries from
+            <code>/api/skills</code> and <code>/api/summarize</code>. I added Clerk-aware client
+            guards so those background personalized requests wait for a signed-in user while server
+            routes keep enforcing auth.
+          </li>
+          <li>
+            Final Vercel QA for deployment <code>dpl_7oqcnmJdEnBQeeQg2DkzvFPZ7rT5</code> verified
+            the signed-out desktop and mobile chat panels after the guard fix. Screenshots were
+            captured at <code>/tmp/readable-vercel-ea706f9-chat-open-desktop.png</code> and
+            <code>/tmp/readable-vercel-ea706f9-chat-open-mobile.png</code>.
+          </li>
+          <li>
+            Local Clerk keyless mode created a <code>.clerk/</code> directory during dev-server
+            verification and shows Clerk's local setup prompt over the app. I kept the generated
+            <code>.gitignore</code> guard because that directory can contain local auth
+            configuration, and used Vercel preview as the screenshot QA source.
+          </li>
+        </ul>
+      </section>
+    </main>
+  </body>
+</html>

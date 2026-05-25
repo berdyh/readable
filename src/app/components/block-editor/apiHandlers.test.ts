@@ -43,9 +43,7 @@ describe("executeApiCommand", () => {
 
     expect(onInsertBlocks).toHaveBeenCalledTimes(1);
     const [blocks] = onInsertBlocks.mock.calls[0] as [Block[]];
-    expect(blocks[0]?.content).toContain(
-      "This command is not available in this editor yet.",
-    );
+    expect(blocks[0]?.content).toContain("This command is not available in this editor yet.");
   });
 
   it("shows inline guidance when /arxiv has no target", async () => {
@@ -60,8 +58,6 @@ describe("executeApiCommand", () => {
     const [blocks] = onInsertBlocks.mock.calls[0] as [Block[]];
     expect(blocks[0]?.content).toContain("needs an arXiv ID, DOI, or URL");
   });
-
-
 
   it("routes /explain to selection summary endpoint", async () => {
     const onInsertBlocks = vi.fn();
@@ -88,11 +84,38 @@ describe("executeApiCommand", () => {
       }),
     );
 
-    expect(fetchSpy).toHaveBeenCalledWith(
-      "/api/editor/selection/summary",
-      expect.any(Object),
-    );
+    expect(fetchSpy).toHaveBeenCalledWith("/api/editor/selection/summary", expect.any(Object));
+    const [, requestInit] = fetchSpy.mock.calls[0] as [string, { body: string }];
+    expect(JSON.parse(requestInit.body)).toEqual({
+      paperId: "paper-1",
+      selection: {
+        text: "selected text",
+        page: 1,
+        section: "Introduction",
+      },
+    });
     expect(onInsertBlocks).toHaveBeenCalledTimes(1);
+  });
+
+  it("omits client user ids from summary requests", async () => {
+    const onInsertBlocks = vi.fn();
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        paperId: "paper-1",
+        abstract: ["Short summary"],
+        sections: [],
+        keyTakeaways: [],
+        citations: [],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await executeApiCommand("summary", createContext(onInsertBlocks));
+
+    expect(fetchSpy).toHaveBeenCalledWith("/api/summarize", expect.any(Object));
+    const [, requestInit] = fetchSpy.mock.calls[0] as [string, { body: string }];
+    expect(JSON.parse(requestInit.body)).toEqual({ paperId: "paper-1" });
   });
   it("routes /arxiv to ingest endpoint when target is provided", async () => {
     const onInsertBlocks = vi.fn();

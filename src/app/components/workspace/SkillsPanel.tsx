@@ -1,5 +1,6 @@
 "use client";
 
+import { useUser } from "@clerk/nextjs";
 import { useEffect, useState } from "react";
 import { Sparkles } from "lucide-react";
 
@@ -12,13 +13,12 @@ interface SkillsConcept {
 }
 
 interface SkillsApiResponse {
-  userId: string;
-  total: number;
+  userId?: string;
+  total?: number;
   concepts: SkillsConcept[];
 }
 
 export interface SkillsPanelProps {
-  userId?: string;
   /**
    * When this counter changes, refetch. Caller bumps it after a QA /
    * summary call so newly-extracted concepts show up without a hard
@@ -37,37 +37,38 @@ function formatLearnedAt(value?: string): string {
   });
 }
 
-export function SkillsPanel({ userId, refreshKey }: SkillsPanelProps) {
+export function SkillsPanel({ refreshKey }: SkillsPanelProps) {
+  const { isLoaded, isSignedIn } = useUser();
   const [concepts, setConcepts] = useState<SkillsConcept[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [authRequiredFromApi, setAuthRequiredFromApi] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    let cancelled = false;
-    if (!userId) {
-      queueMicrotask(() => {
-        if (!cancelled) {
-          setConcepts([]);
-          setLoading(false);
-          setError(null);
-        }
-      });
-      return () => {
-        cancelled = true;
-      };
+    if (!isLoaded || !isSignedIn) {
+      return;
     }
+
+    let cancelled = false;
 
     queueMicrotask(() => {
       if (!cancelled) {
         setLoading(true);
         setError(null);
+        setAuthRequiredFromApi(false);
       }
     });
 
-    fetch(`/api/skills/${encodeURIComponent(userId)}`, {
+    fetch("/api/skills", {
       cache: "no-store",
     })
       .then((response) => {
+        if (response.status === 401) {
+          if (!cancelled) {
+            setAuthRequiredFromApi(true);
+          }
+          return { concepts: [] } as SkillsApiResponse;
+        }
         if (!response.ok) {
           throw new Error(`Skills request failed (${response.status}).`);
         }
@@ -89,7 +90,12 @@ export function SkillsPanel({ userId, refreshKey }: SkillsPanelProps) {
     return () => {
       cancelled = true;
     };
-  }, [userId, refreshKey]);
+  }, [isLoaded, isSignedIn, refreshKey]);
+
+  const authRequired = isLoaded && (!isSignedIn || authRequiredFromApi);
+  const visibleConcepts = authRequired ? [] : concepts;
+  const visibleError = authRequired ? null : error;
+  const isLoading = !isLoaded || (isSignedIn && loading);
 
   return (
     <aside
@@ -102,30 +108,34 @@ export function SkillsPanel({ userId, refreshKey }: SkillsPanelProps) {
           <Sparkles className="h-4 w-4" /> Your skills
         </h2>
         <span className="text-[10px] uppercase tracking-wide opacity-60">
-          {loading ? "loading…" : `${concepts?.length ?? 0} concepts`}
+          {isLoading ? "loading…" : `${visibleConcepts?.length ?? 0} concepts`}
         </span>
       </header>
 
-      {!userId && (
+      {authRequired && (
         <p className="text-xs opacity-70">Sign in to track concepts you encounter.</p>
       )}
 
-      {error && (
+      {visibleError && (
         <p className="text-xs text-amber-500" role="alert">
-          {error}
+          {visibleError}
         </p>
       )}
 
-      {userId && !error && concepts && concepts.length === 0 && !loading && (
-        <p className="text-xs opacity-70">
-          No concepts yet. Ask a question or generate a summary; encountered
-          concepts will be tracked here.
-        </p>
-      )}
+      {!authRequired &&
+        !visibleError &&
+        visibleConcepts &&
+        visibleConcepts.length === 0 &&
+        !isLoading && (
+          <p className="text-xs opacity-70">
+            No concepts yet. Ask a question or generate a summary; encountered concepts will be
+            tracked here.
+          </p>
+        )}
 
-      {concepts && concepts.length > 0 && (
+      {visibleConcepts && visibleConcepts.length > 0 && (
         <ul className="flex flex-wrap gap-1.5">
-          {concepts.slice(0, 30).map((entry) => (
+          {visibleConcepts.slice(0, 30).map((entry) => (
             <li
               key={entry.concept}
               className="flex max-w-full items-center gap-1.5 rounded-full border border-neutral-200 bg-neutral-100 px-2.5 py-1 text-xs text-neutral-700 dark:border-neutral-700 dark:bg-neutral-800/80 dark:text-neutral-200"

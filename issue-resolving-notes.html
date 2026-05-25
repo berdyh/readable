@@ -347,6 +347,76 @@
           </li>
         </ul>
       </section>
+
+      <section>
+        <h2>2026-05-25 OpenRouter Native Fallback Fix</h2>
+        <p>
+          The Vercel error showed the app-level router trying
+          <code>openrouter/openrouter/free</code>, which meant an OpenRouter model ID from
+          <code>OPENROUTER_FALLBACK_MODELS</code> was being rewrapped as an internal provider/model
+          ref instead of being sent to OpenRouter as a native fallback.
+        </p>
+
+        <h2>Design Decisions</h2>
+        <ul>
+          <li>
+            Keep <code>OPENROUTER_FALLBACK_MODELS</code> as the user-facing Vercel env var, but
+            interpret its values as raw OpenRouter model IDs for the upstream <code>models</code>
+            array.
+          </li>
+          <li>
+            Preserve <code>LLM_ALLOWED_PROVIDERS</code> for cross-provider app routing while letting
+            OpenRouter handle same-provider model fallback inside one OpenRouter request.
+          </li>
+          <li>
+            Use OpenRouter's current attribution header name,
+            <code>X-OpenRouter-Title</code>, while keeping the existing
+            <code>OPENROUTER_X_TITLE</code> env var as this app's local configuration name.
+          </li>
+        </ul>
+
+        <h2>Deviations</h2>
+        <ul>
+          <li>
+            I intentionally stopped converting OpenRouter fallback model IDs into app-level fallback
+            refs. That avoids doubled strings such as <code>openrouter/openrouter/free</code>
+            and matches OpenRouter's documented fallback API.
+          </li>
+        </ul>
+
+        <h2>Tradeoffs</h2>
+        <ul>
+          <li>
+            OpenRouter-native fallback gives cleaner Vercel configuration and fewer app-level retry
+            hops, but the app no longer sees each OpenRouter model attempt separately in its own
+            fallback summary.
+          </li>
+          <li>
+            I did not hard-code the Nvidia fallback model. The deployment remains configurable
+            through Vercel env vars.
+          </li>
+        </ul>
+
+        <h2>Open Questions</h2>
+        <ul>
+          <li>
+            Confirm whether you want to keep <code>openrouter/free</code> as one fallback model ID,
+            or replace it in Vercel with a specific current model such as
+            <code>nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free</code>.
+          </li>
+        </ul>
+
+        <h2>Verification Notes</h2>
+        <ul>
+          <li>
+            <code>pnpm test</code> passed with <code>128</code> tests, including new coverage for
+            OpenRouter's native <code>models</code> fallback body and the app-level router not
+            producing <code>openrouter/openrouter/free</code>.
+          </li>
+          <li><code>pnpm lint</code> completed with existing warnings and no errors.</li>
+          <li><code>pnpm exec next build --webpack</code> completed successfully.</li>
+        </ul>
+      </section>
     </main>
   </body>
 </html>

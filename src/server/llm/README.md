@@ -32,41 +32,47 @@ llm/
 ## Usage
 
 ```typescript
-import { generateJson, generateText } from '@/server/llm';
+import { generateJson, generateText } from "@/server/llm";
 
-const result = await generateJson({
-  systemPrompt: 'You are a helpful assistant.',
-  userPrompt: 'Summarize this paper.',
-  schema: { type: 'object', properties: { summary: { type: 'string' } } },
-}, { taskName: 'summary', temperature: 0.3 });
+const result = await generateJson(
+  {
+    systemPrompt: "You are a helpful assistant.",
+    userPrompt: "Summarize this paper.",
+    schema: { type: "object", properties: { summary: { type: "string" } } },
+  },
+  { taskName: "summary", temperature: 0.3 },
+);
 
 const text = await generateText({
-  systemPrompt: 'You are a helpful assistant.',
-  userPrompt: 'Explain this concept.',
+  systemPrompt: "You are a helpful assistant.",
+  userPrompt: "Explain this concept.",
 });
 ```
 
 ## Provider selection
 
-Two paths, gated by `LLM_ALLOWED_PROVIDERS`:
+Two paths, gated by `LLM_ALLOWED_PROVIDERS` for cross-provider routing:
 
 ### Single-provider fast path (legacy, default)
 
-If `LLM_ALLOWED_PROVIDERS` is **unset**, the request goes straight to the provider named in `LLM_PROVIDER` (or `options.provider`) unless same-provider model fallbacks are configured for that provider. Existing single-provider deploys without model fallbacks keep their simpler path.
+If `LLM_ALLOWED_PROVIDERS` is **unset**, the request goes straight to the provider named in `LLM_PROVIDER` (or `options.provider`). Existing single-provider deploys keep their simpler path.
 
 ```bash
 LLM_PROVIDER=openrouter        # default; also accepts openai | anthropic | gemini
 ```
 
-OpenRouter can also use same-provider model fallback. If the primary OpenRouter
-model fails with quota/rate-limit/timeout/provider errors, set a fallback chain:
+OpenRouter can also use its native same-provider model fallback. If the primary
+OpenRouter model fails, OpenRouter tries the request body's `models` array in
+order. Rate limits are one of the upstream errors that trigger this fallback:
 
 ```bash
 OPENROUTER_FALLBACK_MODELS=nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
 ```
 
-Configure the fallback chain with `OPENROUTER_FALLBACK_MODELS` or a
-task-specific variant such as `OPENROUTER_QA_FALLBACK_MODELS`.
+Configure the fallback chain with raw OpenRouter model IDs in
+`OPENROUTER_FALLBACK_MODELS` or a task-specific variant such as
+`OPENROUTER_QA_FALLBACK_MODELS`. Do not prefix values with the app's internal
+provider ref unless that prefix is part of the OpenRouter model ID itself.
 
 ### Multi-provider routing (OpenClaw pattern)
 
@@ -101,11 +107,11 @@ Provider/model refs use slash form: `openai/gpt-4o-mini`, `anthropic/claude-3-5-
 
 Configured in [`../llm-config/models.json`](../llm-config/models.json); see that folder's README for the full table. Quick summary:
 
-| Provider | paper_summary | qa | selection_summary |
-|---|---|---|---|
-| OpenAI | `gpt-4o-mini` | `gpt-4o-mini` | `gpt-4o-mini` |
-| Anthropic | `claude-3-haiku-20240307` | `claude-3-5-sonnet-20241022` | `claude-3-haiku-20240307` |
-| Gemini | `gemini-1.5-flash` | `gemini-1.5-pro` | `gemini-1.5-flash` |
+| Provider               | paper_summary                      | qa                                       | selection_summary           |
+| ---------------------- | ---------------------------------- | ---------------------------------------- | --------------------------- |
+| OpenAI                 | `gpt-4o-mini`                      | `gpt-4o-mini`                            | `gpt-4o-mini`               |
+| Anthropic              | `claude-3-haiku-20240307`          | `claude-3-5-sonnet-20241022`             | `claude-3-haiku-20240307`   |
+| Gemini                 | `gemini-1.5-flash`                 | `gemini-1.5-pro`                         | `gemini-1.5-flash`          |
 | OpenRouter (free tier) | `deepseek/deepseek-chat-v3.1:free` | `meta-llama/llama-3.3-70b-instruct:free` | `qwen/qwen3-235b-a22b:free` |
 
 Override via env: `OPENAI_QA_MODEL`, `ANTHROPIC_PAPER_SUMMARY_MODEL`, `OPENROUTER_QA_MODEL`, etc. Or set a coarse default with `OPENAI_MODEL`, `ANTHROPIC_MODEL`, `OPENROUTER_MODEL`.
@@ -131,7 +137,7 @@ interface LlmProviderInterface {
 }
 ```
 
-OpenRouter notes: OpenRouter's HTTP shape is OpenAI-compatible at `/chat/completions`, but most free models reject `response_format: { type: 'json_schema', strict: true }`. The provider therefore uses `response_format: { type: 'json_object' }` and appends the schema to the system prompt as a hint; the existing defensive JSON parsers in QA / summarize handle the result. OpenRouter requires `HTTP-Referer` + `X-Title` headers for attribution — defaults are configurable via `OPENROUTER_HTTP_REFERER` / `OPENROUTER_X_TITLE`.
+OpenRouter notes: OpenRouter's HTTP shape is OpenAI-compatible at `/chat/completions`, but most free models reject `response_format: { type: 'json_schema', strict: true }`. The provider therefore uses `response_format: { type: 'json_object' }` and appends the schema to the system prompt as a hint; the existing defensive JSON parsers in QA / summarize handle the result. When `OPENROUTER_FALLBACK_MODELS` is set, the provider sends those model IDs in OpenRouter's native `models` array instead of expanding them into app-level fallback candidates. OpenRouter attribution headers default to `HTTP-Referer` + `X-OpenRouter-Title`, configurable via `OPENROUTER_HTTP_REFERER` / `OPENROUTER_X_TITLE`.
 
 ## Credit
 

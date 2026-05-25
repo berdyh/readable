@@ -320,6 +320,32 @@
             of staying device-local.
           </li>
         </ul>
+
+        <h2>Verification Notes</h2>
+        <ul>
+          <li>
+            Vercel deployment <code>dpl_BZtDi7yJX1HcGe2VFekmCHT4bJgk</code> for commit
+            <code>ee71829</code> reached <code>READY</code>. The preview required a temporary Vercel
+            share URL for browser access because the direct deployment URL returned Vercel
+            authentication.
+          </li>
+          <li>
+            <code>gstack browse</code> verified the deployed <code>/test-block-editor</code> route:
+            after full page load, opening the research chat showed the signed-out guard and exposed
+            the new <code>role="separator"</code> handle. Screenshot:
+            <code>/tmp/readable-chat-resizer-preview.png</code>.
+          </li>
+          <li>
+            Keyboard resize verification on the deployed preview changed the panel from
+            <code>460px</code> to <code>476px</code> with <code>ArrowLeft</code>, then clamped to
+            <code>360px</code> with <code>End</code> and <code>760px</code> with <code>Home</code>.
+          </li>
+          <li>
+            A few preview attempts hit transient <code>ERR_NETWORK_CHANGED</code> during the
+            Vercel/Clerk redirect handshake. Retrying after <code>wait --load</code> produced a
+            stable run; the remaining console item was Clerk's development-key warning.
+          </li>
+        </ul>
       </section>
     </main>
   </body>

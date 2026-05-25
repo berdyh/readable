@@ -182,6 +182,18 @@
             storage.
           </li>
           <li>
+            Vercel deployment <code>dpl_BZtDi7yJX1HcGe2VFekmCHT4bJgk</code> for commit
+            <code>ee71829</code> reached <code>READY</code>. Browser QA used the temporary Vercel
+            share URL because the direct preview URL is protected.
+          </li>
+          <li>
+            <code>gstack browse</code> verified the deployed chat panel on
+            <code>/test-block-editor</code>: the separator appears in the opened panel, and keyboard
+            controls changed width from <code>460px</code> to <code>476px</code>, then clamped at
+            <code>360px</code> and <code>760px</code>. Screenshot:
+            <code>/tmp/readable-chat-resizer-preview.png</code>.
+          </li>
+          <li>
             Local Clerk keyless mode created a <code>.clerk/</code> directory during dev-server
             verification and shows Clerk's local setup prompt over the app. I kept the generated
             <code>.gitignore</code> guard because that directory can contain local auth

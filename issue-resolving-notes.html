@@ -203,6 +203,57 @@
           </li>
         </ul>
       </section>
+
+      <section>
+        <h2>2026-05-25 Browser QA Follow-up</h2>
+        <p>
+          Once <code>gstack browse</code> became available, I used it against the Vercel preview and
+          found that the signed-out chat panel rendered correctly on desktop and mobile, but two
+          unrelated personalized background calls still created avoidable signed-out
+          <code>401</code> console entries.
+        </p>
+
+        <h2>Design Decisions</h2>
+        <ul>
+          <li>
+            Keep server authorization unchanged: personalized routes still enforce Clerk auth and
+            return <code>401</code> when called without a signed-in user.
+          </li>
+          <li>
+            Add client-side Clerk guards to the skills panel and automatic paper summary fetch so
+            signed-out users see the existing sign-in messaging without triggering background
+            personalized API requests.
+          </li>
+        </ul>
+
+        <h2>Deviations</h2>
+        <ul>
+          <li>
+            I treated browser console <code>401</code> noise from hidden/background personalized
+            widgets as a QA issue even though the server responses were technically correct.
+          </li>
+        </ul>
+
+        <h2>Tradeoffs</h2>
+        <ul>
+          <li>
+            I did not add an anonymous summary or skills mode. Skipping those calls while signed out
+            keeps the behavior aligned with the account-tied persistence model.
+          </li>
+          <li>
+            Local browser QA remains limited by Clerk keyless mode showing its setup prompt. Vercel
+            preview QA is the better signal because it uses the configured project Clerk keys.
+          </li>
+        </ul>
+
+        <h2>Open Questions</h2>
+        <ul>
+          <li>
+            Confirm whether the signed-out reader should hide personalized panels entirely, or keep
+            the current visible sign-in prompts for discoverability.
+          </li>
+        </ul>
+      </section>
     </main>
   </body>
 </html>

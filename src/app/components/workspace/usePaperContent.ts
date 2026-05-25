@@ -1,26 +1,23 @@
 "use client";
 
+import { useUser } from "@clerk/nextjs";
 import { useEffect, useMemo, useState } from "react";
 
 import type { Block } from "../block-editor/types";
-import {
-  parseArxivHtmlToBlocks,
-  parseSummaryToBlocks,
-} from "../block-editor/parsers";
+import { parseArxivHtmlToBlocks, parseSummaryToBlocks } from "../block-editor/parsers";
 import type { InlineArxivIngestResult } from "@/server/editor/types";
 import type { SummaryResult } from "@/server/summarize/types";
 
 const DEFAULT_PDF_URL = "https://arxiv.org/pdf/1706.03762.pdf";
 const DEFAULT_PAPER_ID = "arxiv:1706.03762";
+const AUTH_REQUIRED_SUMMARY_MESSAGE = "Sign in to use personalized reading features.";
 
 const normalizeArxivId = (paperId: string | undefined): string | undefined => {
   if (!paperId) {
     return undefined;
   }
 
-  let normalized = paperId.startsWith("arxiv:")
-    ? paperId.slice("arxiv:".length)
-    : paperId;
+  let normalized = paperId.startsWith("arxiv:") ? paperId.slice("arxiv:".length) : paperId;
 
   normalized = normalized.replace(/v\d+$/i, "");
 
@@ -59,6 +56,7 @@ interface UsePaperContentOptions {
 }
 
 export const usePaperContent = ({ paperId, pdfUrl }: UsePaperContentOptions) => {
+  const { isLoaded: isUserLoaded, isSignedIn } = useUser();
   const resolvedPaperId = paperId && paperId.trim() ? paperId : DEFAULT_PAPER_ID;
   const fallbackPdfUrl = inferArxivPdfUrl(resolvedPaperId);
   const resolvedPdfUrl = pdfUrl ?? fallbackPdfUrl ?? DEFAULT_PDF_URL;
@@ -66,8 +64,7 @@ export const usePaperContent = ({ paperId, pdfUrl }: UsePaperContentOptions) => 
   const [summary, setSummary] = useState<SummaryResult | null>(null);
   const [isSummaryLoading, setIsSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
-  const [arxivHtmlContent, setArxivHtmlContent] =
-    useState<InlineArxivIngestResult | null>(null);
+  const [arxivHtmlContent, setArxivHtmlContent] = useState<InlineArxivIngestResult | null>(null);
   const [isHtmlLoading, setIsHtmlLoading] = useState(false);
   const [htmlError, setHtmlError] = useState<string | null>(null);
 
@@ -99,12 +96,8 @@ export const usePaperContent = ({ paperId, pdfUrl }: UsePaperContentOptions) => 
         });
 
         if (!response.ok) {
-          const payload = (await response.json().catch(() => null)) as
-            | { error?: string }
-            | null;
-          const message =
-            payload?.error ??
-            `HTML fetch failed with status ${response.status}.`;
+          const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+          const message = payload?.error ?? `HTML fetch failed with status ${response.status}.`;
           throw new Error(message);
         }
 
@@ -118,15 +111,8 @@ export const usePaperContent = ({ paperId, pdfUrl }: UsePaperContentOptions) => 
           return;
         }
 
-        console.warn(
-          "[ReaderWorkspace] HTML fetch failed, falling back to summary:",
-          caught,
-        );
-        setHtmlError(
-          caught instanceof Error
-            ? caught.message
-            : "Failed to load HTML content.",
-        );
+        console.warn("[ReaderWorkspace] HTML fetch failed, falling back to summary:", caught);
+        setHtmlError(caught instanceof Error ? caught.message : "Failed to load HTML content.");
       } finally {
         if (isMounted) {
           setIsHtmlLoading(false);
@@ -143,7 +129,7 @@ export const usePaperContent = ({ paperId, pdfUrl }: UsePaperContentOptions) => 
   }, [resolvedPaperId]);
 
   useEffect(() => {
-    if (isHtmlLoading) {
+    if (isHtmlLoading || !isUserLoaded || !isSignedIn) {
       return;
     }
 
@@ -191,9 +177,7 @@ export const usePaperContent = ({ paperId, pdfUrl }: UsePaperContentOptions) => 
         }
 
         setSummaryError(
-          caught instanceof Error
-            ? caught.message
-            : "Failed to load summary for this paper.",
+          caught instanceof Error ? caught.message : "Failed to load summary for this paper.",
         );
         setSummary(null);
       } finally {
@@ -212,7 +196,12 @@ export const usePaperContent = ({ paperId, pdfUrl }: UsePaperContentOptions) => 
       isMounted = false;
       controller.abort();
     };
-  }, [isHtmlLoading, resolvedPaperId]);
+  }, [isHtmlLoading, isSignedIn, isUserLoaded, resolvedPaperId]);
+
+  const authRequired = isUserLoaded && !isSignedIn;
+  const effectiveSummary = authRequired ? null : summary;
+  const effectiveSummaryError = authRequired ? AUTH_REQUIRED_SUMMARY_MESSAGE : summaryError;
+  const effectiveIsSummaryLoading = isUserLoaded && isSignedIn ? isSummaryLoading : false;
 
   const initialBlocks = useMemo<Block[]>(() => {
     if (arxivHtmlContent) {
@@ -230,11 +219,11 @@ export const usePaperContent = ({ paperId, pdfUrl }: UsePaperContentOptions) => 
       ];
     }
 
-    if (summary) {
-      return parseSummaryToBlocks(summary);
+    if (effectiveSummary) {
+      return parseSummaryToBlocks(effectiveSummary);
     }
 
-    if (isSummaryLoading) {
+    if (effectiveIsSummaryLoading) {
       return [
         {
           id: "loading-placeholder",
@@ -245,7 +234,7 @@ export const usePaperContent = ({ paperId, pdfUrl }: UsePaperContentOptions) => 
       ];
     }
 
-    if (summaryError && htmlError) {
+    if (effectiveSummaryError && htmlError && !authRequired) {
       return [
         {
           id: "error-placeholder",
@@ -256,12 +245,12 @@ export const usePaperContent = ({ paperId, pdfUrl }: UsePaperContentOptions) => 
       ];
     }
 
-    if (summaryError) {
+    if (effectiveSummaryError) {
       return [
         {
           id: "error-placeholder",
           type: "paragraph",
-          content: `Summary unavailable: ${summaryError}`,
+          content: `Summary unavailable: ${effectiveSummaryError}`,
           metadata: {},
         },
       ];
@@ -278,20 +267,21 @@ export const usePaperContent = ({ paperId, pdfUrl }: UsePaperContentOptions) => 
     ];
   }, [
     arxivHtmlContent,
+    authRequired,
+    effectiveIsSummaryLoading,
+    effectiveSummary,
+    effectiveSummaryError,
     htmlError,
     isHtmlLoading,
-    isSummaryLoading,
     resolvedPaperId,
-    summary,
-    summaryError,
   ]);
 
   return {
     resolvedPaperId,
     resolvedPdfUrl,
-    summary,
-    summaryError,
-    isSummaryLoading,
+    summary: effectiveSummary,
+    summaryError: effectiveSummaryError,
+    isSummaryLoading: effectiveIsSummaryLoading,
     arxivHtmlContent,
     isHtmlLoading,
     htmlError,

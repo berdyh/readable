@@ -155,13 +155,21 @@
             <code>/papers/test-paper</code> each returned HTTP 200 while signed out.
           </li>
           <li>
-            Screenshot-level QA was not completed because the local <code>gstack browse</code>
-            binary is not built and its skill workflow requires a separate one-time setup.
+            After <code>gstack browse</code> became available, the Vercel preview rendered the
+            signed-out paper route on desktop and mobile. Opening the research chat showed the
+            sign-in guard with <code>Sign in</code> and <code>Sign up</code> actions.
+          </li>
+          <li>
+            Browser QA exposed avoidable signed-out <code>401</code> console entries from
+            <code>/api/skills</code> and <code>/api/summarize</code>. I added Clerk-aware client
+            guards so those background personalized requests wait for a signed-in user while server
+            routes keep enforcing auth.
           </li>
           <li>
             Local Clerk keyless mode created a <code>.clerk/</code> directory during dev-server
-            verification. I kept the generated <code>.gitignore</code> guard because that directory
-            can contain local auth configuration.
+            verification and shows Clerk's local setup prompt over the app. I kept the generated
+            <code>.gitignore</code> guard because that directory can contain local auth
+            configuration, and used Vercel preview as the screenshot QA source.
           </li>
         </ul>
       </section>

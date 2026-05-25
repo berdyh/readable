@@ -48,3 +48,4 @@ next-env.d.ts
 LOG.md
 # clerk configuration (can include secrets)
 /.clerk/
+.gstack/

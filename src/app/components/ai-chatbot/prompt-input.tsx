@@ -1,17 +1,16 @@
 "use client";
 
-import { forwardRef, useState, useRef, useEffect } from "react";
+import { forwardRef, useRef, useEffect } from "react";
 import { clsx } from "clsx";
 import { Send, Paperclip, Globe } from "lucide-react";
 
 interface PromptInputProps extends Omit<React.HTMLAttributes<HTMLFormElement>, "onSubmit"> {
   onSubmit: (value: string) => void;
   className?: string;
-  autoSubmit?: boolean;
 }
 
 export const PromptInput = forwardRef<HTMLFormElement, PromptInputProps>(
-  ({ onSubmit, className, children, autoSubmit = false, ...props }, ref) => {
+  ({ onSubmit, className, children, ...props }, ref) => {
     const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
       e.preventDefault();
       const formData = new FormData(e.currentTarget);
@@ -35,8 +34,7 @@ export const PromptInput = forwardRef<HTMLFormElement, PromptInputProps>(
 );
 PromptInput.displayName = "PromptInput";
 
-interface PromptInputTextareaProps
-  extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
+interface PromptInputTextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
   onMentionTrigger?: (query: string) => void;
 }
 
@@ -48,7 +46,6 @@ export function PromptInputTextarea({
   ...props
 }: PromptInputTextareaProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
 
   // Auto-resize textarea based on content
   useEffect(() => {
@@ -77,14 +74,11 @@ export function PromptInputTextarea({
         const textAfterAt = textBeforeCursor.substring(lastAt + 1);
         // Check if there's a space or newline after @ (mention ended)
         if (textAfterAt.match(/[\s\n]/)) {
-          setMentionQuery(null);
           onMentionTrigger?.("");
         } else {
-          setMentionQuery(textAfterAt);
           onMentionTrigger?.(textAfterAt);
         }
       } else {
-        setMentionQuery(null);
         onMentionTrigger?.("");
       }
     };
@@ -224,4 +218,3 @@ export function PromptInputSubmit({
     </button>
   );
 }
-

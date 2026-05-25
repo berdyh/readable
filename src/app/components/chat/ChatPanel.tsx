@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { SignInButton, SignUpButton, useUser } from "@clerk/nextjs";
 
 import type { AnswerResult, QuestionSelection } from "@/server/qa/types";
 
@@ -170,7 +171,7 @@ const MessageBubble = ({ message }: { message: ChatMessage }) => {
 
   return (
     <div
-      className={`flex flex-col gap-3 rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${isUser ? "self-end bg-zinc-900 text-white" : "self-start bg-white text-zinc-800"}`}
+      className={`flex max-w-[88%] flex-col gap-3 rounded-lg px-4 py-3 text-sm leading-relaxed shadow-sm ${isUser ? "self-end bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950" : "self-start border border-zinc-200 bg-white text-zinc-800 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100"}`}
     >
       <div className="whitespace-pre-wrap">{message.content}</div>
       {!isUser && message.citations?.length ? (
@@ -178,7 +179,7 @@ const MessageBubble = ({ message }: { message: ChatMessage }) => {
           {message.citations.map((cite) => (
             <span
               key={`${cite.chunkId}-${cite.page ?? "?"}`}
-              className="inline-flex items-center gap-1 rounded-full border border-blue-100 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700"
+              className="inline-flex items-center gap-1 rounded-full border border-blue-100 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-200"
             >
               {cite.page ? `p.${cite.page}` : "p.?"}
               <span className="text-[10px] uppercase tracking-wide text-blue-500">
@@ -204,13 +205,15 @@ const SelectionCallout = ({
   }
 
   return (
-    <div className="flex items-start justify-between gap-4 rounded-lg border border-amber-200 bg-amber-50/80 p-3 text-xs text-amber-700">
+    <div className="flex items-start justify-between gap-4 rounded-lg border border-amber-200 bg-amber-50/80 p-3 text-xs text-amber-700 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-200">
       <div className="flex flex-col gap-1">
         <span className="font-semibold uppercase tracking-wide text-amber-600">
           Highlight added to prompt
         </span>
-        <p className="line-clamp-3 whitespace-pre-wrap text-amber-700">“{selection.text.trim()}”</p>
-        <div className="flex flex-wrap gap-2 text-[10px] font-medium uppercase tracking-wide text-amber-500">
+        <p className="line-clamp-3 whitespace-pre-wrap text-amber-700 dark:text-amber-200">
+          “{selection.text.trim()}”
+        </p>
+        <div className="flex flex-wrap gap-2 text-[10px] font-medium uppercase tracking-wide text-amber-500 dark:text-amber-300">
           {typeof selection.page === "number" && <span>Page {selection.page}</span>}
           {selection.section && <span>{selection.section}</span>}
         </div>
@@ -219,7 +222,7 @@ const SelectionCallout = ({
         <button
           type="button"
           onClick={onClear}
-          className="text-[10px] font-semibold uppercase tracking-wide text-amber-600 transition hover:text-amber-700"
+          className="text-[10px] font-semibold uppercase tracking-wide text-amber-600 transition hover:text-amber-700 dark:text-amber-300 dark:hover:text-amber-200"
         >
           Clear
         </button>
@@ -238,6 +241,7 @@ const ChatPanel = ({
   onAnswerReceived,
   onError,
 }: ChatPanelProps) => {
+  const { isLoaded, isSignedIn } = useUser();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -333,6 +337,10 @@ const ChatPanel = ({
       if (!question || isSubmitting) {
         return;
       }
+      if (!isSignedIn) {
+        reportError("Sign in to ask saved questions.");
+        return;
+      }
 
       setIsSubmitting(true);
       setError(null);
@@ -395,6 +403,7 @@ const ChatPanel = ({
     },
     [
       isSubmitting,
+      isSignedIn,
       onAnswerReceived,
       onDraftChange,
       onQuestionSent,
@@ -479,23 +488,55 @@ const ChatPanel = ({
   );
 
   return (
-    <div className="flex h-full flex-col gap-4 rounded-xl border border-zinc-200 bg-zinc-100/60 p-4 shadow-sm">
+    <div className="flex h-full flex-col gap-4 rounded-lg border border-zinc-200 bg-zinc-100/60 p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/60">
       <div className="flex items-center justify-between">
         <div className="flex flex-col">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
             Research Chat
           </h2>
-          <p className="text-xs text-zinc-500">Ask grounded questions about this paper.</p>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            Ask grounded questions about this paper.
+          </p>
         </div>
       </div>
 
+      {!isLoaded && (
+        <div className="rounded-lg border border-zinc-200 bg-white p-4 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+          Loading chat...
+        </div>
+      )}
+
+      {isLoaded && !isSignedIn && (
+        <div className="rounded-lg border border-zinc-200 bg-white p-4 text-sm text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200">
+          <p className="mb-3">Sign in to use paper chat.</p>
+          <div className="flex flex-wrap gap-2">
+            <SignInButton>
+              <button
+                type="button"
+                className="rounded-lg bg-zinc-950 px-3 py-2 text-sm font-medium text-white transition hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
+              >
+                Sign in
+              </button>
+            </SignInButton>
+            <SignUpButton>
+              <button
+                type="button"
+                className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-800 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-800"
+              >
+                Sign up
+              </button>
+            </SignUpButton>
+          </div>
+        </div>
+      )}
+
       <div
         ref={scrollRef}
-        className="flex min-h-[220px] flex-1 flex-col gap-3 overflow-y-auto rounded-lg border border-zinc-200 bg-white p-4"
+        className="flex min-h-[220px] flex-1 flex-col gap-3 overflow-y-auto rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900"
         aria-live="polite"
       >
         {messages.length === 0 ? (
-          <div className="flex h-full items-center justify-center text-sm text-zinc-400">
+          <div className="flex h-full items-center justify-center text-sm text-zinc-400 dark:text-zinc-500">
             Start by asking how the Transformer differs from attention-only baselines.
           </div>
         ) : (
@@ -506,7 +547,7 @@ const ChatPanel = ({
       <SelectionCallout selection={selection} onClear={selection ? onSelectionClear : undefined} />
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-600">
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-600 dark:border-red-900/70 dark:bg-red-950/30 dark:text-red-200">
           {error}
         </div>
       )}
@@ -514,7 +555,7 @@ const ChatPanel = ({
       <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
         <label
           htmlFor={textareaId}
-          className="text-xs font-semibold uppercase tracking-wide text-zinc-500"
+          className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400"
         >
           Ask a question
         </label>
@@ -526,7 +567,8 @@ const ChatPanel = ({
             onChange={(event) => onDraftChange(event.target.value)}
             onKeyDown={onKeyDown}
             placeholder="Ask how self-attention compares to recurrence…"
-            className="min-h-[96px] w-full resize-y rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm leading-relaxed text-zinc-800 outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200"
+            disabled={!isLoaded || !isSignedIn || isSubmitting}
+            className="min-h-[96px] w-full resize-y rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm leading-relaxed text-zinc-800 outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-600 dark:focus:ring-zinc-800"
           />
           {showSlashMenu && filteredCommands.length > 0 && (
             <SlashCommandMenu
@@ -542,11 +584,11 @@ const ChatPanel = ({
             />
           )}
         </div>
-        <div className="flex items-center justify-end text-xs text-zinc-500">
+        <div className="flex items-center justify-end text-xs text-zinc-500 dark:text-zinc-400">
           <button
             type="submit"
-            disabled={isSubmitting || !draft.trim()}
-            className="inline-flex items-center gap-2 rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={isSubmitting || !draft.trim() || !isLoaded || !isSignedIn}
+            className="inline-flex items-center gap-2 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
           >
             {isSubmitting ? "Sending…" : "Send"}
           </button>

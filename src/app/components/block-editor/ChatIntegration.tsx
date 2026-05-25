@@ -1,25 +1,29 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { SignInButton, SignUpButton, useUser } from "@clerk/nextjs";
 import { useTheme } from "next-themes";
-import { MessageSquare, X, Plus, Upload } from "lucide-react";
+import {
+  BookOpenText,
+  Loader2,
+  MessageSquare,
+  MessageSquarePlus,
+  PanelRightClose,
+  Send,
+  Sparkles,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
 import { clsx } from "clsx";
+
 import type { Block } from "./types";
 import type { QuestionSelection } from "@/server/qa/types";
-import {
-  Conversation,
-  ConversationContent,
-  ConversationScrollButton,
-} from "../ai-chatbot/conversation";
-import { Message, MessageAvatar, MessageContent } from "../ai-chatbot/message";
-import {
-  PromptInput,
-  PromptInputSubmit,
-  PromptInputTextarea,
-  PromptInputToolbar,
-} from "../ai-chatbot/prompt-input";
-import { Reasoning, ReasoningContent } from "../ai-chatbot/reasoning";
-import { Sources, SourcesContent } from "../ai-chatbot/sources";
+import { Conversation, ConversationContent } from "../ai-chatbot/conversation";
+import { Message, MessageAvatar } from "../ai-chatbot/message";
+import { PromptInputTextarea } from "../ai-chatbot/prompt-input";
+import { Reasoning } from "../ai-chatbot/reasoning";
+import { Sources, type Source } from "../ai-chatbot/sources";
 
 interface ChatIntegrationProps {
   paperId: string;
@@ -41,29 +45,212 @@ interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
-  citations?: Array<{ chunkId: string; page?: number; quote?: string }>;
+  citations?: Source[];
   reasoning?: string;
   createdAt: number;
+  status?: "error";
+}
+
+interface ChatSessionResponse {
+  session: {
+    id: string;
+    paperId: string;
+    createdAt: string;
+  };
+}
+
+interface ChatHistoryResponse {
+  sessions?: Array<{
+    sessionId: string;
+    messages: ChatMessage[];
+    createdAt: number;
+    updatedAt: number;
+  }>;
+  messages?: ChatMessage[];
+}
+
+const QUICK_PROMPTS = [
+  "Summarize this paper",
+  "What are the key findings?",
+  "What are the main limitations?",
+];
+
+function createLocalId(prefix: string): string {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function createDraftTab(): ChatTab {
+  return {
+    id: createLocalId("chat"),
+    title: "New chat",
+    messages: [],
+    sessionId: null,
+  };
+}
+
+function titleFromQuestion(question: string): string {
+  const compact = question.replace(/\s+/g, " ").trim();
+  if (!compact) return "New chat";
+  return compact.length > 42 ? `${compact.slice(0, 39)}...` : compact;
+}
+
+async function readResponseError(response: Response, fallback: string): Promise<string> {
+  const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+  return payload?.error ?? fallback;
+}
+
+async function createRemoteSession(paperId: string): Promise<string> {
+  const response = await fetch("/api/chat/session", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ paperId }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readResponseError(response, "Failed to create chat session."));
+  }
+
+  const payload = (await response.json()) as ChatSessionResponse;
+  return payload.session.id;
+}
+
+async function saveChatMessage(
+  sessionId: string,
+  paperId: string,
+  message: ChatMessage,
+): Promise<void> {
+  const response = await fetch("/api/chat/history", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      sessionId,
+      paperId,
+      message,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await readResponseError(response, "Failed to save chat history."));
+  }
+}
+
+async function deleteChatSession(sessionId: string): Promise<void> {
+  const response = await fetch(`/api/chat/history?sessionId=${encodeURIComponent(sessionId)}`, {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    throw new Error(await readResponseError(response, "Failed to delete chat session."));
+  }
 }
 
 /**
- * Floating AI chat button that opens chat panel
+ * Floating AI chat button that opens chat panel.
  */
 export function ChatButton({ onClick }: { onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="fixed bottom-8 right-8 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg transition-all hover:bg-blue-700 hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:bg-blue-500 dark:hover:bg-blue-600"
-      aria-label="Open AI chat"
+      className="fixed bottom-8 right-8 z-50 flex h-14 w-14 items-center justify-center rounded-full border border-white/20 bg-zinc-950 text-white shadow-xl transition hover:-translate-y-0.5 hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 dark:border-zinc-700 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
+      aria-label="Open research chat"
+      title="Open research chat"
     >
       <MessageSquare className="h-6 w-6" />
     </button>
   );
 }
 
+function ChatMessageBubble({ message, paperId }: { message: ChatMessage; paperId: string }) {
+  const isUser = message.role === "user";
+  const isError = message.status === "error";
+
+  return (
+    <Message from={message.role} className="items-start">
+      <MessageAvatar from={message.role} />
+      <div
+        className={clsx("flex max-w-[82%] flex-col gap-2", isUser ? "items-end" : "items-start")}
+      >
+        <div
+          className={clsx(
+            "rounded-lg px-4 py-3 text-sm leading-relaxed shadow-sm",
+            "break-words",
+            isUser && "bg-zinc-950 text-white dark:bg-zinc-100 dark:text-zinc-950",
+            !isUser &&
+              !isError &&
+              "border border-zinc-200 bg-white text-zinc-800 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100",
+            isError &&
+              "border border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/70 dark:bg-rose-950/30 dark:text-rose-200",
+          )}
+        >
+          <div className="whitespace-pre-wrap">{message.content}</div>
+        </div>
+
+        {!isUser && message.citations && message.citations.length > 0 && (
+          <Sources sources={message.citations} defaultVisible={false} paperId={paperId} />
+        )}
+
+        {!isUser && message.reasoning && <Reasoning content={message.reasoning} />}
+      </div>
+    </Message>
+  );
+}
+
+function AuthRequiredPanel({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="flex h-full flex-col bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
+      <header className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+        <div className="flex items-center gap-2">
+          <MessageSquare className="h-4 w-4 text-emerald-500" />
+          <h2 className="text-sm font-semibold">Research chat</h2>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-100"
+          aria-label="Close chat"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </header>
+
+      <div className="flex flex-1 items-center justify-center px-6">
+        <div className="flex max-w-sm flex-col items-center gap-4 text-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+            <Sparkles className="h-5 w-5" />
+          </div>
+          <div className="space-y-2">
+            <h3 className="text-base font-semibold">Sign in to chat</h3>
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              Saved chats, sources, and reading preferences are tied to your account.
+            </p>
+          </div>
+          <div className="flex flex-wrap justify-center gap-2">
+            <SignInButton>
+              <button
+                type="button"
+                className="rounded-lg bg-zinc-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
+              >
+                Sign in
+              </button>
+            </SignInButton>
+            <SignUpButton>
+              <button
+                type="button"
+                className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-800 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-900"
+              >
+                Sign up
+              </button>
+            </SignUpButton>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /**
- * Block editor AI chat side panel with tabs
+ * Block editor AI chat side panel with saved sessions.
  */
 export function ChatSidePanel({
   paperId,
@@ -71,678 +258,503 @@ export function ChatSidePanel({
   onToggle,
   onInsertBlocks,
   selection,
+  onSelectionClear,
 }: ChatIntegrationProps) {
   const { resolvedTheme } = useTheme();
+  const { isLoaded, isSignedIn } = useUser();
   const [mounted, setMounted] = useState(false);
-  const [tabs, setTabs] = useState<ChatTab[]>([
-    {
-      id: `chat-${Date.now()}`,
-      title: "New AI chat",
-      messages: [],
-      sessionId: null,
-    },
-  ]);
-  const [activeTabId, setActiveTabId] = useState<string | null>(tabs[0]?.id || null);
+  const [tabs, setTabs] = useState<ChatTab[]>(() => [createDraftTab()]);
+  const [activeTabId, setActiveTabId] = useState<string | null>(tabs[0]?.id ?? null);
   const [input, setInput] = useState("");
-  const [mentionQuery, setMentionQuery] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const mentionMenuRef = useRef<HTMLDivElement>(null);
-  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [panelError, setPanelError] = useState<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  // Load chat history for paper on mount
   useEffect(() => {
-    if (!isOpen || !paperId || !mounted) {
+    if (!isOpen || !paperId || !mounted || !isLoaded) {
       return;
     }
 
+    if (!isSignedIn) {
+      setIsLoadingHistory(false);
+      setTabs([createDraftTab()]);
+      setActiveTabId(null);
+      setPanelError(null);
+      return;
+    }
+
+    let cancelled = false;
+
     const loadChatHistory = async () => {
+      setIsLoadingHistory(true);
+      setPanelError(null);
+
       try {
-        setIsLoadingHistory(true);
-        const response = await fetch(`/api/chat/history?paperId=${encodeURIComponent(paperId)}`);
+        const response = await fetch(`/api/chat/history?paperId=${encodeURIComponent(paperId)}`, {
+          cache: "no-store",
+        });
 
         if (!response.ok) {
-          console.error("Failed to load chat history");
-          setIsLoadingHistory(false);
-          return;
+          throw new Error(await readResponseError(response, "Failed to load saved chats."));
         }
 
-        const result = (await response.json()) as {
-          sessions?: Array<{
-            sessionId: string;
-            messages: ChatMessage[];
-            createdAt: number;
-            updatedAt: number;
-          }>;
-        };
+        const result = (await response.json()) as ChatHistoryResponse;
+        if (cancelled) return;
 
         if (result.sessions && result.sessions.length > 0) {
-          // Load existing sessions as tabs
-          const loadedTabs: ChatTab[] = result.sessions.map((session, index) => ({
+          const loadedTabs = result.sessions.map((session, index) => ({
             id: `chat-${session.sessionId}`,
-            title: index === 0 ? "New AI chat" : `Chat ${index + 1}`,
+            title: titleFromQuestion(
+              session.messages.find((message) => message.role === "user")?.content ??
+                `Chat ${index + 1}`,
+            ),
             messages: session.messages,
             sessionId: session.sessionId,
           }));
-
           setTabs(loadedTabs);
-          setActiveTabId(loadedTabs[0]?.id || null);
+          setActiveTabId(loadedTabs[0]?.id ?? null);
         } else {
-          // No history, create default tab
-          const defaultTab: ChatTab = {
-            id: `chat-${Date.now()}`,
-            title: "New AI chat",
-            messages: [],
-            sessionId: null,
-          };
-          setTabs([defaultTab]);
-          setActiveTabId(defaultTab.id);
+          const draftTab = createDraftTab();
+          setTabs([draftTab]);
+          setActiveTabId(draftTab.id);
         }
       } catch (error) {
-        console.error("Error loading chat history:", error);
-        // Fallback to default tab
-        const defaultTab: ChatTab = {
-          id: `chat-${Date.now()}`,
-          title: "New AI chat",
-          messages: [],
-          sessionId: null,
-        };
-        setTabs([defaultTab]);
-        setActiveTabId(defaultTab.id);
+        if (cancelled) return;
+        const message = error instanceof Error ? error.message : "Failed to load saved chats.";
+        setPanelError(message);
+        const draftTab = createDraftTab();
+        setTabs([draftTab]);
+        setActiveTabId(draftTab.id);
       } finally {
-        setIsLoadingHistory(false);
+        if (!cancelled) {
+          setIsLoadingHistory(false);
+        }
       }
     };
 
     void loadChatHistory();
-  }, [isOpen, paperId, mounted]);
 
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoaded, isOpen, isSignedIn, mounted, paperId]);
+
+  const activeTab = useMemo(
+    () => tabs.find((tab) => tab.id === activeTabId) ?? tabs[0],
+    [activeTabId, tabs],
+  );
   const isDarkMode = mounted && resolvedTheme === "dark";
-  const activeTab = tabs.find((tab) => tab.id === activeTabId);
+  const selectedText = selection?.text?.trim();
+  const lastAssistantMessage = activeTab?.messages
+    .slice()
+    .reverse()
+    .find((message) => message.role === "assistant" && message.status !== "error");
 
-  // Create new chat tab
   const handleNewChat = useCallback(async () => {
+    if (!isSignedIn) {
+      setPanelError("Sign in to start a saved chat.");
+      return;
+    }
+
     try {
-      const response = await fetch("/api/chat/session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          paperId,
-        }),
-      });
+      const sessionId = await createRemoteSession(paperId);
+      const newTab: ChatTab = {
+        id: `chat-${sessionId}`,
+        title: "New chat",
+        messages: [],
+        sessionId,
+      };
+      setTabs((prev) => [...prev, newTab]);
+      setActiveTabId(newTab.id);
+      setInput("");
+      setPanelError(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to create chat session.";
+      setPanelError(message);
+    }
+  }, [isSignedIn, paperId]);
 
-      let sessionId: string | null = null;
-      if (response.ok) {
-        const result = (await response.json()) as { session: { id: string } };
-        sessionId = result.session.id;
-      }
+  const handleIngestToBlock = useCallback(() => {
+    if (!lastAssistantMessage || !onInsertBlocks) {
+      return;
+    }
 
-      // Load messages for this session if sessionId exists
-      let initialMessages: ChatMessage[] = [];
-      if (sessionId) {
+    onInsertBlocks([
+      {
+        id: createLocalId("chat"),
+        type: "callout",
+        content: lastAssistantMessage.content,
+        metadata: { type: "info", locked: true },
+      },
+    ]);
+  }, [lastAssistantMessage, onInsertBlocks]);
+
+  const handleCloseTab = useCallback(
+    async (tabId: string) => {
+      const tab = tabs.find((item) => item.id === tabId);
+      if (tab?.sessionId) {
         try {
-          const historyResponse = await fetch(
-            `/api/chat/history?sessionId=${encodeURIComponent(sessionId)}`,
-          );
-          if (historyResponse.ok) {
-            const historyResult = (await historyResponse.json()) as {
-              messages?: ChatMessage[];
-            };
-            initialMessages = historyResult.messages || [];
-          }
+          await deleteChatSession(tab.sessionId);
         } catch (error) {
-          console.error("Failed to load session history:", error);
+          const message = error instanceof Error ? error.message : "Failed to delete chat session.";
+          setPanelError(message);
+          return;
         }
       }
 
-      const newTab: ChatTab = {
-        id: `chat-${Date.now()}`,
-        title: `Chat ${tabs.length + 1}`,
-        messages: initialMessages,
-        sessionId,
-      };
+      setPanelError(null);
+      if (tabs.length <= 1) {
+        const nextTab = createDraftTab();
+        setTabs([nextTab]);
+        setActiveTabId(nextTab.id);
+        return;
+      }
 
-      setTabs((prev) => [...prev, newTab]);
-      setActiveTabId(newTab.id);
-      setInput("");
-    } catch (error) {
-      console.error("Failed to create new chat session:", error);
-      // Still create tab even if backend fails
-      const newTab: ChatTab = {
-        id: `chat-${Date.now()}`,
-        title: `Chat ${tabs.length + 1}`,
-        messages: [],
-        sessionId: null,
-      };
-      setTabs((prev) => [...prev, newTab]);
-      setActiveTabId(newTab.id);
-      setInput("");
-    }
-  }, [paperId, tabs.length]);
+      const remainingTabs = tabs.filter((item) => item.id !== tabId);
+      setTabs(remainingTabs);
+      if (activeTabId === tabId) {
+        setActiveTabId(remainingTabs[0]?.id ?? null);
+      }
+    },
+    [activeTabId, tabs],
+  );
 
-  // Handle @ mention for context
-  const handleMentionTrigger = useCallback((query: string) => {
-    setMentionQuery(query);
-    // TODO: Fetch context suggestions from backend
-    // This could be papers, sections, figures, etc.
-  }, []);
-
-  // Handle ingest to highlighted block
-  const handleIngestToBlock = useCallback(() => {
-    if (!activeTab || !onInsertBlocks) {
-      return;
-    }
-
-    // Get the last assistant message
-    const lastMessage = [...activeTab.messages].reverse().find((msg) => msg.role === "assistant");
-
-    if (!lastMessage) {
-      return;
-    }
-
-    // Insert as a paragraph block
-    const blocks: Block[] = [
-      {
-        id: `ingest-${Date.now()}`,
-        type: "paragraph",
-        content: lastMessage.content,
-      },
-    ];
-
-    onInsertBlocks(blocks);
-  }, [activeTab, onInsertBlocks]);
-
-  // Send question to backend
   const sendQuestion = useCallback(
-    async (question: string) => {
-      if (!question.trim() || !activeTab || isSubmitting) {
+    async (rawQuestion: string) => {
+      const question = rawQuestion.trim();
+      if (!question || !activeTab || isSubmitting) {
+        return;
+      }
+      if (!isSignedIn) {
+        setPanelError("Sign in to ask saved questions.");
         return;
       }
 
       setIsSubmitting(true);
-      const userMessageId = `msg-${Date.now()}`;
+      setPanelError(null);
 
-      // Ensure sessionId exists - create if missing
-      let currentSessionId = activeTab.sessionId;
-      if (!currentSessionId) {
-        try {
-          const sessionResponse = await fetch("/api/chat/session", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              paperId,
-            }),
-          });
-          if (sessionResponse.ok) {
-            const sessionResult = (await sessionResponse.json()) as { session: { id: string } };
-            currentSessionId = sessionResult.session.id;
-            // Update tab with new sessionId
-            setTabs((prev) =>
-              prev.map((tab) =>
-                tab.id === activeTabId ? { ...tab, sessionId: currentSessionId } : tab,
-              ),
-            );
-          }
-        } catch (error) {
-          console.error("Failed to create session:", error);
-        }
-      }
-
-      // Add user message
-      const userMessage: ChatMessage = {
-        id: userMessageId,
-        role: "user",
-        content: question.trim(),
-        createdAt: Date.now(),
-      };
-
-      setTabs((prev) =>
-        prev.map((tab) =>
-          tab.id === activeTabId ? { ...tab, messages: [...tab.messages, userMessage] } : tab,
-        ),
-      );
-
-      // Save user message to history (now sessionId should always exist)
-      if (currentSessionId) {
-        try {
-          await fetch("/api/chat/history", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              sessionId: currentSessionId,
-              paperId,
-              message: userMessage,
-            }),
-          });
-        } catch (error) {
-          console.error("Failed to save user message:", error);
-        }
-      }
-
-      setInput("");
-      setMentionQuery(""); // Clear mention query after sending message
+      let sessionId = activeTab.sessionId;
+      let userMessage: ChatMessage | null = null;
 
       try {
+        if (!sessionId) {
+          sessionId = await createRemoteSession(paperId);
+          setTabs((prev) =>
+            prev.map((tab) =>
+              tab.id === activeTab.id ? { ...tab, sessionId, id: `chat-${sessionId}` } : tab,
+            ),
+          );
+          setActiveTabId(`chat-${sessionId}`);
+        }
+
+        userMessage = {
+          id: createLocalId("msg"),
+          role: "user",
+          content: question,
+          createdAt: Date.now(),
+        };
+
+        setInput("");
+        setTabs((prev) =>
+          prev.map((tab) =>
+            tab.id === activeTab.id || tab.sessionId === sessionId
+              ? {
+                  ...tab,
+                  title: tab.messages.length === 0 ? titleFromQuestion(question) : tab.title,
+                  messages: [...tab.messages, userMessage!],
+                }
+              : tab,
+          ),
+        );
+
+        await saveChatMessage(sessionId, paperId, userMessage);
+
         const response = await fetch("/api/qa", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             paperId,
-            question: question.trim(),
-            selection: mentionQuery ? { text: mentionQuery } : selection,
+            question,
+            selection: selectedText ? selection : undefined,
           }),
         });
 
         if (!response.ok) {
-          const payload = (await response.json().catch(() => null)) as { error?: string } | null;
-          const message = payload?.error ?? `QA request failed with status ${response.status}.`;
-          throw new Error(message);
+          throw new Error(await readResponseError(response, "Failed to answer the question."));
         }
 
         const result = (await response.json()) as {
           answer: string;
-          cites?: Array<{ chunkId: string; page?: number; quote?: string }>;
+          cites?: Source[];
+          reasoning?: string;
         };
 
-        // Add assistant message with citations
         const assistantMessage: ChatMessage = {
-          id: `msg-${Date.now()}`,
+          id: createLocalId("msg"),
           role: "assistant",
           content: result.answer,
           citations: result.cites,
+          reasoning: result.reasoning,
           createdAt: Date.now(),
         };
 
         setTabs((prev) =>
           prev.map((tab) =>
-            tab.id === activeTabId
+            tab.sessionId === sessionId
               ? { ...tab, messages: [...tab.messages, assistantMessage] }
               : tab,
           ),
         );
 
-        // Get current sessionId from updated tab state
-        const updatedTab = tabs.find((tab) => tab.id === activeTabId);
-        const sessionIdToSave = updatedTab?.sessionId || currentSessionId;
+        await saveChatMessage(sessionId, paperId, assistantMessage);
 
-        // Save assistant message to history
-        if (sessionIdToSave) {
-          try {
-            await fetch("/api/chat/history", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                sessionId: sessionIdToSave,
-                paperId,
-                message: assistantMessage,
-              }),
-            });
-          } catch (error) {
-            console.error("Failed to save assistant message:", error);
-          }
-        }
-
-        // Optionally insert as blocks
-        if (onInsertBlocks && result.answer) {
-          const blocks: Block[] = [
-            {
-              id: `chat-${Date.now()}`,
-              type: "callout",
-              content: result.answer,
-              metadata: { type: "info" },
-            },
-          ];
-          onInsertBlocks(blocks);
+        if (selectedText) {
+          onSelectionClear?.();
         }
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Unexpected QA error occurred.";
+        const message = error instanceof Error ? error.message : "Unexpected chat error occurred.";
         const errorMessage: ChatMessage = {
-          id: `msg-${Date.now()}`,
+          id: createLocalId("msg"),
           role: "assistant",
-          content: `Error: ${message}`,
+          content: message,
           createdAt: Date.now(),
+          status: "error",
         };
-        setTabs((prev) =>
-          prev.map((tab) =>
-            tab.id === activeTabId ? { ...tab, messages: [...tab.messages, errorMessage] } : tab,
-          ),
-        );
-
-        // Get current sessionId from updated tab state
-        const updatedTab = tabs.find((tab) => tab.id === activeTabId);
-        const sessionIdToSave = updatedTab?.sessionId || currentSessionId;
-
-        // Save error message to history
-        if (sessionIdToSave) {
-          try {
-            await fetch("/api/chat/history", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                sessionId: sessionIdToSave,
-                paperId,
-                message: errorMessage,
-              }),
-            });
-          } catch (error) {
-            console.error("Failed to save error message:", error);
-          }
+        setPanelError(message);
+        if (userMessage) {
+          setTabs((prev) =>
+            prev.map((tab) =>
+              tab.id === activeTab.id || tab.sessionId === sessionId
+                ? { ...tab, messages: [...tab.messages, errorMessage] }
+                : tab,
+            ),
+          );
         }
       } finally {
         setIsSubmitting(false);
       }
     },
-    [activeTab, activeTabId, isSubmitting, paperId, selection, mentionQuery, onInsertBlocks, tabs],
-  );
-
-  // Handle submit
-  const handleSubmit = useCallback(
-    (value: string) => {
-      void sendQuestion(value);
-    },
-    [sendQuestion],
-  );
-
-  // Close tab
-  const handleCloseTab = useCallback(
-    (tabId: string) => {
-      if (tabs.length <= 1) {
-        // If last tab, just clear messages
-        setTabs([
-          {
-            id: `chat-${Date.now()}`,
-            title: "New AI chat",
-            messages: [],
-            sessionId: null,
-          },
-        ]);
-        setActiveTabId(tabs[0]?.id || null);
-      } else {
-        setTabs((prev) => prev.filter((tab) => tab.id !== tabId));
-        if (activeTabId === tabId) {
-          const remainingTabs = tabs.filter((tab) => tab.id !== tabId);
-          setActiveTabId(remainingTabs[0]?.id || null);
-        }
-      }
-    },
-    [tabs, activeTabId],
+    [activeTab, isSignedIn, isSubmitting, onSelectionClear, paperId, selectedText, selection],
   );
 
   if (!isOpen || !mounted) {
     return null;
   }
 
-  // Show loading state while fetching history
-  if (isLoadingHistory) {
-    return (
-      <div
-        className={clsx(
-          "fixed right-0 top-0 z-40 flex h-full w-[420px] flex-col shadow-xl transition-transform",
-          isDarkMode ? "bg-neutral-900" : "bg-white",
-          isOpen ? "translate-x-0" : "translate-x-full",
-        )}
-      >
-        <div className="flex h-full items-center justify-center">
-          <div className="text-sm text-neutral-500 dark:text-neutral-400">
-            Loading chat history...
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div
+    <aside
       className={clsx(
-        "fixed right-0 top-0 z-50 h-full flex flex-col border-l",
-        isDarkMode ? "bg-neutral-900 border-neutral-800" : "bg-white border-neutral-200",
+        "fixed inset-y-0 right-0 z-50 flex h-dvh w-full max-w-[460px] flex-col border-l shadow-2xl",
+        isDarkMode
+          ? "border-zinc-800 bg-zinc-950 text-zinc-100"
+          : "border-zinc-200 bg-zinc-50 text-zinc-950",
       )}
-      style={{ width: "420px" }}
+      aria-label="Research chat"
     >
-      {/* Header with tabs */}
-      <div
-        className={clsx(
-          "flex flex-col border-b",
-          isDarkMode ? "border-neutral-800" : "border-neutral-200",
-        )}
-      >
-        {/* Tab bar */}
-        <div className="flex items-center gap-1 px-2 pt-2 overflow-x-auto">
-          {tabs.map((tab) => (
-            <div
-              key={tab.id}
-              className={clsx(
-                "flex items-center gap-2 px-3 py-2 rounded-t-lg text-sm transition-colors relative group",
-                activeTabId === tab.id
-                  ? isDarkMode
-                    ? "bg-neutral-800 text-neutral-100"
-                    : "bg-neutral-50 text-neutral-900"
-                  : isDarkMode
-                    ? "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50"
-                    : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-50",
-              )}
-            >
-              <button
-                type="button"
-                onClick={() => setActiveTabId(tab.id)}
-                className="flex items-center gap-2 text-left flex-1"
-              >
-                <span className="whitespace-nowrap">{tab.title}</span>
-              </button>
-              {tabs.length > 1 && (
+      {!isLoaded ? (
+        <div className="flex h-full items-center justify-center">
+          <Loader2 className="h-5 w-5 animate-spin text-zinc-400" />
+        </div>
+      ) : !isSignedIn ? (
+        <AuthRequiredPanel onClose={() => onToggle(false)} />
+      ) : (
+        <>
+          <header className="flex shrink-0 flex-col border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
+            <div className="flex items-center justify-between px-4 py-3">
+              <div className="flex min-w-0 items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                  <MessageSquare className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <h2 className="truncate text-sm font-semibold">Research chat</h2>
+                  <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">{paperId}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1">
                 <button
                   type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleCloseTab(tab.id);
-                  }}
-                  className={clsx(
-                    "opacity-0 group-hover:opacity-100 transition-opacity rounded p-0.5 flex-shrink-0",
-                    isDarkMode ? "hover:bg-neutral-700" : "hover:bg-neutral-200",
-                  )}
-                  aria-label="Close tab"
+                  onClick={handleNewChat}
+                  disabled={isSubmitting}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-40 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-100"
+                  aria-label="New chat"
+                  title="New chat"
                 >
-                  <X className="h-3 w-3" />
+                  <MessageSquarePlus className="h-4 w-4" />
                 </button>
-              )}
-            </div>
-          ))}
-          <button
-            type="button"
-            onClick={handleNewChat}
-            className={clsx(
-              "flex items-center gap-1 px-2 py-2 rounded-lg text-sm transition-colors ml-1",
-              isDarkMode
-                ? "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800"
-                : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100",
-            )}
-            aria-label="New chat"
-          >
-            <Plus className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => onToggle(false)}
-            className={clsx(
-              "p-2 rounded transition-colors ml-auto",
-              isDarkMode
-                ? "hover:bg-neutral-800 text-neutral-400"
-                : "hover:bg-neutral-100 text-neutral-500",
-            )}
-            aria-label="Close chat"
-          >
-            <X size={16} />
-          </button>
-        </div>
-      </div>
-
-      {activeTab && (
-        <div className="flex-1 flex flex-col overflow-hidden relative">
-          <Conversation className="flex-1 pb-32">
-            {activeTab.messages.length === 0 ? (
-              <div className="flex-1 flex items-center justify-center px-6 pb-32">
-                <div className="text-center max-w-sm">
-                  <h2
-                    className={clsx(
-                      "text-2xl font-semibold mb-2",
-                      isDarkMode ? "text-white" : "text-neutral-900",
-                    )}
-                  >
-                    Your AI Assistant
-                  </h2>
-                  <p
-                    className={clsx(
-                      "text-sm mb-6",
-                      isDarkMode ? "text-neutral-400" : "text-neutral-600",
-                    )}
-                  >
-                    Ask questions about the paper, request summaries, or explore key findings.
-                  </p>
-                  <div className="flex flex-col gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleSubmit("Summarize this paper")}
-                      className={clsx(
-                        "px-4 py-2 rounded-lg text-sm text-left transition-colors",
-                        isDarkMode
-                          ? "bg-neutral-800 text-neutral-100 hover:bg-neutral-700"
-                          : "bg-neutral-100 text-neutral-900 hover:bg-neutral-200",
-                      )}
-                    >
-                      Summarize paper
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleSubmit("What are the key findings?")}
-                      className={clsx(
-                        "px-4 py-2 rounded-lg text-sm text-left transition-colors",
-                        isDarkMode
-                          ? "bg-neutral-800 text-neutral-100 hover:bg-neutral-700"
-                          : "bg-neutral-100 text-neutral-900 hover:bg-neutral-200",
-                      )}
-                    >
-                      Key findings
-                    </button>
-                  </div>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => onToggle(false)}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-950 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-100"
+                  aria-label="Close chat"
+                  title="Close chat"
+                >
+                  <PanelRightClose className="h-4 w-4" />
+                </button>
               </div>
-            ) : (
-              <ConversationContent className="pb-32">
-                {activeTab.messages.map((message) => (
-                  <Message key={message.id} from={message.role}>
-                    <MessageAvatar from={message.role} />
-                    <MessageContent reasoning={message.reasoning}>
-                      <div className="whitespace-pre-wrap">{message.content}</div>
-                      {message.citations && message.citations.length > 0 && (
-                        <Sources
-                          sources={message.citations}
-                          defaultVisible={true}
-                          paperId={paperId}
-                        />
-                      )}
-                      {message.reasoning && <Reasoning content={message.reasoning} />}
-                    </MessageContent>
-                  </Message>
-                ))}
-                {isSubmitting && (
-                  <Message from="assistant">
-                    <MessageAvatar from="assistant" />
-                    <MessageContent>
-                      <div
-                        className={clsx(
-                          "text-sm",
-                          isDarkMode ? "text-neutral-400" : "text-neutral-600",
-                        )}
-                      >
-                        Thinking...
-                      </div>
-                    </MessageContent>
-                  </Message>
-                )}
-              </ConversationContent>
-            )}
-            <ConversationScrollButton />
-          </Conversation>
-
-          {/* Ingest button - shown after messages or input */}
-          {activeTab.messages.length > 0 && onInsertBlocks && (
-            <div
-              className={clsx(
-                "absolute bottom-20 left-0 right-0 flex items-center justify-center px-4 py-2 z-10",
-                isDarkMode ? "bg-neutral-900/95 backdrop-blur-sm" : "bg-white/95 backdrop-blur-sm",
-              )}
-            >
-              <button
-                type="button"
-                onClick={handleIngestToBlock}
-                className={clsx(
-                  "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors",
-                  isDarkMode
-                    ? "bg-blue-600 text-white hover:bg-blue-700"
-                    : "bg-blue-500 text-white hover:bg-blue-600",
-                )}
-                title="Ingest last response to highlighted block in editor"
-              >
-                <Upload className="h-4 w-4" />
-                <span>Ingest to highlighted block</span>
-              </button>
             </div>
-          )}
 
-          {/* Floating input form */}
-          <div
-            className={clsx(
-              "absolute bottom-0 left-0 right-0 z-20 p-4",
-              isDarkMode ? "bg-neutral-900" : "bg-white",
-            )}
-          >
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (input.trim() && !isSubmitting) {
-                  handleSubmit(input);
-                }
-              }}
-              className="relative"
-            >
-              <div className="flex-1 relative">
-                <PromptInputTextarea
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onMentionTrigger={handleMentionTrigger}
-                  placeholder="Ask, search, or make anything..."
-                  className="w-full pr-20"
-                />
-                {/* Buttons inside textarea container, at right edge, vertically centered */}
-                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2">
+            <div className="flex gap-1 overflow-x-auto px-3 pb-2">
+              {tabs.map((tab) => (
+                <div
+                  key={tab.id}
+                  className={clsx(
+                    "group inline-flex h-8 max-w-[190px] shrink-0 items-center rounded-lg border text-xs transition",
+                    activeTab?.id === tab.id
+                      ? "border-zinc-300 bg-zinc-100 text-zinc-950 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                      : "border-transparent text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-100",
+                  )}
+                  title={tab.title}
+                >
                   <button
                     type="button"
-                    onClick={() => {
-                      setInput("@");
-                      const textarea =
-                        document.querySelector<HTMLTextAreaElement>('textarea[name="prompt"]');
-                      textarea?.focus();
-                    }}
-                    className={clsx(
-                      "flex items-center justify-center h-8 w-8 rounded transition-colors",
-                      isDarkMode
-                        ? "bg-neutral-800 text-neutral-400 hover:bg-neutral-700"
-                        : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200",
-                    )}
-                    title="Grab context (@) - Add PDF sections to chat question"
+                    onClick={() => setActiveTabId(tab.id)}
+                    className="min-w-0 flex-1 truncate px-2.5 py-1.5 text-left"
                   >
-                    @
+                    {tab.title}
                   </button>
-                  <PromptInputSubmit disabled={!input.trim() || isSubmitting} />
+                  <button
+                    type="button"
+                    onClick={() => void handleCloseTab(tab.id)}
+                    disabled={isSubmitting}
+                    className="mr-1 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-zinc-400 opacity-0 transition hover:bg-zinc-200 hover:text-rose-600 focus:opacity-100 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-zinc-400 group-hover:opacity-100 dark:hover:bg-zinc-800"
+                    aria-label="Delete chat tab"
+                    title="Delete chat tab"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
                 </div>
-              </div>
-            </form>
-          </div>
-        </div>
+              ))}
+            </div>
+          </header>
+
+          {isLoadingHistory ? (
+            <div className="flex flex-1 items-center justify-center gap-2 text-sm text-zinc-500">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>Loading saved chats</span>
+            </div>
+          ) : (
+            <>
+              <Conversation className="min-h-0 flex-1">
+                <ConversationContent className="flex min-h-0 flex-1 flex-col gap-4 space-y-0 px-4 py-4">
+                  {!activeTab || activeTab.messages.length === 0 ? (
+                    <div className="flex flex-1 items-center justify-center">
+                      <div className="flex w-full max-w-sm flex-col gap-3">
+                        <div className="flex items-center gap-2 text-sm font-medium text-zinc-700 dark:text-zinc-200">
+                          <Sparkles className="h-4 w-4 text-emerald-500" />
+                          Start a paper chat
+                        </div>
+                        <div className="grid gap-2">
+                          {QUICK_PROMPTS.map((prompt) => (
+                            <button
+                              key={prompt}
+                              type="button"
+                              onClick={() => void sendQuestion(prompt)}
+                              className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-left text-sm text-zinc-700 transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-zinc-950 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-emerald-700 dark:hover:bg-emerald-950/30"
+                            >
+                              {prompt}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    activeTab.messages.map((message) => (
+                      <ChatMessageBubble key={message.id} message={message} paperId={paperId} />
+                    ))
+                  )}
+
+                  {isSubmitting && (
+                    <Message from="assistant" className="items-start">
+                      <MessageAvatar from="assistant" />
+                      <div className="rounded-lg border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-500 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+                        <span className="inline-flex items-center gap-2">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          Thinking
+                        </span>
+                      </div>
+                    </Message>
+                  )}
+                </ConversationContent>
+              </Conversation>
+
+              <footer className="shrink-0 border-t border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
+                {selectedText && (
+                  <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-200">
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                      <span className="inline-flex items-center gap-1.5 font-medium">
+                        <BookOpenText className="h-3.5 w-3.5" />
+                        Selected context
+                      </span>
+                      <button
+                        type="button"
+                        onClick={onSelectionClear}
+                        className="rounded px-1.5 py-0.5 font-medium text-amber-700 transition hover:bg-amber-100 dark:text-amber-200 dark:hover:bg-amber-900/50"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                    <p className="line-clamp-3 whitespace-pre-wrap">{selectedText}</p>
+                  </div>
+                )}
+
+                {panelError && (
+                  <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:border-rose-900/70 dark:bg-rose-950/30 dark:text-rose-200">
+                    {panelError}
+                  </div>
+                )}
+
+                {lastAssistantMessage && onInsertBlocks && (
+                  <div className="mb-3 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleIngestToBlock}
+                      className="inline-flex items-center gap-2 rounded-lg border border-zinc-300 px-3 py-2 text-xs font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"
+                    >
+                      <Upload className="h-3.5 w-3.5" />
+                      Insert answer
+                    </button>
+                  </div>
+                )}
+
+                <form
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void sendQuestion(input);
+                  }}
+                  className="flex items-end gap-2"
+                >
+                  <PromptInputTextarea
+                    value={input}
+                    onChange={(event) => setInput(event.target.value)}
+                    placeholder={
+                      selectedText ? "Ask about the selected passage" : "Ask about this paper"
+                    }
+                    className="min-h-[48px] flex-1 pr-3"
+                    disabled={isSubmitting}
+                  />
+                  <button
+                    type="submit"
+                    disabled={!input.trim() || isSubmitting}
+                    className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-zinc-950 text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
+                    aria-label="Send message"
+                    title="Send message"
+                  >
+                    {isSubmitting ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Send className="h-4 w-4" />
+                    )}
+                  </button>
+                </form>
+              </footer>
+            </>
+          )}
+        </>
       )}
-    </div>
+    </aside>
   );
 }

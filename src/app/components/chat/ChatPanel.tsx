@@ -1,23 +1,11 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
 import type { AnswerResult, QuestionSelection } from "@/server/qa/types";
 
-import SlashCommandMenu, {
-  type SlashCommandOption,
-} from "./SlashCommandMenu";
-import {
-  EDITOR_INTENT_EVENT,
-  type EditorIntentDetail,
-} from "../block-editor/intents";
+import SlashCommandMenu, { type SlashCommandOption } from "./SlashCommandMenu";
+import { EDITOR_INTENT_EVENT, type EditorIntentDetail } from "../block-editor/intents";
 
 type MessageRole = "user" | "assistant";
 
@@ -35,7 +23,6 @@ export interface ChatPanelProps {
   onDraftChange: (value: string) => void;
   selection?: QuestionSelection;
   onSelectionClear?: () => void;
-  userId?: string;
   onQuestionSent?: (question: string) => void;
   onAnswerReceived?: (answer: string) => void;
   onError?: (error: string) => void;
@@ -43,18 +30,12 @@ export interface ChatPanelProps {
 
 interface SlashCommandDefinition {
   option: SlashCommandOption;
-  buildQuestion: (context: {
-    selection?: QuestionSelection;
-    draft: string;
-  }) => {
+  buildQuestion: (context: { selection?: QuestionSelection; draft: string }) => {
     question: string;
     selection?: QuestionSelection;
     autoSubmit?: boolean;
   };
 }
-
-const DEFAULT_USER_ID =
-  process.env.NEXT_PUBLIC_DEMO_USER_ID ?? "demo-user";
 
 function createMessageId() {
   return `msg_${Math.random().toString(36).slice(2, 10)}_${Date.now()}`;
@@ -86,8 +67,7 @@ const slashCommandDefinitions: SlashCommandDefinition[] = [
       }
 
       return {
-        question:
-          "Explain the Transformer architecture introduced in this paper.",
+        question: "Explain the Transformer architecture introduced in this paper.",
         autoSubmit: true,
       };
     },
@@ -132,8 +112,7 @@ const slashCommandDefinitions: SlashCommandDefinition[] = [
       }
 
       return {
-        question:
-          "Explain the Transformer paper like I’m five, sticking to grounded facts.",
+        question: "Explain the Transformer paper like I’m five, sticking to grounded facts.",
         autoSubmit: true,
       };
     },
@@ -230,13 +209,9 @@ const SelectionCallout = ({
         <span className="font-semibold uppercase tracking-wide text-amber-600">
           Highlight added to prompt
         </span>
-        <p className="line-clamp-3 whitespace-pre-wrap text-amber-700">
-          “{selection.text.trim()}”
-        </p>
+        <p className="line-clamp-3 whitespace-pre-wrap text-amber-700">“{selection.text.trim()}”</p>
         <div className="flex flex-wrap gap-2 text-[10px] font-medium uppercase tracking-wide text-amber-500">
-          {typeof selection.page === "number" && (
-            <span>Page {selection.page}</span>
-          )}
+          {typeof selection.page === "number" && <span>Page {selection.page}</span>}
           {selection.section && <span>{selection.section}</span>}
         </div>
       </div>
@@ -259,7 +234,6 @@ const ChatPanel = ({
   onDraftChange,
   selection,
   onSelectionClear,
-  userId,
   onQuestionSent,
   onAnswerReceived,
   onError,
@@ -282,9 +256,7 @@ const ChatPanel = ({
         : "";
 
   const showSlashMenu =
-    trimmedDraft.startsWith("/") &&
-    commandSpaceIndex === -1 &&
-    !trimmedDraft.includes("\n");
+    trimmedDraft.startsWith("/") && commandSpaceIndex === -1 && !trimmedDraft.includes("\n");
 
   const filteredCommands = useMemo(() => {
     const query = slashToken.toLowerCase();
@@ -387,18 +359,13 @@ const ChatPanel = ({
           body: JSON.stringify({
             paperId,
             question,
-            userId: userId ?? DEFAULT_USER_ID,
             selection: payloadSelection,
           }),
         });
 
         if (!response.ok) {
-          const payload = (await response.json().catch(() => null)) as
-            | { error?: string }
-            | null;
-          const message =
-            payload?.error ??
-            `QA request failed with status ${response.status}.`;
+          const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+          const message = payload?.error ?? `QA request failed with status ${response.status}.`;
           throw new Error(message);
         }
 
@@ -420,10 +387,7 @@ const ChatPanel = ({
           onSelectionClear?.();
         }
       } catch (caught) {
-        const message =
-          caught instanceof Error
-            ? caught.message
-            : "Unexpected QA error occurred.";
+        const message = caught instanceof Error ? caught.message : "Unexpected QA error occurred.";
         reportError(message);
       } finally {
         setIsSubmitting(false);
@@ -438,7 +402,6 @@ const ChatPanel = ({
       paperId,
       reportError,
       selection,
-      userId,
     ],
   );
 
@@ -472,17 +435,13 @@ const ChatPanel = ({
       if (showSlashMenu && filteredCommands.length > 0) {
         if (event.key === "ArrowDown" || event.key === "Tab") {
           event.preventDefault();
-          setSlashActiveIndex((prev) =>
-            prev + 1 >= filteredCommands.length ? 0 : prev + 1,
-          );
+          setSlashActiveIndex((prev) => (prev + 1 >= filteredCommands.length ? 0 : prev + 1));
           return;
         }
 
         if (event.key === "ArrowUp") {
           event.preventDefault();
-          setSlashActiveIndex((prev) =>
-            prev - 1 < 0 ? filteredCommands.length - 1 : prev - 1,
-          );
+          setSlashActiveIndex((prev) => (prev - 1 < 0 ? filteredCommands.length - 1 : prev - 1));
           return;
         }
 
@@ -526,9 +485,7 @@ const ChatPanel = ({
           <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
             Research Chat
           </h2>
-          <p className="text-xs text-zinc-500">
-            Ask grounded questions about this paper.
-          </p>
+          <p className="text-xs text-zinc-500">Ask grounded questions about this paper.</p>
         </div>
       </div>
 
@@ -539,20 +496,14 @@ const ChatPanel = ({
       >
         {messages.length === 0 ? (
           <div className="flex h-full items-center justify-center text-sm text-zinc-400">
-            Start by asking how the Transformer differs from attention-only
-            baselines.
+            Start by asking how the Transformer differs from attention-only baselines.
           </div>
         ) : (
-          messages.map((message) => (
-            <MessageBubble key={message.id} message={message} />
-          ))
+          messages.map((message) => <MessageBubble key={message.id} message={message} />)
         )}
       </div>
 
-      <SelectionCallout
-        selection={selection}
-        onClear={selection ? onSelectionClear : undefined}
-      />
+      <SelectionCallout selection={selection} onClear={selection ? onSelectionClear : undefined} />
 
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-600">
@@ -582,9 +533,7 @@ const ChatPanel = ({
               options={filteredCommands.map((definition) => definition.option)}
               activeIndex={slashActiveIndex}
               onSelect={(option) => {
-                const definition = filteredCommands.find(
-                  (item) => item.option.id === option.id,
-                );
+                const definition = filteredCommands.find((item) => item.option.id === option.id);
                 if (definition) {
                   applySlashCommand(definition);
                 }

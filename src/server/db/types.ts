@@ -68,3 +68,21 @@ export interface Interaction {
   chunkIds?: string[];
   personaConceptIds?: string[];
 }
+
+export interface ChatMessageRecord {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  citations?: unknown[];
+  reasoning?: string;
+  createdAt: number;
+}
+
+export interface ChatSessionRecord {
+  sessionId: string;
+  paperId: string;
+  userId: string;
+  messages: ChatMessageRecord[];
+  createdAt: number;
+  updatedAt: number;
+}

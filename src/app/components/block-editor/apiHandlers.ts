@@ -25,7 +25,6 @@ export interface ApiHandlerContext {
   blockIndex: number;
   onInsertBlocks: (blocks: Block[], insertIndex?: number) => void;
   selection?: QuestionSelection;
-  userId?: string;
   target?: string;
 }
 
@@ -42,19 +41,12 @@ export async function executeApiCommand(
   command: string,
   context: ApiHandlerContext,
 ): Promise<void> {
-  const {
-    paperId,
-    blockIndex,
-    onInsertBlocks,
-    selection,
-    userId,
-    target,
-  } = context;
+  const { paperId, blockIndex, onInsertBlocks, selection, target } = context;
 
   try {
     switch (command) {
       case "summary":
-        await executeSummary(paperId, blockIndex, onInsertBlocks, userId);
+        await executeSummary(paperId, blockIndex, onInsertBlocks);
         break;
       case "figure":
         await executeFigures(paperId, blockIndex, onInsertBlocks, selection);
@@ -63,13 +55,7 @@ export async function executeApiCommand(
         await executeCitations(paperId, blockIndex, onInsertBlocks, selection);
         break;
       case "explain":
-        await executeSelectionSummary(
-          paperId,
-          blockIndex,
-          onInsertBlocks,
-          selection,
-          userId,
-        );
+        await executeSelectionSummary(paperId, blockIndex, onInsertBlocks, selection);
         break;
       case "arxiv":
         await executeArxiv(paperId, blockIndex, onInsertBlocks, target);
@@ -119,18 +105,15 @@ async function executeSummary(
   paperId: string,
   blockIndex: number,
   onInsertBlocks: (blocks: Block[], insertIndex?: number) => void,
-  userId?: string,
 ): Promise<void> {
   const response = await fetch("/api/summarize", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ paperId, userId }),
+    body: JSON.stringify({ paperId }),
   });
 
   if (!response.ok) {
-    const error = await response
-      .json()
-      .catch(() => ({ error: "Failed to generate summary" }));
+    const error = await response.json().catch(() => ({ error: "Failed to generate summary" }));
     throw new Error(error.error || `Failed to generate summary: ${response.status}`);
   }
 
@@ -155,8 +138,7 @@ async function executeArxiv(
         {
           id: `status-arxiv-${Date.now()}`,
           type: "paragraph",
-          content:
-            "⚠️ The /arxiv command needs an arXiv ID, DOI, or URL in the current block.",
+          content: "⚠️ The /arxiv command needs an arXiv ID, DOI, or URL in the current block.",
         },
       ],
       blockIndex,
@@ -171,9 +153,7 @@ async function executeArxiv(
   });
 
   if (!response.ok) {
-    const error = await response
-      .json()
-      .catch(() => ({ error: "Failed to ingest arXiv content" }));
+    const error = await response.json().catch(() => ({ error: "Failed to ingest arXiv content" }));
     throw new Error(error.error || `Failed to ingest arXiv content: ${response.status}`);
   }
 
@@ -204,9 +184,7 @@ async function executeFigures(
   });
 
   if (!response.ok) {
-    const error = await response
-      .json()
-      .catch(() => ({ error: "Failed to fetch figures" }));
+    const error = await response.json().catch(() => ({ error: "Failed to fetch figures" }));
     throw new Error(error.error || `Failed to fetch figures: ${response.status}`);
   }
 
@@ -249,9 +227,7 @@ async function executeCitations(
   });
 
   if (!response.ok) {
-    const error = await response
-      .json()
-      .catch(() => ({ error: "Failed to fetch citations" }));
+    const error = await response.json().catch(() => ({ error: "Failed to fetch citations" }));
     throw new Error(error.error || `Failed to fetch citations: ${response.status}`);
   }
 
@@ -281,7 +257,6 @@ async function executeSelectionSummary(
   blockIndex: number,
   onInsertBlocks: (blocks: Block[], insertIndex?: number) => void,
   selection?: QuestionSelection,
-  userId?: string,
 ): Promise<void> {
   if (!selection?.text) {
     throw new Error("Text selection is required to summarize a selection");
@@ -290,13 +265,11 @@ async function executeSelectionSummary(
   const response = await fetch("/api/editor/selection/summary", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ paperId, selection, userId }),
+    body: JSON.stringify({ paperId, selection }),
   });
 
   if (!response.ok) {
-    const error = await response
-      .json()
-      .catch(() => ({ error: "Failed to summarize selection" }));
+    const error = await response.json().catch(() => ({ error: "Failed to summarize selection" }));
     throw new Error(error.error || `Failed to summarize selection: ${response.status}`);
   }
 

@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
+
+import {
+  AUTH_REQUIRED_MESSAGE,
+  isAuthenticationRequiredError,
+  requireAuthenticatedUserId,
+} from "@/server/auth/user";
+import { createChatSession } from "@/server/db";
 
 function generateSessionId(): string {
-  return `chat_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+  return `chat_${Date.now()}_${randomUUID()}`;
 }
 
 /**
@@ -11,32 +19,30 @@ function generateSessionId(): string {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
-    const { paperId, userId } = body as { paperId?: string; userId?: string };
+    const { paperId } = body as { paperId?: string };
+    const userId = await requireAuthenticatedUserId();
+    const resolvedPaperId = paperId?.trim();
 
-    if (!paperId) {
-      return NextResponse.json(
-        { error: "paperId is required" },
-        { status: 400 },
-      );
+    if (!resolvedPaperId) {
+      return NextResponse.json({ error: "paperId is required" }, { status: 400 });
     }
 
-    // Create a new chat session ID
     const sessionId = generateSessionId();
-
-    // Store session metadata (in a real app, this would be in a database)
+    const createdSession = await createChatSession(userId, resolvedPaperId, sessionId);
     const session = {
-      id: sessionId,
-      paperId,
-      userId: userId || "default",
-      createdAt: new Date().toISOString(),
+      id: createdSession.sessionId,
+      paperId: createdSession.paperId,
+      createdAt: new Date(createdSession.createdAt).toISOString(),
     };
 
     return NextResponse.json({ session }, { status: 200 });
   } catch (error) {
+    if (isAuthenticationRequiredError(error)) {
+      return NextResponse.json({ error: AUTH_REQUIRED_MESSAGE }, { status: 401 });
+    }
+
     console.error("[chat/session] Failed to create session", error);
-    const message =
-      error instanceof Error ? error.message : "Failed to create chat session.";
+    const message = error instanceof Error ? error.message : "Failed to create chat session.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-

@@ -12,13 +12,12 @@ interface SkillsConcept {
 }
 
 interface SkillsApiResponse {
-  userId: string;
-  total: number;
+  userId?: string;
+  total?: number;
   concepts: SkillsConcept[];
 }
 
 export interface SkillsPanelProps {
-  userId?: string;
   /**
    * When this counter changes, refetch. Caller bumps it after a QA /
    * summary call so newly-extracted concepts show up without a hard
@@ -37,37 +36,33 @@ function formatLearnedAt(value?: string): string {
   });
 }
 
-export function SkillsPanel({ userId, refreshKey }: SkillsPanelProps) {
+export function SkillsPanel({ refreshKey }: SkillsPanelProps) {
   const [concepts, setConcepts] = useState<SkillsConcept[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [authRequired, setAuthRequired] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    if (!userId) {
-      queueMicrotask(() => {
-        if (!cancelled) {
-          setConcepts([]);
-          setLoading(false);
-          setError(null);
-        }
-      });
-      return () => {
-        cancelled = true;
-      };
-    }
 
     queueMicrotask(() => {
       if (!cancelled) {
         setLoading(true);
         setError(null);
+        setAuthRequired(false);
       }
     });
 
-    fetch(`/api/skills/${encodeURIComponent(userId)}`, {
+    fetch("/api/skills", {
       cache: "no-store",
     })
       .then((response) => {
+        if (response.status === 401) {
+          if (!cancelled) {
+            setAuthRequired(true);
+          }
+          return { concepts: [] } as SkillsApiResponse;
+        }
         if (!response.ok) {
           throw new Error(`Skills request failed (${response.status}).`);
         }
@@ -89,7 +84,7 @@ export function SkillsPanel({ userId, refreshKey }: SkillsPanelProps) {
     return () => {
       cancelled = true;
     };
-  }, [userId, refreshKey]);
+  }, [refreshKey]);
 
   return (
     <aside
@@ -106,7 +101,7 @@ export function SkillsPanel({ userId, refreshKey }: SkillsPanelProps) {
         </span>
       </header>
 
-      {!userId && (
+      {authRequired && (
         <p className="text-xs opacity-70">Sign in to track concepts you encounter.</p>
       )}
 
@@ -116,10 +111,10 @@ export function SkillsPanel({ userId, refreshKey }: SkillsPanelProps) {
         </p>
       )}
 
-      {userId && !error && concepts && concepts.length === 0 && !loading && (
+      {!authRequired && !error && concepts && concepts.length === 0 && !loading && (
         <p className="text-xs opacity-70">
-          No concepts yet. Ask a question or generate a summary; encountered
-          concepts will be tracked here.
+          No concepts yet. Ask a question or generate a summary; encountered concepts will be
+          tracked here.
         </p>
       )}
 

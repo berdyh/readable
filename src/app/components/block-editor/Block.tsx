@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  useState,
-  useCallback,
-  useRef,
-  useEffect,
-} from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { clsx } from "clsx";
 import { GripVertical, Plus, Edit2, Lock } from "lucide-react";
 
@@ -22,7 +17,11 @@ import { DividerBlock } from "./blocks/DividerBlock";
 import { CalloutBlock } from "./blocks/CalloutBlock";
 import { ChatMessageBlock } from "./blocks/ChatMessageBlock";
 import { FigureBlock } from "./blocks/FigureBlock";
-import { getDeletionFocusTarget, isBlockContentEmpty, resolveDropReorder } from "./blockInteractionUtils";
+import {
+  getDeletionFocusTarget,
+  isBlockContentEmpty,
+  resolveDropReorder,
+} from "./blockInteractionUtils";
 
 interface BlockProps {
   block: BlockType;
@@ -53,7 +52,9 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
   useEffect(() => {
     registerBlockFocusApi(block.id, {
       focus: (position = "end") => {
-        const editorElement = containerRef.current?.querySelector(".ProseMirror") as HTMLElement | null;
+        const editorElement = containerRef.current?.querySelector(
+          ".ProseMirror",
+        ) as HTMLElement | null;
         if (!editorElement) return false;
 
         editorElement.focus();
@@ -88,7 +89,6 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
           });
         },
         selection: params?.selection as QuestionSelection | undefined,
-        userId: params?.userId as string | undefined,
         target: params?.target as string | undefined,
       });
     },
@@ -102,40 +102,56 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
     [block.id, updateBlock],
   );
 
-  const handleEnter = useCallback((markDone?: boolean) => {
-    if (markDone && (block.type === "to_do_list" || block.type === "bullet_list" || block.type === "number_list")) {
-      updateBlock(block.id, {
-        metadata: { ...block.metadata, checked: true },
-      });
-    }
+  const handleEnter = useCallback(
+    (markDone?: boolean) => {
+      if (
+        markDone &&
+        (block.type === "to_do_list" ||
+          block.type === "bullet_list" ||
+          block.type === "number_list")
+      ) {
+        updateBlock(block.id, {
+          metadata: { ...block.metadata, checked: true },
+        });
+      }
 
-    const newBlock = addBlock(block.type, index);
-    focusBlock(newBlock.id, "end");
-  }, [addBlock, block.type, block.id, block.metadata, index, updateBlock, focusBlock]);
+      const newBlock = addBlock(block.type, index);
+      focusBlock(newBlock.id, "end");
+    },
+    [addBlock, block.type, block.id, block.metadata, index, updateBlock, focusBlock],
+  );
 
-  const handleBackspace = useCallback((triggerKey?: "Backspace" | "Delete") => {
-    const effectiveTriggerKey = triggerKey ?? "Backspace";
-    const isEmpty = isBlockContentEmpty(block.content);
+  const handleBackspace = useCallback(
+    (triggerKey?: "Backspace" | "Delete") => {
+      const effectiveTriggerKey = triggerKey ?? "Backspace";
+      const isEmpty = isBlockContentEmpty(block.content);
 
-    if (isEmpty && (block.type === "to_do_list" || block.type === "bullet_list" || block.type === "number_list")) {
-      changeBlockType(block.id, "paragraph");
-      setTimeout(() => {
-        focusBlock(block.id, "end");
-      }, 0);
-      return;
-    }
+      if (
+        isEmpty &&
+        (block.type === "to_do_list" ||
+          block.type === "bullet_list" ||
+          block.type === "number_list")
+      ) {
+        changeBlockType(block.id, "paragraph");
+        setTimeout(() => {
+          focusBlock(block.id, "end");
+        }, 0);
+        return;
+      }
 
-    if (!isEmpty) {
-      return;
-    }
+      if (!isEmpty) {
+        return;
+      }
 
-    const focusTarget = getDeletionFocusTarget(state.blocks, block.id, effectiveTriggerKey);
-    deleteBlock(block.id);
+      const focusTarget = getDeletionFocusTarget(state.blocks, block.id, effectiveTriggerKey);
+      deleteBlock(block.id);
 
-    if (focusTarget) {
-      focusBlock(focusTarget.blockId, focusTarget.position);
-    }
-  }, [block.id, block.content, block.type, state.blocks, deleteBlock, changeBlockType, focusBlock]);
+      if (focusTarget) {
+        focusBlock(focusTarget.blockId, focusTarget.position);
+      }
+    },
+    [block.id, block.content, block.type, state.blocks, deleteBlock, changeBlockType, focusBlock],
+  );
 
   const handleSlashCommand = useCallback(
     (query: string) => {
@@ -158,21 +174,24 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
     });
   }, [block.id, block.metadata, isLocked, updateBlock]);
 
-  const handleDragStart = useCallback((e: React.DragEvent) => {
-    setIsDragging(true);
-    e.dataTransfer.effectAllowed = "move";
-    e.dataTransfer.setData("text/plain", block.id);
-    e.dataTransfer.setData("application/x-block-reorder", "true");
-    e.stopPropagation();
-    if (e.dataTransfer.setDragImage) {
-      const dragImage = e.currentTarget.cloneNode(true) as HTMLElement;
-      dragImage.style.opacity = "0.5";
-      dragImage.style.transform = "rotate(2deg)";
-      document.body.appendChild(dragImage);
-      e.dataTransfer.setDragImage(dragImage, 0, 0);
-      setTimeout(() => document.body.removeChild(dragImage), 0);
-    }
-  }, [block.id]);
+  const handleDragStart = useCallback(
+    (e: React.DragEvent) => {
+      setIsDragging(true);
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", block.id);
+      e.dataTransfer.setData("application/x-block-reorder", "true");
+      e.stopPropagation();
+      if (e.dataTransfer.setDragImage) {
+        const dragImage = e.currentTarget.cloneNode(true) as HTMLElement;
+        dragImage.style.opacity = "0.5";
+        dragImage.style.transform = "rotate(2deg)";
+        document.body.appendChild(dragImage);
+        e.dataTransfer.setDragImage(dragImage, 0, 0);
+        setTimeout(() => document.body.removeChild(dragImage), 0);
+      }
+    },
+    [block.id],
+  );
 
   const handleDragEnd = useCallback((e: React.DragEvent) => {
     setIsDragging(false);
@@ -199,26 +218,29 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
     }
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragOver(false);
-    setIsDragging(false);
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setDragOver(false);
+      setIsDragging(false);
 
-    const isBlockReorder = e.dataTransfer.getData("application/x-block-reorder") === "true";
-    if (!isBlockReorder) return;
+      const isBlockReorder = e.dataTransfer.getData("application/x-block-reorder") === "true";
+      if (!isBlockReorder) return;
 
-    const draggedBlockId = e.dataTransfer.getData("text/plain");
-    if (!draggedBlockId || draggedBlockId === block.id) return;
+      const draggedBlockId = e.dataTransfer.getData("text/plain");
+      if (!draggedBlockId || draggedBlockId === block.id) return;
 
-    const rect = e.currentTarget.getBoundingClientRect();
-    const midPoint = rect.top + rect.height / 2;
-    const dropPosition = e.clientY < midPoint ? "before" : "after";
-    const reorder = resolveDropReorder(state.blocks, draggedBlockId, block.id, dropPosition);
-    if (!reorder) return;
+      const rect = e.currentTarget.getBoundingClientRect();
+      const midPoint = rect.top + rect.height / 2;
+      const dropPosition = e.clientY < midPoint ? "before" : "after";
+      const reorder = resolveDropReorder(state.blocks, draggedBlockId, block.id, dropPosition);
+      if (!reorder) return;
 
-    moveBlock(draggedBlockId, reorder.toIndex);
-  }, [block.id, moveBlock, state.blocks]);
+      moveBlock(draggedBlockId, reorder.toIndex);
+    },
+    [block.id, moveBlock, state.blocks],
+  );
 
   const handleFocus = useCallback(() => {
     setIsFocused(true);
@@ -422,11 +444,7 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
           className="flex h-6 w-6 items-center justify-center rounded hover:bg-neutral-200 dark:hover:bg-neutral-700 active:scale-95 transition-all duration-150 text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
           title={isLocked ? "Click to unlock and edit" : "Click to lock (make read-only)"}
         >
-          {isLocked ? (
-            <Edit2 className="h-4 w-4" />
-          ) : (
-            <Lock className="h-4 w-4" />
-          )}
+          {isLocked ? <Edit2 className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
         </button>
       </div>
 
@@ -453,7 +471,9 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
         </button>
       </div>
 
-      <div className="flex-1" onFocus={handleFocus}>{renderBlock()}</div>
+      <div className="flex-1" onFocus={handleFocus}>
+        {renderBlock()}
+      </div>
     </div>
   );
 }

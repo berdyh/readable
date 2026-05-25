@@ -12,8 +12,6 @@ import { usePaperContent } from "./usePaperContent";
 import { usePassState } from "./usePassState";
 import { useWorkspaceStatus } from "./useWorkspaceStatus";
 
-const SKILLS_USER_ID = "demo-user";
-
 export interface ReaderWorkspaceProps {
   paperId?: string;
   pdfUrl?: string;
@@ -77,15 +75,13 @@ const ReaderWorkspace = ({ paperId, pdfUrl }: ReaderWorkspaceProps) => {
             />
           </div>
           <div className="hidden lg:block">
-            <SkillsPanel userId={SKILLS_USER_ID} />
+            <SkillsPanel />
           </div>
         </div>
         <div className="mt-4 flex items-center justify-end gap-3">
           <button
             type="button"
-            onClick={() =>
-              setTheme(resolvedTheme === "dark" ? "light" : "dark")
-            }
+            onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
             className="inline-flex h-9 w-9 items-center justify-center rounded-full border shadow-sm transition border-neutral-300 bg-white text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:bg-neutral-800"
             title="Toggle theme"
             aria-label="Toggle theme"

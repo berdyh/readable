@@ -2,12 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useTheme } from "next-themes";
-import {
-  MessageSquare,
-  X,
-  Plus,
-  Upload,
-} from "lucide-react";
+import { MessageSquare, X, Plus, Upload } from "lucide-react";
 import { clsx } from "clsx";
 import type { Block } from "./types";
 import type { QuestionSelection } from "@/server/qa/types";
@@ -33,7 +28,6 @@ interface ChatIntegrationProps {
   onInsertBlocks?: (blocks: Block[], insertIndex?: number) => void;
   selection?: QuestionSelection;
   onSelectionClear?: () => void;
-  userId?: string;
 }
 
 interface ChatTab {
@@ -77,7 +71,6 @@ export function ChatSidePanel({
   onToggle,
   onInsertBlocks,
   selection,
-  userId,
 }: ChatIntegrationProps) {
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
@@ -109,9 +102,7 @@ export function ChatSidePanel({
     const loadChatHistory = async () => {
       try {
         setIsLoadingHistory(true);
-        const response = await fetch(
-          `/api/chat/history?paperId=${encodeURIComponent(paperId)}&userId=${encodeURIComponent(userId ?? "default")}`,
-        );
+        const response = await fetch(`/api/chat/history?paperId=${encodeURIComponent(paperId)}`);
 
         if (!response.ok) {
           console.error("Failed to load chat history");
@@ -167,7 +158,7 @@ export function ChatSidePanel({
     };
 
     void loadChatHistory();
-  }, [isOpen, paperId, userId, mounted]);
+  }, [isOpen, paperId, mounted]);
 
   const isDarkMode = mounted && resolvedTheme === "dark";
   const activeTab = tabs.find((tab) => tab.id === activeTabId);
@@ -180,7 +171,6 @@ export function ChatSidePanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           paperId,
-          userId: userId ?? "default",
         }),
       });
 
@@ -231,7 +221,7 @@ export function ChatSidePanel({
       setActiveTabId(newTab.id);
       setInput("");
     }
-  }, [paperId, userId, tabs.length]);
+  }, [paperId, tabs.length]);
 
   // Handle @ mention for context
   const handleMentionTrigger = useCallback((query: string) => {
@@ -247,10 +237,8 @@ export function ChatSidePanel({
     }
 
     // Get the last assistant message
-    const lastMessage = [...activeTab.messages]
-      .reverse()
-      .find((msg) => msg.role === "assistant");
-    
+    const lastMessage = [...activeTab.messages].reverse().find((msg) => msg.role === "assistant");
+
     if (!lastMessage) {
       return;
     }
@@ -276,7 +264,7 @@ export function ChatSidePanel({
 
       setIsSubmitting(true);
       const userMessageId = `msg-${Date.now()}`;
-      
+
       // Ensure sessionId exists - create if missing
       let currentSessionId = activeTab.sessionId;
       if (!currentSessionId) {
@@ -286,7 +274,6 @@ export function ChatSidePanel({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               paperId,
-              userId: userId ?? "default",
             }),
           });
           if (sessionResponse.ok) {
@@ -295,9 +282,7 @@ export function ChatSidePanel({
             // Update tab with new sessionId
             setTabs((prev) =>
               prev.map((tab) =>
-                tab.id === activeTabId
-                  ? { ...tab, sessionId: currentSessionId }
-                  : tab,
+                tab.id === activeTabId ? { ...tab, sessionId: currentSessionId } : tab,
               ),
             );
           }
@@ -316,9 +301,7 @@ export function ChatSidePanel({
 
       setTabs((prev) =>
         prev.map((tab) =>
-          tab.id === activeTabId
-            ? { ...tab, messages: [...tab.messages, userMessage] }
-            : tab,
+          tab.id === activeTabId ? { ...tab, messages: [...tab.messages, userMessage] } : tab,
         ),
       );
 
@@ -331,7 +314,6 @@ export function ChatSidePanel({
             body: JSON.stringify({
               sessionId: currentSessionId,
               paperId,
-              userId: userId ?? "default",
               message: userMessage,
             }),
           });
@@ -350,7 +332,6 @@ export function ChatSidePanel({
           body: JSON.stringify({
             paperId,
             question: question.trim(),
-            userId: userId ?? "default",
             selection: mentionQuery ? { text: mentionQuery } : selection,
           }),
         });
@@ -396,7 +377,6 @@ export function ChatSidePanel({
               body: JSON.stringify({
                 sessionId: sessionIdToSave,
                 paperId,
-                userId: userId ?? "default",
                 message: assistantMessage,
               }),
             });
@@ -418,8 +398,7 @@ export function ChatSidePanel({
           onInsertBlocks(blocks);
         }
       } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "Unexpected QA error occurred.";
+        const message = error instanceof Error ? error.message : "Unexpected QA error occurred.";
         const errorMessage: ChatMessage = {
           id: `msg-${Date.now()}`,
           role: "assistant",
@@ -428,9 +407,7 @@ export function ChatSidePanel({
         };
         setTabs((prev) =>
           prev.map((tab) =>
-            tab.id === activeTabId
-              ? { ...tab, messages: [...tab.messages, errorMessage] }
-              : tab,
+            tab.id === activeTabId ? { ...tab, messages: [...tab.messages, errorMessage] } : tab,
           ),
         );
 
@@ -447,7 +424,6 @@ export function ChatSidePanel({
               body: JSON.stringify({
                 sessionId: sessionIdToSave,
                 paperId,
-                userId: userId ?? "default",
                 message: errorMessage,
               }),
             });
@@ -459,17 +435,7 @@ export function ChatSidePanel({
         setIsSubmitting(false);
       }
     },
-    [
-      activeTab,
-      activeTabId,
-      isSubmitting,
-      paperId,
-      userId,
-      selection,
-      mentionQuery,
-      onInsertBlocks,
-      tabs,
-    ],
+    [activeTab, activeTabId, isSubmitting, paperId, selection, mentionQuery, onInsertBlocks, tabs],
   );
 
   // Handle submit
@@ -532,9 +498,7 @@ export function ChatSidePanel({
     <div
       className={clsx(
         "fixed right-0 top-0 z-50 h-full flex flex-col border-l",
-        isDarkMode
-          ? "bg-neutral-900 border-neutral-800"
-          : "bg-white border-neutral-200",
+        isDarkMode ? "bg-neutral-900 border-neutral-800" : "bg-white border-neutral-200",
       )}
       style={{ width: "420px" }}
     >
@@ -670,12 +634,14 @@ export function ChatSidePanel({
                 {activeTab.messages.map((message) => (
                   <Message key={message.id} from={message.role}>
                     <MessageAvatar from={message.role} />
-                    <MessageContent
-                      reasoning={message.reasoning}
-                    >
+                    <MessageContent reasoning={message.reasoning}>
                       <div className="whitespace-pre-wrap">{message.content}</div>
                       {message.citations && message.citations.length > 0 && (
-                        <Sources sources={message.citations} defaultVisible={true} paperId={paperId} />
+                        <Sources
+                          sources={message.citations}
+                          defaultVisible={true}
+                          paperId={paperId}
+                        />
                       )}
                       {message.reasoning && <Reasoning content={message.reasoning} />}
                     </MessageContent>
@@ -756,9 +722,8 @@ export function ChatSidePanel({
                     type="button"
                     onClick={() => {
                       setInput("@");
-                      const textarea = document.querySelector<HTMLTextAreaElement>(
-                        'textarea[name="prompt"]',
-                      );
+                      const textarea =
+                        document.querySelector<HTMLTextAreaElement>('textarea[name="prompt"]');
                       textarea?.focus();
                     }}
                     className={clsx(

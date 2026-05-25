@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Issue Resolving Notes</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        line-height: 1.5;
+      }
+
+      body {
+        margin: 0;
+        background: Canvas;
+        color: CanvasText;
+      }
+
+      main {
+        max-width: 880px;
+        margin: 0 auto;
+        padding: 40px 24px 56px;
+      }
+
+      h1,
+      h2 {
+        line-height: 1.15;
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: 2rem;
+      }
+
+      h2 {
+        margin: 32px 0 12px;
+        font-size: 1.25rem;
+      }
+
+      p,
+      li {
+        max-width: 74ch;
+      }
+
+      .meta {
+        margin: 0 0 28px;
+        color: color-mix(in srgb, CanvasText 68%, Canvas 32%);
+      }
+
+      section {
+        border-top: 1px solid color-mix(in srgb, CanvasText 18%, Canvas 82%);
+        padding-top: 20px;
+      }
+
+      code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.95em;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Issue Resolving Notes</h1>
+      <p class="meta">
+        Running notes for review-driven fixes, spec interpretation, and known follow-up questions.
+      </p>
+
+      <section>
+        <h2>2026-05-25 Review Pass</h2>
+        <p>
+          The requested <code>/review</code> workflow currently has no reviewable branch diff: the
+          workspace is on <code>main</code>, <code>origin/HEAD</code> points to
+          <code>origin/main</code>, and <code>git diff origin/main...HEAD</code> is empty.
+        </p>
+
+        <h2>Design Decisions</h2>
+        <ul>
+          <li>
+            Treat the current state as a landed main-branch snapshot rather than inventing a
+            synthetic review base. That keeps review findings tied to an actual branch diff.
+          </li>
+          <li>
+            Keep this file as the running audit trail requested by the spec, even when a review pass
+            cannot produce code findings.
+          </li>
+        </ul>
+
+        <h2>Deviations</h2>
+        <ul>
+          <li>
+            No code issue fixes were made in this pass because the
+            <code>/review</code> workflow stops on the base branch when there is no diff to review.
+          </li>
+        </ul>
+
+        <h2>Tradeoffs</h2>
+        <ul>
+          <li>
+            I did not compare arbitrary recent commits manually as a substitute for
+            <code>/review</code>. That would produce less reproducible findings because the user did
+            not name a previous commit or PR as the intended review base.
+          </li>
+        </ul>
+
+        <h2>Open Questions</h2>
+        <ul>
+          <li>
+            Confirm whether future issue-resolution work should happen on a new branch from
+            <code>main</code>, or whether you want a manual review of the already-landed commits
+            against a specific earlier commit.
+          </li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>2026-05-25 Clerk Data Isolation Fix</h2>
+        <p>
+          The known auth/data issue is now treated as a reviewable branch change: server routes
+          derive the active user from Clerk instead of accepting a browser-supplied
+          <code>userId</code>.
+        </p>
+
+        <h2>Design Decisions</h2>
+        <ul>
+          <li>
+            Use <code>auth()</code> from <code>@clerk/nextjs/server</code> in route handlers and
+            pass that Clerk user ID into QA, summarization, selection summaries, skills lookup, and
+            chat history persistence.
+          </li>
+          <li>
+            Replace the chat history route's process-local <code>Map</code> with Postgres-backed
+            <code>chat_sessions</code> and <code>chat_messages</code> tables keyed by
+            <code>user_id</code>, <code>paper_id</code>, and <code>session_id</code>.
+          </li>
+          <li>
+            Keep Clerk's user ID as the application user key instead of adding a separate users
+            table, matching the existing persona schema that already stores opaque text user IDs.
+          </li>
+          <li>
+            Keep <code>/api/skills/[userId]</code> as a disabled legacy route that returns
+            <code>410</code>; the supported route is now <code>/api/skills</code> for the
+            authenticated user.
+          </li>
+          <li>
+            Validate and sanitize chat citation metadata before writing assistant messages to
+            Postgres. The accepted citation fields cover both existing chat shapes:
+            <code>id/title/url/page</code> and <code>chunkId/quote/page</code>.
+          </li>
+        </ul>
+
+        <h2>Deviations</h2>
+        <ul>
+          <li>
+            The previous demo/default user fallback was removed from personalized routes. Signed-out
+            requests now receive <code>401</code> for routes that create or read personalized data.
+          </li>
+          <li>
+            Existing in-memory chat history is not migrated because it was only process-local
+            runtime state and was not durable across Vercel function instances.
+          </li>
+          <li>
+            Invalid chat message payloads now return <code>400</code> instead of falling through to
+            a generic server error.
+          </li>
+        </ul>
+
+        <h2>Tradeoffs</h2>
+        <ul>
+          <li>
+            I chose authenticated-only personalized endpoints over anonymous browser IDs. Anonymous
+            IDs would preserve guest usage but still require a separate trust and merge model before
+            it could safely become account data.
+          </li>
+          <li>
+            I added database chat persistence now rather than only scoping the existing in-memory
+            map. Serverless memory is not durable, so a scoped map would still make "stored chats"
+            misleading on Vercel.
+          </li>
+          <li>
+            I preserved the old <code>messageCount</code> response meaning as the total messages in
+            the session, even though the current client does not read that field.
+          </li>
+        </ul>
+
+        <h2>Open Questions</h2>
+        <ul>
+          <li>
+            Confirm whether you want any signed-out read-only or no-persistence QA mode, or whether
+            all LLM-backed personalized actions should stay sign-in only.
+          </li>
+          <li>
+            Confirm when to remove the disabled legacy
+            <code>/api/skills/[userId]</code> route entirely after clients have moved to
+            <code>/api/skills</code>.
+          </li>
+        </ul>
+      </section>
+    </main>
+  </body>
+</html>

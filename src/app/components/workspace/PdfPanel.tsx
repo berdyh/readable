@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { IHighlight } from "react-pdf-highlighter";
-import { X } from "lucide-react";
+import { FileText, X } from "lucide-react";
 
 import FigureCallouts, { type FigureCallout } from "../pdf/FigureCallouts";
 import PdfViewerWithHighlights, {
@@ -55,10 +55,8 @@ const WorkspaceModal = ({
         className="absolute inset-0 bg-black/40"
       />
       <div
-        className={`relative z-10 flex w-full max-w-5xl flex-col overflow-hidden rounded-3xl border shadow-2xl ${
-          isDarkMode
-            ? "border-neutral-700 bg-neutral-900"
-            : "border-zinc-200 bg-white"
+        className={`relative z-10 flex w-full max-w-7xl flex-col overflow-hidden rounded-lg border shadow-2xl ${
+          isDarkMode ? "border-neutral-700 bg-neutral-900" : "border-zinc-200 bg-white"
         }`}
       >
         <div
@@ -87,7 +85,7 @@ const WorkspaceModal = ({
           </button>
         </div>
         <div
-          className={`max-h-[80vh] overflow-y-auto p-5 ${
+          className={`max-h-[82vh] overflow-y-auto p-4 ${
             isDarkMode ? "bg-neutral-950" : "bg-zinc-50"
           }`}
         >
@@ -120,13 +118,7 @@ interface PdfPanelProps {
   onStatus: (message: string) => void;
 }
 
-const PdfPanel = ({
-  pdfUrl,
-  summary,
-  arxivHtmlContent,
-  isDarkMode,
-  onStatus,
-}: PdfPanelProps) => {
+const PdfPanel = ({ pdfUrl, summary, arxivHtmlContent, isDarkMode, onStatus }: PdfPanelProps) => {
   const viewerRef = useRef<PdfViewerHandle>(null);
   const [isOpen, setIsOpen] = useState(false);
 
@@ -139,6 +131,7 @@ const PdfPanel = ({
           id: figure.id,
           label: figure.label,
           caption: figure.caption?.trim() || `Figure ${figure.label || figure.id}`,
+          imageUrl: figure.imageUrl,
           pageNumber: undefined,
           supportingText: undefined,
         });
@@ -149,9 +142,7 @@ const PdfPanel = ({
       for (const figure of summary.figures) {
         const pageNumber = extractPageNumber(figure.page_anchor);
         const caption =
-          figure.caption?.trim() ||
-          figure.insight?.trim() ||
-          "Figure insight unavailable.";
+          figure.caption?.trim() || figure.insight?.trim() || "Figure insight unavailable.";
         const supporting = figure.insight?.trim() ? [figure.insight.trim()] : undefined;
 
         const existing = calloutMap.get(figure.figure_id);
@@ -226,13 +217,14 @@ const PdfPanel = ({
       <button
         type="button"
         onClick={() => setIsOpen(true)}
-        className={`rounded-full border px-4 py-2 text-xs font-semibold transition ${
+        className={`inline-flex h-9 items-center gap-2 rounded-full border px-3 text-xs font-semibold transition ${
           isDarkMode
             ? "border-neutral-700 bg-neutral-900 text-neutral-200 hover:border-neutral-600 hover:bg-neutral-800"
             : "border-zinc-300 bg-white text-zinc-700 hover:border-zinc-400 hover:text-zinc-900"
         }`}
       >
-        View PDF panel
+        <FileText className="h-3.5 w-3.5" aria-hidden="true" />
+        Figures / PDF
       </button>
 
       <WorkspaceModal
@@ -241,34 +233,28 @@ const PdfPanel = ({
         onClose={() => setIsOpen(false)}
         isDarkMode={isDarkMode}
       >
-        <div className="flex flex-col gap-4">
-          <div
-            className={`rounded-xl border p-4 shadow-sm ${
-              isDarkMode
-                ? "border-neutral-700 bg-neutral-900"
-                : "border-zinc-200 bg-white"
+        <div className="grid min-h-[70vh] gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,22rem)]">
+          <section
+            className={`min-w-0 overflow-hidden rounded-lg border ${
+              isDarkMode ? "border-neutral-700 bg-neutral-900" : "border-zinc-200 bg-white"
             }`}
-          >
-            <FigureCallouts figures={figureCallouts} onShow={handleFigureNavigation} />
-          </div>
-          <div
-            className={`rounded-xl border p-4 shadow-sm ${
-              isDarkMode
-                ? "border-neutral-700 bg-neutral-900"
-                : "border-zinc-200 bg-white"
-            }`}
+            aria-label="PDF viewer"
           >
             <PdfViewerWithHighlights
               ref={viewerRef}
               pdfUrl={pdfUrl}
-              className={`min-h-[65vh] rounded-lg border ${
-                isDarkMode
-                  ? "border-neutral-700 bg-neutral-900"
-                  : "border-zinc-200 bg-white"
-              }`}
+              className="h-[70vh] min-h-[520px]"
               onSelectionAction={handlePdfSelection}
             />
-          </div>
+          </section>
+          <aside
+            className={`min-h-0 overflow-y-auto border-t pt-4 lg:max-h-[70vh] lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0 ${
+              isDarkMode ? "border-neutral-800" : "border-zinc-200"
+            }`}
+            aria-label="Figure callouts"
+          >
+            <FigureCallouts figures={figureCallouts} onShow={handleFigureNavigation} />
+          </aside>
         </div>
       </WorkspaceModal>
     </>

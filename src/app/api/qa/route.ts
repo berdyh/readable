@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { answerPaperQuestion } from "@/server/qa";
-import type { QuestionSelection } from "@/server/qa/types";
+import type { AnswerResult, QuestionSelection } from "@/server/qa/types";
 import { parseQuestionSelection } from "@/server/qa/selection";
+import { classifyFailoverSignal } from "@/server/llm/routing/failover-classifier";
 import {
   AUTH_REQUIRED_MESSAGE,
   isAuthenticationRequiredError,
@@ -45,16 +46,78 @@ function parseRequestPayload(data: unknown): QaRequestPayload {
   return result;
 }
 
-function mapErrorStatus(error: unknown): number {
-  if (error instanceof Error) {
-    if (error.message.includes("OpenAI request failed")) {
-      return 502;
-    }
-    if (error.message.includes("OPENAI_API_KEY")) {
-      return 500;
-    }
+function mapQaError(error: unknown): { status: number; message: string; code: string } {
+  const reason = classifyFailoverSignal({
+    message: error instanceof Error ? error.message : error,
+  });
+
+  switch (reason) {
+    case "auth":
+    case "auth_permanent":
+      return {
+        status: 500,
+        code: "provider_auth",
+        message:
+          "The configured QA provider could not authenticate. Check provider credentials.",
+      };
+    case "rate_limit":
+      return {
+        status: 429,
+        code: "provider_rate_limit",
+        message: "The QA provider is rate limited. Try again shortly.",
+      };
+    case "billing":
+      return {
+        status: 402,
+        code: "provider_billing",
+        message: "The QA provider quota or billing limit was reached.",
+      };
+    case "timeout":
+      return {
+        status: 504,
+        code: "provider_timeout",
+        message: "The QA provider timed out. Try again shortly.",
+      };
+    case "overloaded":
+      return {
+        status: 503,
+        code: "provider_overloaded",
+        message: "The QA provider is temporarily overloaded. Try again shortly.",
+      };
+    case "model_not_found":
+      return {
+        status: 500,
+        code: "provider_model",
+        message: "The configured QA model is not available.",
+      };
+    case "format":
+    case "empty_response":
+      return {
+        status: 502,
+        code: "provider_response",
+        message: "The QA provider returned an unsupported response.",
+      };
+    default:
+      return {
+        status: 502,
+        code: "qa_failed",
+        message: "Failed to answer the question.",
+      };
   }
-  return 502;
+}
+
+function emitQaTrustCounter(result: AnswerResult) {
+  console.info("[qa] trust_counter", {
+    status: result.trust.status,
+    hasEvidence: result.trust.hasEvidence,
+    validCitationCount: result.trust.validCitationCount,
+    invalidCitationCount: result.trust.invalidCitationCount,
+    warningCount: result.trust.warnings.length,
+    vectorStatus: result.trust.retrieval.vector.status,
+    vectorHitCount: result.trust.retrieval.vector.hitCount,
+    textStatus: result.trust.retrieval.text.status,
+    textHitCount: result.trust.retrieval.text.hitCount,
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -73,6 +136,7 @@ export async function POST(request: NextRequest) {
       userId,
       selection: payload.selection,
     });
+    emitQaTrustCounter(result);
 
     return NextResponse.json(result, { status: 200 });
   } catch (error) {
@@ -80,8 +144,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: AUTH_REQUIRED_MESSAGE }, { status: 401 });
     }
     console.error("[qa] Failed to answer question", error);
-    const status = mapErrorStatus(error);
-    const message = error instanceof Error ? error.message : "Failed to answer the question.";
-    return NextResponse.json({ error: message }, { status });
+    const mapped = mapQaError(error);
+    return NextResponse.json(
+      { error: mapped.message, code: mapped.code },
+      { status: mapped.status },
+    );
   }
 }

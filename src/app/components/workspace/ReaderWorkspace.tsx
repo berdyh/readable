@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { SignInButton, SignUpButton } from "@clerk/nextjs";
+import { clsx } from "clsx";
 import { SunMedium, MoonStar } from "lucide-react";
 import { useTheme } from "next-themes";
 
@@ -17,6 +19,8 @@ export interface ReaderWorkspaceProps {
   pdfUrl?: string;
 }
 
+const PERSONALIZED_FEATURES_AUTH_MESSAGE = "Sign in to use personalized reading features.";
+
 const ReaderWorkspace = ({ paperId, pdfUrl }: ReaderWorkspaceProps) => {
   // resolvedTheme is undefined on the server but populated post-mount.
   // Tailwind `dark:` utilities (driven by next-themes' class on <html>)
@@ -24,6 +28,7 @@ const ReaderWorkspace = ({ paperId, pdfUrl }: ReaderWorkspaceProps) => {
   // theme-switch toggle (which is only operable after mount anyway) and
   // for the legacy isDarkMode prop on PdfPanel.
   const { setTheme, resolvedTheme } = useTheme();
+  const [isResearchChatOpen, setIsResearchChatOpen] = useState(false);
 
   const {
     resolvedPaperId,
@@ -38,6 +43,27 @@ const ReaderWorkspace = ({ paperId, pdfUrl }: ReaderWorkspaceProps) => {
   const { pass, setPass } = usePassState({ paperId: resolvedPaperId });
 
   const { statusMessage, setStatusMessage, clearStatus } = useWorkspaceStatus();
+  const showPersonalizedFeatureGate = summaryError === PERSONALIZED_FEATURES_AUTH_MESSAGE;
+  const editorInitialBlocks = useMemo(() => {
+    if (!showPersonalizedFeatureGate) {
+      return initialBlocks;
+    }
+
+    return initialBlocks.map((block) => {
+      if (
+        block.id === "error-placeholder" &&
+        block.content.includes(PERSONALIZED_FEATURES_AUTH_MESSAGE)
+      ) {
+        return {
+          ...block,
+          content:
+            "Sign in to generate a personalized summary for this paper. Public paper text will appear here when HTML parsing is available.",
+        };
+      }
+
+      return block;
+    });
+  }, [initialBlocks, showPersonalizedFeatureGate]);
 
   useEffect(() => {
     if (arxivHtmlContent) {
@@ -52,31 +78,72 @@ const ReaderWorkspace = ({ paperId, pdfUrl }: ReaderWorkspaceProps) => {
   }, [summary, setStatusMessage]);
 
   useEffect(() => {
-    if (summaryError || htmlError) {
-      setStatusMessage((previous) => previous ?? summaryError ?? htmlError ?? null);
+    const summaryStatus = showPersonalizedFeatureGate ? null : summaryError;
+    if (summaryStatus || htmlError) {
+      setStatusMessage((previous) => previous ?? summaryStatus ?? htmlError ?? null);
     }
-  }, [htmlError, setStatusMessage, summaryError]);
+  }, [htmlError, setStatusMessage, showPersonalizedFeatureGate, summaryError]);
 
   const isDarkMode = resolvedTheme === "dark";
 
   return (
     <div className="flex min-h-screen flex-col font-sans bg-zinc-50 text-zinc-900 dark:bg-neutral-950 dark:text-neutral-100">
-      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-5 py-10">
+      <main
+        className={clsx(
+          "mx-auto flex w-full flex-1 flex-col px-5 py-10 transition-[max-width] duration-200",
+          isResearchChatOpen ? "max-w-7xl" : "max-w-6xl",
+        )}
+      >
         <div className="flex flex-col gap-6 lg:flex-row">
           <div className="flex-1 min-w-0">
+            {showPersonalizedFeatureGate && (
+              <section
+                aria-label="Personalized reader features"
+                className="mb-4 flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-100 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">Sign in for personalized reading tools.</p>
+                  <p className="mt-1 text-xs leading-relaxed text-amber-800 dark:text-amber-200">
+                    Public paper text stays readable; summaries, saved chats, and skills need an
+                    account.
+                  </p>
+                </div>
+                <div className="flex shrink-0 flex-wrap gap-2">
+                  <SignInButton>
+                    <button
+                      type="button"
+                      className="inline-flex h-9 items-center justify-center rounded-lg bg-zinc-950 px-3 text-sm font-medium text-white transition hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
+                    >
+                      Sign in
+                    </button>
+                  </SignInButton>
+                  <SignUpButton>
+                    <button
+                      type="button"
+                      className="inline-flex h-9 items-center justify-center rounded-lg border border-amber-300 px-3 text-sm font-medium text-amber-900 transition hover:bg-amber-100 dark:border-amber-800 dark:text-amber-100 dark:hover:bg-amber-900/40"
+                    >
+                      Sign up
+                    </button>
+                  </SignUpButton>
+                </div>
+              </section>
+            )}
             <ThreePassBar pass={pass} onPassChange={setPass} />
             <BlockEditor
               paperId={resolvedPaperId}
-              initialBlocks={initialBlocks}
+              initialBlocks={editorInitialBlocks}
               statusMessage={statusMessage}
-              errorMessage={summaryError}
+              errorMessage={showPersonalizedFeatureGate ? null : summaryError}
               onStatusClear={clearStatus}
               showChatButton={true}
+              onChatOpenChange={setIsResearchChatOpen}
             />
           </div>
-          <div className="hidden lg:block">
-            <SkillsPanel />
-          </div>
+          {!isResearchChatOpen && (
+            <div className="hidden lg:block">
+              <SkillsPanel />
+            </div>
+          )}
         </div>
         <div className="mt-4 flex items-center justify-end gap-3">
           <button

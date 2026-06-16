@@ -417,6 +417,814 @@
           <li><code>pnpm exec next build --webpack</code> completed successfully.</li>
         </ul>
       </section>
+
+      <section>
+        <h2>2026-05-25 Vercel Failed Fetch Investigation</h2>
+        <p>
+          I investigated the reported production <code>Failed to fetch</code> symptom against the
+          current Vercel deployment and browser-loaded production alias. The deployment itself is
+          ready, and the public alias responds normally; the most concrete findings point to
+          environment/auth-domain configuration rather than a failed build.
+        </p>
+
+        <h2>Design Decisions</h2>
+        <ul>
+          <li>
+            Treat <code>https://readable-woad.vercel.app</code> as the production URL for manual QA.
+            The raw deployment URL is Vercel-auth protected and is not a reliable public test URL.
+          </li>
+          <li>
+            Keep signed-out API behavior as JSON <code>401</code> responses instead of weakening the
+            auth guard. Personalized endpoints should remain tied to a Clerk user.
+          </li>
+        </ul>
+
+        <h2>Deviations</h2>
+        <ul>
+          <li>
+            I did not change application code during this pass because the checks reproduced access
+            and Clerk configuration issues, not a build regression.
+          </li>
+        </ul>
+
+        <h2>Tradeoffs</h2>
+        <ul>
+          <li>
+            Vercel's connected tools expose deployment metadata and build logs here, but not the
+            signed-in runtime function logs needed to prove a server-side chatbot fetch failure.
+            Vercel CLI runtime logs require an OAuth device login.
+          </li>
+        </ul>
+
+        <h2>Open Questions</h2>
+        <ul>
+          <li>
+            Confirm whether the visible <code>Failed to fetch</code> happens on the protected raw
+            deployment URL or on <code>https://readable-woad.vercel.app</code>.
+          </li>
+          <li>
+            If the failure happens after sending a signed-in chatbot message, capture the Vercel
+            runtime log line for <code>/api/qa</code> or the exact failing request from the browser
+            network panel.
+          </li>
+          <li>
+            Replace the deployed Clerk development keys with production Clerk keys before treating
+            the app as production-ready.
+          </li>
+        </ul>
+
+        <h2>Verification Notes</h2>
+        <ul>
+          <li>
+            Latest production deployment <code>dpl_C9QDE46nrnxuD2QXXVHuBhdvcDd1</code> is
+            <code>READY</code> for commit <code>9af809f</code>.
+          </li>
+          <li>
+            <code>curl -I https://readable-woad.vercel.app</code> returned <code>200</code>, and
+            <code>/api/health</code> returned JSON <code>{"status":"ok"}</code>.
+          </li>
+          <li>
+            A signed-out <code>POST /api/qa</code> returned JSON <code>401</code> with
+            <code>Sign in to use personalized reading features.</code>, confirming the public API
+            path is reachable and guarded rather than failing at the browser fetch/CORS layer.
+          </li>
+          <li>
+            <code>curl -I https://readable-nc2evnm5r-shoh-berdys-projects.vercel.app</code>
+            returned Vercel <code>401</code>, confirming the raw deployment URL is protected.
+          </li>
+          <li>
+            <code>gstack browse</code> opened the public paper page and chat panel without
+            network-level failures. The browser console warned that Clerk is loaded with development
+            keys on the deployed app.
+          </li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>2026-05-26 Vercel Env Cleanup</h2>
+        <p>
+          I trimmed the Vercel project environment variables to remove stale analytics/default URL
+          entries and duplicate task-specific OpenRouter fallback settings while preserving the
+          services the user wants to keep for later.
+        </p>
+
+        <h2>Design Decisions</h2>
+        <ul>
+          <li>
+            Kept the single global <code>OPENROUTER_FALLBACK_MODELS</code> value as the source of
+            truth for OpenRouter-native fallback behavior.
+          </li>
+          <li>
+            Kept <code>RUNPOD_API_KEY</code>, <code>RUNPOD_ENDPOINT_ID</code>, and
+            <code>SEMANTIC_SCHOLAR_KEY</code> because the user wants to reuse those integrations
+            later.
+          </li>
+          <li>
+            Removed <code>ARXIV_API_BASE_URL</code> and <code>AR5IV_BASE_URL</code> because the app
+            already has the same defaults in code.
+          </li>
+        </ul>
+
+        <h2>Deviations</h2>
+        <ul>
+          <li>
+            I did not remove optional model override variables, Qdrant collection settings, or
+            embedding settings because they are still part of the current deployed configuration.
+          </li>
+        </ul>
+
+        <h2>Verification Notes</h2>
+        <ul>
+          <li>
+            Removed <code>POSTHOG_KEY</code>, <code>ARXIV_API_BASE_URL</code>,
+            <code>AR5IV_BASE_URL</code>, and the task-specific
+            <code>OPENROUTER_*_FALLBACK_MODELS</code> duplicates from Vercel.
+          </li>
+          <li>
+            Verified <code>RUNPOD_API_KEY</code>, <code>RUNPOD_ENDPOINT_ID</code>, and
+            <code>SEMANTIC_SCHOLAR_KEY</code> remain configured.
+          </li>
+          <li>
+            Refreshed <code>.env.production.local</code> and
+            <code>/home/shoh/Downloads/readable.env.local</code> from the cleaned production env
+            export.
+          </li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>2026-05-26 Local Stack and Agent Routing</h2>
+        <p>
+          This local session covered three related findings: the reported
+          <code>429 Unknown Error</code> was not a database connection problem, the local Postgres
+          and Qdrant services needed to be composed and migrated, and local LLM calls should route
+          through coding-agent CLIs instead of remote SDK providers.
+        </p>
+
+        <h2>Design Decisions</h2>
+        <ul>
+          <li>
+            Set local storage config in <code>.env.local</code>:
+            <code>DATABASE_URL=postgresql://readable:readable@localhost:5432/readable</code> and
+            <code>QDRANT_URL=http://localhost:6333</code>.
+          </li>
+          <li>
+            Set <code>ARXIV_CONTACT_EMAIL=sendmeto6@gmail.com</code> for local arXiv requests.
+          </li>
+          <li>
+            Add <code>LLM_PROVIDER=coding-agent</code> so local LLM requests use installed coding
+            agents rather than API providers. The configured order is
+            <code>claude-code,codex-cli,gemini-cli,antigravity,opencode</code>.
+          </li>
+          <li>
+            Pin Codex and opencode to cached local binaries in <code>.env.local</code> so the dev
+            server does not trigger network-backed <code>npx</code> wrappers during local requests.
+          </li>
+          <li>
+            Keep Antigravity behind an explicit
+            <code>LLM_AGENT_ANTIGRAVITY_ARGS_JSON</code> override. A local
+            <code>antigravity --help</code> probe started the IDE wizard instead of exposing a clear
+            headless prompt command.
+          </li>
+        </ul>
+
+        <h2>Deviations</h2>
+        <ul>
+          <li>
+            The initial <code>429</code> was traced to arXiv metadata fetching inside
+            <code>fetchArxivMetadata</code>, not to Postgres or Qdrant. The ingest route returned
+            <code>502</code> after arXiv returned the rate-limit-style failure.
+          </li>
+          <li>
+            Qdrant was reachable, but the existing health check assumed JSON from
+            <code>/readyz</code>. Current Qdrant returns plain text for readiness, so
+            <code>pingQdrant</code> now checks HTTP status without parsing the body as JSON.
+          </li>
+          <li>
+            Automatic agent discovery now skips likely <code>npx --prefer-online</code> wrappers
+            unless the user explicitly configures them with <code>LLM_AGENT_*_COMMAND</code>.
+          </li>
+        </ul>
+
+        <h2>Tradeoffs</h2>
+        <ul>
+          <li>
+            Local coding-agent mode treats the CLIs as pure LLM backends: prompts instruct them not
+            to edit files, run tools, or start long-running work. That keeps app requests scoped to
+            answer generation while still using the authenticated local agents.
+          </li>
+          <li>
+            The local provider uses OpenClaw-style sequential fallback across available agents, but
+            does not persist cooldown state for local CLI attempts.
+          </li>
+        </ul>
+
+        <h2>Verification Notes</h2>
+        <ul>
+          <li>
+            <code>docker compose ps</code> showed <code>readable-postgres</code> healthy on
+            <code>localhost:5432</code> and <code>readable-qdrant</code> running on
+            <code>localhost:6333</code>.
+          </li>
+          <li><code>pnpm db:migrate</code> applied the local Postgres schema successfully.</li>
+          <li>
+            <code>pnpm test:stores</code> now passes: Postgres reachable, schema applied, Qdrant
+            reachable, and the vector collection ready.
+          </li>
+          <li>
+            Targeted tests passed:
+            <code
+              >pnpm test src/server/vector/qdrant.test.ts src/server/llm/router.test.ts
+              src/server/llm/providers/local-coding-agent.test.ts</code
+            >
+            with <code>8</code> tests.
+          </li>
+          <li><code>pnpm lint</code> completed with existing warnings and no errors.</li>
+          <li>
+            <code>pnpm exec tsc --noEmit</code> still fails only on the pre-existing unrelated tuple
+            error in
+            <code>src/server/llm/providers/__tests__/openrouter-model-resolution.test.ts:154</code>.
+          </li>
+          <li>
+            The dev server was restarted after the env changes and responds with HTTP
+            <code>200</code> at <code>http://localhost:3000</code>.
+          </li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>2026-05-28 Browser E2E QA: arXiv 1706.03762</h2>
+        <p>
+          I ran a browser-driven local QA pass from the ingest form through the reader workspace
+          using <code>https://arxiv.org/abs/1706.03762</code>. The app is reachable on
+          <code>http://localhost:3000</code>, and the local Postgres/Qdrant compose services are
+          running.
+        </p>
+
+        <h2>Findings</h2>
+        <ul>
+          <li>
+            The browser ingest form accepted the arXiv URL and contact email, enabled the submit
+            button, and redirected to <code>/papers/1706.03762v7</code>.
+          </li>
+          <li>
+            The paper rendered in the reader workspace with metadata, sections, figures, the
+            three-pass guide, the PDF/figures panel, and the research chat entry point.
+          </li>
+          <li>
+            Postgres persistence was verified directly: paper <code>1706.03762v7</code> exists with
+            <code>60</code> chunks and <code>9</code> figures.
+          </li>
+          <li>
+            Qdrant is reachable and has the <code>paper_chunks</code> collection, but the count for
+            <code>paperId=1706.03762v7</code> is <code>0</code>. Server logs explain why: vector
+            indexing was skipped because the default OpenAI embedder needs
+            <code>OPENAI_API_KEY</code>, or <code>EMBEDDING_PROVIDER</code> must be changed to a
+            configured provider.
+          </li>
+          <li>
+            The chatbot panel opens in the in-page reader/chat split and has no horizontal overflow
+            at desktop width, but signed-out users see the expected Clerk gate instead of a message
+            textarea.
+          </li>
+          <li>
+            A browser-side <code>POST /api/qa</code> while signed out returned JSON
+            <code>401</code> with <code>Sign in to use personalized reading features.</code>.
+          </li>
+        </ul>
+
+        <h2>Limitations</h2>
+        <ul>
+          <li>
+            I did not create a hosted Clerk test account, so I could not send an authenticated
+            chatbot message through the browser. The sign-in/sign-up flow is hosted by Clerk and
+            needs an approved test account or explicit permission to create one.
+          </li>
+          <li>
+            The first browser visit used <code>127.0.0.1</code> and produced a Clerk keyless
+            host-mismatch/CORS warning before recovering to <code>localhost</code>. Continuing on
+            <code>http://localhost:3000</code> avoided that local-only noise.
+          </li>
+          <li>
+            Server logs still showed one arXiv <code>429</code> from an earlier ingest attempt, but
+            the browser-submitted ingest for this QA pass completed successfully.
+          </li>
+        </ul>
+
+        <h2>Verification Notes</h2>
+        <ul>
+          <li>
+            Browser screenshots captured: <code>/tmp/readable-home-qa.png</code>,
+            <code>/tmp/readable-final-chat-qa.png</code>,
+            <code>/tmp/readable-pdf-panel-qa.png</code>, and responsive screenshots under
+            <code>/tmp/readable-responsive-chat-*.png</code>.
+          </li>
+          <li>
+            Reader controls checked: <code>Read pass</code> switched to pressed state, the
+            PDF/figures panel opened and listed figure/table callouts, and responsive desktop/tablet
+            views kept the chat gate visible without page overflow.
+          </li>
+          <li>
+            Final browser console contained the expected Clerk development-key warning plus the
+            deliberate signed-out <code>/api/qa</code> <code>401</code> from the QA probe.
+          </li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>2026-05-28 Follow-up: OpenRouter Embeddings and Codex Routing</h2>
+        <p>
+          After browser QA showed vector indexing was skipped because the old default embedder
+          required <code>OPENAI_API_KEY</code>, I switched the default embedding provider to
+          <code>openrouter</code> and configured the local env for the requested OpenRouter
+          embedding model. I also pinned local LLM routing to Codex.
+        </p>
+
+        <h2>Changes</h2>
+        <ul>
+          <li>
+            <code>.env.local</code> now sets <code>EMBEDDING_PROVIDER=openrouter</code>,
+            <code>OPENROUTER_API_KEY</code>, <code>OPENROUTER_EMBEDDING_MODEL</code>, and
+            <code>OPENROUTER_EMBEDDING_DIMENSIONS=2048</code>. The secret value is intentionally not
+            repeated in this note.
+          </li>
+          <li>
+            Local app LLM calls now route through <code>LLM_PROVIDER=coding-agent</code> with
+            <code>LLM_LOCAL_AGENTS=codex-cli</code>, <code>LLM_AGENT_CODEX_MODEL=gpt-5.5</code>, and
+            <code>LLM_AGENT_CODEX_REASONING_EFFORT=xhigh</code>.
+          </li>
+          <li>
+            The Codex CLI runner now passes configured model and reasoning settings into
+            <code>codex exec</code> instead of using them only as routing metadata.
+          </li>
+          <li>
+            Existing papers indexed under the previous provider need to be re-ingested so Qdrant
+            gets points in the new OpenRouter-specific collection.
+          </li>
+        </ul>
+
+        <h2>Verification Notes</h2>
+        <ul>
+          <li>
+            <code>pnpm embeddings:probe</code> returned provider <code>openrouter</code>, model
+            <code>nvidia/llama-nemotron-embed-vl-1b-v2:free</code>, and
+            <code>2048</code> dimensions.
+          </li>
+          <li>
+            Full <code>POST /api/ingest</code> for <code>1706.03762</code> completed and the
+            OpenRouter Qdrant collection now has <code>60</code> points for
+            <code>1706.03762v7</code>.
+          </li>
+          <li>
+            A direct Codex smoke test showed the literal <code>gpt5.5</code> id is rejected by the
+            ChatGPT-backed Codex account. The env and docs use the working hyphenated
+            <code>gpt-5.5</code> id.
+          </li>
+          <li>
+            The dev server was restarted and returns HTTP <code>200</code> at
+            <code>http://localhost:3000</code>.
+          </li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>2026-05-29 Clerk Authenticated QA</h2>
+        <p>
+          I used the Clerk testing guidance to move past the signed-out chatbot gate. Clerk
+          development test emails use a <code>+clerk_test</code> subaddress and verification code
+          <code>424242</code>, while automated hosted sign-up flows can use a short-lived Testing
+          Token to bypass bot detection. The local env now has Clerk dev keys configured; secret
+          values are intentionally not repeated in this note.
+        </p>
+
+        <h2>Findings</h2>
+        <ul>
+          <li>
+            <code>.env.local</code> now contains <code>NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY</code> and
+            <code>CLERK_SECRET_KEY</code>, and the dev server was restarted with those values.
+          </li>
+          <li>
+            A Clerk Testing Token was minted through the Backend API. Hosted sign-up still stalled
+            on the hosted page during browser automation, so I used Clerk's Backend API session
+            token flow for the authenticated request.
+          </li>
+          <li>
+            A test user and session were created through Clerk's Backend API, then a short-lived
+            session token was sent as <code>Authorization: Bearer &lt;session_token&gt;</code> to
+            the local app.
+          </li>
+          <li>
+            The authenticated QA path returned answers with citations, proving the chatbot backend
+            works with Clerk auth, Qdrant retrieval, OpenRouter embeddings, and Codex local LLM
+            routing.
+          </li>
+        </ul>
+
+        <h2>Verification Notes</h2>
+        <ul>
+          <li>
+            Browser screenshot captured:
+            <code>/tmp/readable-clerk-signup-turnstile.png</code>.
+          </li>
+          <li>
+            Direct authenticated <code>POST /api/qa</code> returned HTTP <code>200</code> with an
+            answer and two citations for <code>1706.03762v7</code>.
+          </li>
+          <li>
+            Browser-originated authenticated <code>fetch('/api/qa')</code> from the paper page
+            returned HTTP <code>200</code>, an answer, and <code>3</code> citations.
+          </li>
+          <li>
+            Server logs show authenticated <code>POST /api/qa</code> requests completing in roughly
+            <code>15.1s</code> and <code>18.7s</code> through the local Codex-backed route.
+          </li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>2026-05-29 HTML Parser Fixture Coverage</h2>
+        <p>
+          I expanded <code>parseAr5ivHtml</code> unit coverage beyond the original ar5iv-flavored
+          fixture with two non-Soliq offline HTML fixtures: plain semantic article markup and common
+          class-based paper/figure markup.
+        </p>
+
+        <h2>Design Decisions</h2>
+        <ul>
+          <li>
+            Keep the parser tests fully offline by embedding representative HTML fixture strings in
+            <code>src/server/ingest/ar5iv.test.ts</code> instead of scraping live pages during unit
+            tests.
+          </li>
+          <li>
+            Cover generic webpage shapes already supported by the parser: direct semantic
+            paragraphs, header-wrapped headings, <code>data-bibtex-key</code> citations,
+            <code>figcaption</code> figures, class-based <code>div.figure</code> captions, and
+            lazy-loaded image attributes.
+          </li>
+        </ul>
+
+        <h2>Tradeoffs</h2>
+        <ul>
+          <li>
+            Offline fixtures are less exhaustive than periodic live scraping, but they are
+            deterministic, fast, and safe for unit tests. Live webpage drift should be covered by
+            separate integration or manual QA when a specific source needs investigation.
+          </li>
+          <li>
+            I did not add parser special cases for any one domain. The new coverage verifies generic
+            structured HTML patterns relevant to paper/content extraction.
+          </li>
+        </ul>
+
+        <h2>Verification Notes</h2>
+        <ul>
+          <li>
+            <code>pnpm test src/server/ingest/ar5iv.test.ts</code> passed with three parser tests.
+          </li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>2026-05-29 Worker A LLM Routing Review</h2>
+        <p>
+          Reviewed the dirty LLM/provider diff against the local Codex routing goal and the
+          OpenClaw/ACP interpretation documented for this app.
+        </p>
+
+        <h2>Findings Fixed</h2>
+        <ul>
+          <li>
+            <code>LLM_ALLOWED_PROVIDERS</code> was checked before the
+            <code>coding-agent</code> fast-path guard. A stale API fallback value could send a local
+            Codex request into the HTTP routing loop, where <code>coding-agent</code> has no auth
+            profile and can be skipped.
+          </li>
+          <li>
+            The Codex argv started with flags before <code>exec</code>. The runner now builds the
+            documented <code>codex exec ...</code> form and forwards model/reasoning options after
+            the subcommand.
+          </li>
+          <li>
+            <code>pnpm setup</code> did not expose <code>coding-agent</code> as a selectable local
+            provider even though the README directed users to use setup for provider routing.
+          </li>
+        </ul>
+
+        <h2>Deliberate Semantics</h2>
+        <ul>
+          <li>
+            Readable's <code>coding-agent</code> mode is a local provider backend that invokes
+            installed CLIs and treats their final response as the app LLM answer. It is not a full
+            OpenClaw <code>sessions_spawn(runtime: "acp")</code> implementation.
+          </li>
+          <li>
+            The Codex local target is documented as <code>LLM_AGENT_CODEX_MODEL=gpt-5.5</code> with
+            <code>LLM_AGENT_CODEX_REASONING_EFFORT=xhigh</code>.
+          </li>
+          <li>
+            Local coding-agent calls now run from an isolated temp directory with a minimal child
+            process environment. Extra variables can be opted in with
+            <code>LLM_LOCAL_AGENT_ENV_ALLOWLIST</code>, but database, auth, and embedding secrets
+            are intentionally not forwarded by default.
+          </li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>2026-05-29 Worker B Ingest and Vector Review</h2>
+        <p>
+          I reviewed the scoped dirty diff for local store, embedding, Qdrant, ar5iv parsing, and
+          ingest route behavior. The main fixes keep first-ingest vector indexing working on a fresh
+          collection and keep local development usable without remote embedding keys.
+        </p>
+
+        <h2>Issues Fixed</h2>
+        <ul>
+          <li>
+            Vector re-ingest now ensures the active Qdrant collection exists before deleting old
+            points. The prior order deleted by paper before collection creation, so a fresh
+            provider-specific collection could return <code>404</code> and skip indexing.
+          </li>
+          <li>
+            Embedding selection now uses OpenRouter when <code>OPENROUTER_API_KEY</code> exists and
+            falls back to a deterministic local hash embedder when the key is absent.
+          </li>
+          <li>
+            Re-ingest now prunes stale figures and citations in Postgres, not just stale chunks.
+          </li>
+          <li>
+            ar5iv relative image URLs now resolve against the fetched paper HTML URL, not just the
+            <code>ar5iv.org</code> origin.
+          </li>
+          <li>
+            Route tests now clear mock call counts between cases so auth assertions are isolated.
+          </li>
+        </ul>
+
+        <h2>Verification Notes</h2>
+        <ul>
+          <li>
+            Added focused coverage for embedding auto/local fallback, Qdrant existing-collection
+            payload indexes, ar5iv image-base propagation, and stale figure cleanup.
+          </li>
+          <li>
+            Final command outputs for this pass are reported in the Worker B handoff response.
+          </li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>2026-05-29 Worker C Reader Visual Rail Review</h2>
+        <p>
+          I reviewed the scoped dirty diff and current reader UI for signed-out/auth states, the
+          reader/chat split, and PDF/figure visualization placement.
+        </p>
+
+        <h2>Issues Fixed</h2>
+        <ul>
+          <li>
+            Signed-out personalized-summary gating was presented as a red editor error and could
+            also appear as an in-document <code>Summary unavailable</code> block. The reader now
+            shows a neutral auth notice and normalizes that fallback block copy.
+          </li>
+          <li>
+            The PDF tool stacked figure callouts above the PDF on desktop. It now opens as a
+            two-column tool with the PDF viewer on the left and figure callouts in a right-side
+            visual rail.
+          </li>
+          <li>
+            Figure callouts lacked dark-mode styling and enabled a no-op <code>Show figure</code>
+            action when a page reference was missing. Missing-page callouts now render a disabled
+            <code>No page</code> action.
+          </li>
+          <li>
+            Embedded block chat showed inactive transcript and input controls beneath the signed-out
+            auth gate. It now renders only the sign-in/sign-up gate until Clerk reports a signed-in
+            user.
+          </li>
+        </ul>
+
+        <h2>Verification Notes</h2>
+        <ul>
+          <li><code>pnpm exec tsc --noEmit</code> passed.</li>
+          <li><code>pnpm test</code> passed with <code>150</code> tests.</li>
+          <li>
+            Scoped ESLint for the Worker C files passed. The later orchestrator pass also fixed the
+            cross-scope <code>prefer-const</code> lint error in
+            <code>src/server/llm/providers/local-coding-agent.ts</code> and full
+            <code>pnpm lint</code> subsequently passed.
+          </li>
+          <li>
+            Browser QA on <code>http://localhost:3000/papers/test-paper</code> verified the
+            signed-out auth notice, non-error fallback copy, no horizontal overflow at
+            <code>1280px</code>, and <code>max-width: 1152px</code> before chat opens.
+          </li>
+          <li>
+            Additional chat-open and PDF-modal browser click-through was not completed after the
+            browser tool escalation was rejected by the session usage limit.
+          </li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>2026-05-30 Orchestrator Final Review Fixes</h2>
+        <p>
+          The final review pass found issues in signed-out reading, figure visualization, ingest
+          replacement safety, vector cleanup, and embedding response validation. The fixes below are
+          the current interpretation of the platform spec.
+        </p>
+
+        <h2>Design Decisions</h2>
+        <ul>
+          <li>
+            <code>/api/editor/ingest/arxiv</code> is now public read-only. It fetches and parses
+            arXiv HTML for the reader but does not persist paper records, chats, summaries, or user
+            state. The durable ingest, upload extraction, summarization, and QA routes remain
+            auth-gated.
+          </li>
+          <li>
+            Paper replacement now uses one Postgres transaction with a per-paper advisory
+            transaction lock. Metadata, chunks, figures, and citations are replaced together so
+            re-ingest cannot leave mixed old/new records after a partial failure.
+          </li>
+          <li>
+            Qdrant stale-vector deletion now happens before embedding generation. If embedding fails
+            after a successful DB re-ingest, old vectors are already removed and search falls back
+            to Postgres text retrieval instead of ranking stale vector IDs.
+          </li>
+          <li>
+            Remote embedding responses are validated for index range, duplicate/missing indexes,
+            finite numeric values, and expected vector dimensions before Qdrant sees them.
+          </li>
+          <li>
+            HTML-derived figure images now flow into the right-side figure rail. Figures with PDF
+            page anchors still jump to the PDF; figures without page anchors can be previewed as
+            images instead of becoming inert <code>No page</code> cards.
+          </li>
+        </ul>
+
+        <h2>Deviations and Tradeoffs</h2>
+        <ul>
+          <li>
+            The inline arXiv reader route being public is a deliberate divergence from the earlier
+            blanket auth-gate pass. The tradeoff is that signed-out users can read public papers,
+            while personalized and persisted features still require Clerk.
+          </li>
+          <li>
+            Local coding-agent LLM calls run from an isolated temp directory with a minimal
+            environment, not the repository root. That reduces file and secret exposure but also
+            means agent-backed app calls should be treated as pure prompt/response calls rather than
+            repo-aware coding sessions.
+          </li>
+        </ul>
+
+        <h2>Open Questions</h2>
+        <ul>
+          <li>
+            Confirm whether the public read-only arXiv parse route should get explicit rate limiting
+            or cache headers before production exposure.
+          </li>
+          <li>
+            Browser visual QA is still limited by the local Playwright browser cache missing its
+            Chromium binary. Curl/runtime checks and unit coverage pass, but a final screenshot pass
+            should be rerun after the browser tool is repaired.
+          </li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>2026-05-30 Final P1 Review Closure</h2>
+        <p>
+          A final read-only review found two remaining P1 issues after the first implementation
+          pass. Both are now closed in the current working tree.
+        </p>
+
+        <h2>Design Decisions</h2>
+        <ul>
+          <li>
+            Same-paper ingest replacement now holds a session-level paper advisory lock across the
+            Postgres replacement transaction and the post-commit Qdrant vector delete/embed/upsert
+            callback. This intentionally serializes re-ingest for one paper longer than the DB
+            transaction alone so older vectors cannot race back in after newer rows commit.
+          </li>
+          <li>
+            The DB transaction still commits before vector replacement runs. If vector indexing
+            fails, the durable paper text remains available through Postgres search, and the lock is
+            released after the failure-handling path completes.
+          </li>
+          <li>
+            Local <code>coding-agent</code> routing now defaults to <code>codex-cli</code> only.
+            <code>claude-code</code> can be listed explicitly; tool-capable built-ins such as
+            <code>gemini-cli</code> and <code>opencode</code> are skipped unless an unsafe local opt
+            in or custom argv is provided.
+          </li>
+          <li>
+            Local agent child processes now get throwaway <code>HOME</code>, <code>TMPDIR</code>,
+            and <code>XDG_*</code> directories. App secrets and normal config paths are not
+            forwarded by default. Codex auth can be provided through an explicit
+            <code>LLM_AGENT_CODEX_AUTH_FILE</code> or <code>CODEX_AUTH_FILE</code>.
+          </li>
+        </ul>
+
+        <h2>Deviations and Tradeoffs</h2>
+        <ul>
+          <li>
+            The requested ACP-style local LLM behavior is implemented as a safe provider-mode CLI
+            bridge, not as a full OpenClaw <code>sessions_spawn(runtime: "acp")</code> session
+            dispatcher. That keeps Readable's chat/summary calls as pure prompt-response requests
+            and avoids exposing repo tools to untrusted app prompts.
+          </li>
+          <li>
+            Holding the paper ingest lock across Qdrant work trades same-paper ingest concurrency
+            for correctness. Different papers can still ingest independently through separate lock
+            keys.
+          </li>
+        </ul>
+
+        <h2>Verification Notes</h2>
+        <ul>
+          <li><code>pnpm exec tsc --noEmit</code> passed.</li>
+          <li>
+            <code>pnpm test</code> passed with <code>24</code> files and <code>158</code> tests.
+          </li>
+          <li>
+            <code>pnpm lint</code> passed with <code>0</code> errors and <code>20</code> warnings.
+          </li>
+          <li><code>pnpm exec next build --webpack</code> passed.</li>
+          <li>
+            <code>pnpm test:stores</code> passed with Postgres reachable, schema applied, Qdrant
+            reachable, and the active collection ready.
+          </li>
+          <li>
+            <code>pnpm embeddings:probe</code> passed using OpenRouter
+            <code>nvidia/llama-nemotron-embed-vl-1b-v2:free</code> with
+            <code>2048</code> dimensions.
+          </li>
+          <li>
+            Runtime checks against <code>http://127.0.0.1:3000</code> returned <code>200</code> for
+            <code>/api/health</code>, <code>401</code> for signed-out <code>/api/qa</code> and
+            <code>/api/ingest</code>, and <code>200</code> for the public read-only
+            <code>/api/editor/ingest/arxiv</code> route with arXiv <code>1706.03762</code>. The
+            arXiv route returned sections plus image-backed figure records for the right-side visual
+            rail.
+          </li>
+          <li>
+            <code>git diff --check</code> passed. The local GStack Playwright browser cache is still
+            missing its Chromium binary, so visual QA used system Chromium in the prior production
+            screenshot pass.
+          </li>
+        </ul>
+
+        <h2>Open Questions</h2>
+        <ul>
+          <li>
+            Confirm whether the public read-only arXiv parse route should get explicit rate limiting
+            or cache headers before production exposure.
+          </li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>2026-05-30 Public Figure URL Review Closure</h2>
+        <p>
+          A follow-up read-only review found one remaining public reader issue: the inline arXiv
+          route could pass only the ar5iv origin into the parser, which made relative figure paths
+          resolve outside the paper HTML directory.
+        </p>
+
+        <h2>Design Decisions</h2>
+        <ul>
+          <li>
+            The inline arXiv route now tracks the exact HTML page URL that supplied the content.
+            Successful ar5iv fetches use <code>buildAr5ivHtmlUrl(arxivId)</code>; fallback fetches
+            use the actual <code>https://arxiv.org/html/&lt;id&gt;</code> or
+            <code>https://arxiv.org/abs/&lt;id&gt;</code> URL.
+          </li>
+          <li>
+            <code>parseAr5ivHtml</code> now resolves image paths with the platform
+            <code>URL</code> parser. Relative paths stay under the paper directory, while
+            root-relative paths resolve from the origin without duplicating
+            <code>/html/&lt;id&gt;</code>.
+          </li>
+        </ul>
+
+        <h2>Verification Notes</h2>
+        <ul>
+          <li>
+            Added <code>src/server/editor/ingest.test.ts</code> coverage for public inline ar5iv and
+            fallback HTML figure URL resolution.
+          </li>
+          <li>Added parser coverage for root-relative figure URLs with a paper URL base.</li>
+          <li>
+            <code
+              >pnpm exec vitest run src/server/editor/ingest.test.ts src/server/ingest/ar5iv.test.ts
+              src/app/api/editor/ingest/arxiv/route.test.ts</code
+            >
+            passed with <code>8</code> tests.
+          </li>
+        </ul>
+      </section>
     </main>
   </body>
 </html>

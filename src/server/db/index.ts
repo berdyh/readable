@@ -14,6 +14,7 @@ export {
   upsertPaperChunks,
   upsertFigures,
   upsertCitations,
+  replacePaperIngestData,
   fetchPaperChunksByPaperId,
   fetchPaperFiguresByPaperId,
   fetchPaperCitationsByPaperId,
@@ -21,7 +22,13 @@ export {
   fetchChunksByIds,
   fetchChunksByPageWindow,
 } from "./papers";
-export type { PaperChunkTextSearchHit, UpsertPaperChunksOptions } from "./papers";
+export type {
+  PaperChunkTextSearchHit,
+  ReplacePaperIngestDataInput,
+  ReplacePaperIngestDataOptions,
+  ReplacePaperIngestDataResult,
+  UpsertPaperChunksOptions,
+} from "./papers";
 export { upsertPersonaConcepts, upsertInteractions, listPersonaConceptsForUser } from "./persona";
 export {
   ChatSessionOwnershipError,

@@ -20,11 +20,11 @@ import { clsx } from "clsx";
 
 import type { Block } from "./types";
 import type { QuestionSelection } from "@/server/qa/types";
+import { AnswerCard, type AnswerTrustMetadata } from "../ai-chatbot/answer-card";
 import { Conversation, ConversationContent } from "../ai-chatbot/conversation";
 import { Message, MessageAvatar } from "../ai-chatbot/message";
 import { PromptInputTextarea } from "../ai-chatbot/prompt-input";
-import { Reasoning } from "../ai-chatbot/reasoning";
-import { Sources, type Source } from "../ai-chatbot/sources";
+import type { Source } from "../ai-chatbot/sources";
 
 interface ChatIntegrationProps {
   paperId: string;
@@ -48,8 +48,15 @@ interface ChatMessage {
   content: string;
   citations?: Source[];
   reasoning?: string;
+  trust?: AnswerTrustMetadata;
+  metadata?: ChatMessageMetadata;
   createdAt: number;
   status?: "error";
+}
+
+interface ChatMessageMetadata {
+  version: 1;
+  trust?: AnswerTrustMetadata;
 }
 
 interface ChatSessionResponse {
@@ -129,6 +136,17 @@ function titleFromQuestion(question: string): string {
   return compact.length > 42 ? `${compact.slice(0, 39)}...` : compact;
 }
 
+function normalizeHistoryMessage(message: ChatMessage): ChatMessage {
+  if (message.trust || !message.metadata?.trust) {
+    return message;
+  }
+
+  return {
+    ...message,
+    trust: message.metadata.trust,
+  };
+}
+
 async function readResponseError(response: Response, fallback: string): Promise<string> {
   const payload = (await response.json().catch(() => null)) as { error?: string } | null;
   return payload?.error ?? fallback;
@@ -154,13 +172,25 @@ async function saveChatMessage(
   paperId: string,
   message: ChatMessage,
 ): Promise<void> {
+  const messagePayload = {
+    ...message,
+    metadata:
+      message.metadata ??
+      (message.role === "assistant" && message.trust
+        ? {
+            version: 1 as const,
+            trust: message.trust,
+          }
+        : undefined),
+  };
+
   const response = await fetch("/api/chat/history", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       sessionId,
       paperId,
-      message,
+      message: messagePayload,
     }),
   });
 
@@ -198,35 +228,31 @@ export function ChatButton({ onClick }: { onClick: () => void }) {
 
 function ChatMessageBubble({ message, paperId }: { message: ChatMessage; paperId: string }) {
   const isUser = message.role === "user";
-  const isError = message.status === "error";
+
+  if (isUser) {
+    return (
+      <Message from={message.role} className="items-start justify-end">
+        <div className="flex max-w-[86%] flex-col items-end gap-2">
+          <div className="whitespace-pre-wrap break-words px-0 py-1 text-right text-sm leading-relaxed text-zinc-700 dark:text-zinc-200">
+            {message.content}
+          </div>
+        </div>
+      </Message>
+    );
+  }
 
   return (
     <Message from={message.role} className="items-start">
       <MessageAvatar from={message.role} />
-      <div
-        className={clsx("flex max-w-[82%] flex-col gap-2", isUser ? "items-end" : "items-start")}
-      >
-        <div
-          className={clsx(
-            "rounded-lg px-4 py-3 text-sm leading-relaxed shadow-sm",
-            "break-words",
-            isUser && "bg-zinc-950 text-white dark:bg-zinc-100 dark:text-zinc-950",
-            !isUser &&
-              !isError &&
-              "border border-zinc-200 bg-white text-zinc-800 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100",
-            isError &&
-              "border border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/70 dark:bg-rose-950/30 dark:text-rose-200",
-          )}
-        >
-          <div className="whitespace-pre-wrap">{message.content}</div>
-        </div>
-
-        {!isUser && message.citations && message.citations.length > 0 && (
-          <Sources sources={message.citations} defaultVisible={false} paperId={paperId} />
-        )}
-
-        {!isUser && message.reasoning && <Reasoning content={message.reasoning} />}
-      </div>
+      <AnswerCard
+        className="max-w-[86%]"
+        content={message.content}
+        citations={message.citations}
+        trust={message.trust}
+        reasoning={message.reasoning}
+        paperId={paperId}
+        status={message.status}
+      />
     </Message>
   );
 }
@@ -384,7 +410,7 @@ export function ChatSidePanel({
               session.messages.find((message) => message.role === "user")?.content ??
                 `Chat ${index + 1}`,
             ),
-            messages: session.messages,
+            messages: session.messages.map(normalizeHistoryMessage),
             sessionId: session.sessionId,
           }));
           setTabs(loadedTabs);
@@ -614,6 +640,7 @@ export function ChatSidePanel({
           answer: string;
           cites?: Source[];
           reasoning?: string;
+          trust?: AnswerTrustMetadata;
         };
 
         const assistantMessage: ChatMessage = {
@@ -622,6 +649,7 @@ export function ChatSidePanel({
           content: result.answer,
           citations: result.cites,
           reasoning: result.reasoning,
+          trust: result.trust,
           createdAt: Date.now(),
         };
 
@@ -671,13 +699,13 @@ export function ChatSidePanel({
   return (
     <aside
       className={clsx(
-        "fixed inset-y-0 right-0 z-50 flex h-dvh flex-col border-l shadow-2xl",
+        "relative z-10 flex min-h-[640px] w-full flex-col border-t lg:sticky lg:top-8 lg:h-[calc(100dvh-4rem)] lg:min-h-0 lg:w-[var(--chat-panel-width)] lg:shrink-0 lg:border-l lg:border-t-0",
         isResizing && "select-none",
         isDarkMode
           ? "border-zinc-800 bg-zinc-950 text-zinc-100"
           : "border-zinc-200 bg-zinc-50 text-zinc-950",
       )}
-      style={{ width: `${panelWidth}px` }}
+      style={{ "--chat-panel-width": `${panelWidth}px` } as React.CSSProperties}
       aria-label="Research chat"
     >
       <div
@@ -692,7 +720,7 @@ export function ChatSidePanel({
         onPointerDown={handleResizePointerDown}
         onKeyDown={handleResizeKeyDown}
         className={clsx(
-          "group absolute inset-y-0 left-0 z-20 flex w-3 -translate-x-1.5 cursor-col-resize touch-none items-center justify-center outline-none",
+          "group absolute inset-y-0 left-0 z-20 hidden w-3 -translate-x-1.5 cursor-col-resize touch-none items-center justify-center outline-none lg:flex",
           "after:absolute after:inset-y-0 after:left-1/2 after:w-px after:-translate-x-1/2 after:bg-zinc-300 after:transition after:content-['']",
           "hover:after:w-1 hover:after:bg-emerald-500 focus-visible:after:w-1 focus-visible:after:bg-emerald-500",
           "dark:after:bg-zinc-700 dark:hover:after:bg-emerald-400 dark:focus-visible:after:bg-emerald-400",
@@ -827,9 +855,9 @@ export function ChatSidePanel({
                 </ConversationContent>
               </Conversation>
 
-              <footer className="shrink-0 border-t border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
+              <footer className="shrink-0 border-t border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
                 {selectedText && (
-                  <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-200">
+                  <div className="border-b border-amber-200 px-4 py-3 text-xs text-amber-800 dark:border-amber-900/70 dark:text-amber-200">
                     <div className="mb-1 flex items-center justify-between gap-2">
                       <span className="inline-flex items-center gap-1.5 font-medium">
                         <BookOpenText className="h-3.5 w-3.5" />
@@ -848,13 +876,13 @@ export function ChatSidePanel({
                 )}
 
                 {panelError && (
-                  <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 dark:border-rose-900/70 dark:bg-rose-950/30 dark:text-rose-200">
+                  <div className="border-b border-rose-200 px-4 py-3 text-xs text-rose-700 dark:border-rose-900/70 dark:text-rose-200">
                     {panelError}
                   </div>
                 )}
 
                 {lastAssistantMessage && onInsertBlocks && (
-                  <div className="mb-3 flex justify-end">
+                  <div className="flex justify-end border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
                     <button
                       type="button"
                       onClick={handleIngestToBlock}
@@ -871,7 +899,7 @@ export function ChatSidePanel({
                     event.preventDefault();
                     void sendQuestion(input);
                   }}
-                  className="flex items-end gap-2"
+                  className="flex min-h-[124px] items-end gap-3 px-4 py-3"
                 >
                   <PromptInputTextarea
                     value={input}
@@ -879,7 +907,8 @@ export function ChatSidePanel({
                     placeholder={
                       selectedText ? "Ask about the selected passage" : "Ask about this paper"
                     }
-                    className="min-h-[48px] flex-1 pr-3"
+                    className="min-h-[92px] flex-1 resize-none rounded-none border-transparent bg-transparent px-0 py-0 pr-3 shadow-none focus:border-transparent focus:ring-0 dark:border-transparent dark:bg-transparent dark:focus:border-transparent dark:focus:ring-0"
+                    style={{ minHeight: "92px", maxHeight: "220px" }}
                     disabled={isSubmitting}
                   />
                   <button

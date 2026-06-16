@@ -10,7 +10,8 @@ llm/
 │   ├── openai.ts         # OpenAI (api-key)
 │   ├── anthropic.ts      # Anthropic Claude (api-key)
 │   ├── gemini.ts         # Google Gemini API (api-key)
-│   └── openrouter.ts     # OpenRouter (api-key; OpenAI-compatible)
+│   ├── openrouter.ts     # OpenRouter (api-key; OpenAI-compatible)
+│   └── local-coding-agent.ts # Claude Code / Codex / Gemini CLI / opencode
 ├── routing/               # OpenClaw-pattern multi-provider routing
 │   ├── types.ts          # FailoverReason, AuthProfile, ModelCandidate, ...
 │   ├── env-keys.ts       # READABLE_LIVE_*_KEY → *_API_KEYS → *_API_KEY → *_API_KEY_*
@@ -51,14 +52,14 @@ const text = await generateText({
 
 ## Provider selection
 
-Two paths, gated by `LLM_ALLOWED_PROVIDERS` for cross-provider routing:
+Two paths, gated by `LLM_ALLOWED_PROVIDERS` for API cross-provider routing:
 
 ### Single-provider fast path (legacy, default)
 
-If `LLM_ALLOWED_PROVIDERS` is **unset**, the request goes straight to the provider named in `LLM_PROVIDER` (or `options.provider`). Existing single-provider deploys keep their simpler path.
+If `LLM_ALLOWED_PROVIDERS` is **unset**, the request goes straight to the provider named in `LLM_PROVIDER` (or `options.provider`). Existing single-provider deploys keep their simpler path. `coding-agent` also stays on this local path when `LLM_ALLOWED_PROVIDERS` is accidentally left over from an API-provider setup.
 
 ```bash
-LLM_PROVIDER=openrouter        # default; also accepts openai | anthropic | gemini
+LLM_PROVIDER=openrouter        # default; also accepts openai | anthropic | gemini | coding-agent
 ```
 
 OpenRouter can also use its native same-provider model fallback. If the primary
@@ -73,6 +74,41 @@ Configure the fallback chain with raw OpenRouter model IDs in
 `OPENROUTER_FALLBACK_MODELS` or a task-specific variant such as
 `OPENROUTER_QA_FALLBACK_MODELS`. Do not prefix values with the app's internal
 provider ref unless that prefix is part of the OpenRouter model ID itself.
+
+### Local coding-agent mode
+
+For local runs, `LLM_PROVIDER=coding-agent` uses installed coding-agent CLIs as the LLM backend. The provider builds one prompt from the app's system/user prompts, calls the first available safe local agent, and falls back through the configured order on failed, timed-out, or empty responses. This is a provider-mode bridge rather than OpenClaw `sessions_spawn`; the CLI is invoked with enforced no-tool/read-only flags when available, runs from an isolated temp directory, and receives a minimal environment by default.
+
+```bash
+LLM_PROVIDER=coding-agent
+LLM_ALLOWED_PROVIDERS=
+LLM_LOCAL_AGENTS=codex-cli
+LLM_LOCAL_AGENT_TIMEOUT_MS=180000
+LLM_LOCAL_AGENT_ENV_ALLOWLIST=
+```
+
+Safe built-in invocations:
+
+- `claude-code`: `claude --print --output-format text --no-session-persistence --permission-mode default --disable-slash-commands --tools ""`
+- `codex-cli`: `codex exec --skip-git-repo-check --sandbox read-only --ask-for-approval never --cd <tempdir> --ephemeral --output-last-message <tempfile> -`
+
+The default fallback order is Codex CLI only. `claude-code` can be listed explicitly with `LLM_LOCAL_AGENTS=claude-code,codex-cli`.
+
+Override command paths with `LLM_AGENT_<AGENT>_COMMAND`, for example `LLM_AGENT_CODEX_COMMAND=/path/to/codex`. Override argv with `LLM_AGENT_<AGENT>_ARGS_JSON`; entries may contain `{prompt}`, `{cwd}`, and `{output}`, where `{cwd}` is the isolated temp directory for that invocation. Antigravity requires an argv override for headless use.
+
+Child processes always get throwaway `HOME`, `TMPDIR`, `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, and `XDG_DATA_HOME` paths. Extra non-secret process env can be forwarded with `LLM_LOCAL_AGENT_ENV_ALLOWLIST`, but HOME/config keys are not accepted through that allowlist. For Codex auth without exposing the user's normal home/config tree, set `LLM_AGENT_CODEX_AUTH_FILE=/absolute/path/to/auth.json` or `CODEX_AUTH_FILE`.
+
+Tool-capable built-in invocations such as `gemini --prompt` and `opencode run` are skipped by default. To use them for local-only experiments, either provide safe custom argv with `LLM_AGENT_<AGENT>_ARGS_JSON` or set `LLM_AGENT_<AGENT>_ALLOW_UNSAFE=1` / `LLM_LOCAL_AGENT_ALLOW_UNSAFE=1`.
+
+To pin local app calls to Codex with GPT-5.5 and xhigh reasoning:
+
+```bash
+LLM_PROVIDER=coding-agent
+LLM_ALLOWED_PROVIDERS=
+LLM_LOCAL_AGENTS=codex-cli
+LLM_AGENT_CODEX_MODEL=gpt-5.5
+LLM_AGENT_CODEX_REASONING_EFFORT=xhigh
+```
 
 ### Multi-provider routing (OpenClaw pattern)
 
@@ -91,7 +127,7 @@ Engaging routing layer's behaviour:
 4. **Cooldown probes**: when all profiles for a provider are in cooldown but the most-recent reason is transient, allow one probe per provider per `MIN_PROBE_INTERVAL_MS=30s`.
 5. **Persist** usage stats after every state change (`persistUsageWrites: true` is wired in `router.ts`) so a process restart doesn't lose the cooldowns.
 
-Use `pnpm setup` for an interactive picker that detects everything you've authenticated and writes both vars correctly.
+Use `pnpm setup` for an interactive picker that detects everything you've authenticated and writes these vars correctly. For local coding-agent mode it writes `LLM_LOCAL_AGENTS` and clears `LLM_ALLOWED_PROVIDERS` so API fallback settings do not take over the request.
 
 ## Detection & credential precedence
 

@@ -4,7 +4,9 @@ import { recordPersonaSignals } from '@/server/persona/record';
 import type {
   AnswerCitation,
   AnswerResult,
+  AnswerTrustMetadata,
   QaChunkContext,
+  QaRetrievalDiagnostics,
   QuestionEvidenceContext,
   QuestionOptions,
 } from './types';
@@ -140,28 +142,90 @@ function formatCitations(citations: LlmCitationPayload[]): Array<{ chunkId: stri
 function enrichCitationsWithChunkData(
   citations: Array<{ chunkId: string; quote?: string }>,
   evidence: QuestionEvidenceContext,
-): AnswerCitation[] {
-  return citations.map((citation) => {
+): {
+  citations: AnswerCitation[];
+  invalidCitationCount: number;
+} {
+  const enriched: AnswerCitation[] = [];
+  let invalidCitationCount = 0;
+
+  for (const citation of citations) {
     // Find the chunk in evidence to get the actual page number
     const chunk =
       evidence.hits.find((hit) => hit.chunkId === citation.chunkId) ??
       evidence.expandedWindow.find((hit) => hit.chunkId === citation.chunkId);
 
+    if (!chunk) {
+      invalidCitationCount += 1;
+      continue;
+    }
+
     // Always use chunk page number if available, otherwise undefined
     const page =
-      chunk && typeof chunk.pageNumber === 'number' && chunk.pageNumber >= 1
+      typeof chunk.pageNumber === 'number' && chunk.pageNumber >= 1
         ? chunk.pageNumber
         : undefined;
 
     // Use chunk text as quote if no quote provided
-    const quote = citation.quote || (chunk ? chunk.text.slice(0, 240).trim() : undefined);
+    const quote = citation.quote || chunk.text.slice(0, 240).trim() || undefined;
 
-    return {
+    enriched.push({
       chunkId: citation.chunkId,
       page,
       quote,
+      sourceAvailable: true,
+    });
+  }
+
+  return {
+    citations: enriched,
+    invalidCitationCount,
+  };
+}
+
+function buildTrustMetadata(
+  citations: AnswerCitation[],
+  invalidCitationCount: number,
+  evidence: QuestionEvidenceContext,
+): AnswerTrustMetadata {
+  const hasEvidence = evidence.hits.length > 0 || evidence.expandedWindow.length > 0;
+  const warnings: string[] = [];
+  const retrieval: QaRetrievalDiagnostics =
+    evidence.retrieval ?? {
+      vector: { status: 'skipped', hitCount: 0, reason: 'legacy_evidence_context' },
+      text: {
+        status: hasEvidence ? 'ok' : 'empty',
+        hitCount: evidence.hits.length + evidence.expandedWindow.length,
+      },
     };
-  });
+
+  if (invalidCitationCount > 0) {
+    warnings.push('Some model citations did not match current paper evidence.');
+  }
+
+  if (retrieval.vector.status !== 'ok') {
+    warnings.push('Vector retrieval was degraded; answer used available text evidence.');
+  }
+
+  const status =
+    citations.length > 0 ? 'sourced' : hasEvidence ? 'uncited' : 'refused';
+
+  if (status === 'uncited') {
+    warnings.push('The answer used retrieved evidence but has no valid source citation.');
+  }
+
+  if (status === 'refused') {
+    warnings.push('No matching paper evidence was retrieved for this question.');
+  }
+
+  return {
+    status,
+    hasEvidence,
+    validCitationCount: citations.length,
+    invalidCitationCount,
+    warnings,
+    retrieval,
+  };
 }
 
 function buildQaUserPrompt(
@@ -303,22 +367,13 @@ export async function answerPaperQuestion(
   // Extract citations (chunkId and quote only - ignoring LLM page numbers)
   const rawCitations = formatCitations(citationsPayload);
 
-  // Always enrich with actual page numbers from chunk data
-  const citations = enrichCitationsWithChunkData(rawCitations, evidence);
-
-  // Fallback to first hit if no citations
-  if (citations.length === 0 && evidence.hits.length > 0) {
-    const fallbackChunk = evidence.hits[0];
-    const page =
-      typeof fallbackChunk.pageNumber === 'number' && fallbackChunk.pageNumber >= 1
-        ? fallbackChunk.pageNumber
-        : undefined;
-    citations.push({
-      chunkId: fallbackChunk.chunkId,
-      page,
-      quote: fallbackChunk.text?.slice(0, 240).trim() || undefined,
-    });
-  }
+  // Always enrich with actual page numbers from chunk data. Unknown model
+  // citation IDs are dropped instead of fabricated into source rows.
+  const { citations, invalidCitationCount } = enrichCitationsWithChunkData(
+    rawCitations,
+    evidence,
+  );
+  const trust = buildTrustMetadata(citations, invalidCitationCount, evidence);
 
   // Persona writes — fire and forget so we never block the answer on
   // disk I/O. A failure here is just a missed skill update.
@@ -337,5 +392,6 @@ export async function answerPaperQuestion(
   return {
     answer,
     cites: citations,
+    trust,
   };
 }

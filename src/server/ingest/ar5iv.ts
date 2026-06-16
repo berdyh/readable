@@ -1,16 +1,12 @@
-import { load, type Cheerio, type CheerioAPI } from 'cheerio';
-import type { AnyNode } from 'domhandler';
+import { load, type Cheerio, type CheerioAPI } from "cheerio";
+import type { AnyNode } from "domhandler";
 
-import type {
-  HtmlParseResult,
-  PaperFigure,
-  PaperSection,
-  SectionParagraph,
-} from './types';
-import { normalizeWhitespace } from './utils';
+import type { HtmlParseResult, PaperFigure, PaperSection, SectionParagraph } from "./types";
+import { normalizeWhitespace } from "./utils";
 
-const HEADING_SELECTOR = '> h1, > h2, > h3, > h4, > h5, > h6, > header > h1, > header > h2, > header > h3, > header > h4, > header > h5, > header > h6';
-const DEFAULT_IMAGE_BASE = 'https://ar5iv.org';
+const HEADING_SELECTOR =
+  "> h1, > h2, > h3, > h4, > h5, > h6, > header > h1, > header > h2, > header > h3, > header > h4, > header > h5, > header > h6";
+const DEFAULT_IMAGE_BASE = "https://ar5iv.org";
 
 interface ParseAr5ivOptions {
   imageBaseUrl?: string;
@@ -41,7 +37,7 @@ function extractParagraphs(
 ): SectionParagraph[] {
   const paragraphs: SectionParagraph[] = [];
 
-  $section.find('> p, > div.ltx_para > p').each((index, element) => {
+  $section.find("> p, > div.ltx_para > p").each((index, element) => {
     const $paragraph = $(element);
     const text = normalizeWhitespace($paragraph.text());
     if (!text) {
@@ -51,22 +47,23 @@ function extractParagraphs(
     const citations = new Set<string>();
     const figureIds = new Set<string>();
 
-    $paragraph.find('a[href], a[data-bibtex-key]').each((_, refElement) => {
+    $paragraph.find("a[href], a[data-bibtex-key]").each((_, refElement) => {
       const $ref = $(refElement);
-        const target =
-          $ref.attr('data-bibtex-key') ??
-          $ref.attr('href') ??
-          $ref.attr('data-target');
-        if (target?.startsWith('#')) {
-          const cleaned = target.slice(1);
-          if (cleaned.toLowerCase().startsWith('fig') || cleaned.match(/(fig|sec|tab|equation)/i)) {
-            figureIds.add(cleaned);
-          } else {
-            citations.add(cleaned);
-          }
-        } else if (target) {
-          citations.add(target);
+      const target = $ref.attr("data-bibtex-key") ?? $ref.attr("href") ?? $ref.attr("data-target");
+      if (target?.startsWith("#")) {
+        const cleaned = target.slice(1);
+        if (
+          cleaned.toLowerCase().startsWith("fig") ||
+          cleaned.match(/(?:^|[._:-])f\d+/i) ||
+          cleaned.match(/(fig|sec|tab|equation)/i)
+        ) {
+          figureIds.add(cleaned);
+        } else {
+          citations.add(cleaned);
         }
+      } else if (target) {
+        citations.add(target);
+      }
     });
 
     paragraphs.push({
@@ -80,10 +77,7 @@ function extractParagraphs(
   return paragraphs;
 }
 
-function resolveImageUrl(
-  src: string | undefined,
-  baseUrl: string | undefined,
-): string | undefined {
+function resolveImageUrl(src: string | undefined, baseUrl: string | undefined): string | undefined {
   if (!src) {
     return undefined;
   }
@@ -93,49 +87,44 @@ function resolveImageUrl(
     return undefined;
   }
 
-  if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith('data:')) {
+  if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith("data:")) {
     return trimmed;
   }
 
-  if (trimmed.startsWith('//')) {
+  if (trimmed.startsWith("//")) {
     return `https:${trimmed}`;
   }
 
   const base = baseUrl ?? DEFAULT_IMAGE_BASE;
-  if (trimmed.startsWith('/')) {
-    return `${base.replace(/\/+$/, '')}${trimmed}`;
+  const directoryBase = base.endsWith("/") ? base : `${base}/`;
+  try {
+    return new URL(trimmed, directoryBase).toString();
+  } catch {
+    return `${base.replace(/\/+$/, "")}/${trimmed.replace(/^\/+/, "")}`;
   }
-
-  return `${base.replace(/\/+$/, '')}/${trimmed}`;
 }
 
-function extractFigures(
-  $root: CheerioAPI,
-  imageBaseUrl: string,
-): PaperFigure[] {
+function extractFigures($root: CheerioAPI, imageBaseUrl: string): PaperFigure[] {
   const figures: PaperFigure[] = [];
 
-  $root('figure, div.ltx_figure, div.figure').each((index, element) => {
+  $root("figure, div.ltx_figure, div.figure").each((index, element) => {
     const $figure = $root(element);
-    const id = $figure.attr('id') ?? `figure-${index + 1}`;
+    const id = $figure.attr("id") ?? `figure-${index + 1}`;
     const label =
       normalizeWhitespace(
-        $figure.find('.ltx_tag, .figure-label, .ltx_figcaption_label').first().text(),
+        $figure.find(".ltx_tag, .figure-label, .ltx_figcaption_label").first().text(),
       ) || undefined;
     const caption =
       normalizeWhitespace(
-        $figure.find('figcaption, .ltx_caption, .figure-caption, .ltx_figcaption').first().text(),
-      ) || '';
+        $figure.find("figcaption, .ltx_caption, .figure-caption, .ltx_figcaption").first().text(),
+      ) || "";
 
     if (!caption) {
       return;
     }
 
-    const $image = $figure.find('img').first();
-    const imageSrc =
-      $image.attr('data-src') ??
-      $image.attr('src') ??
-      $image.attr('data-original');
+    const $image = $figure.find("img").first();
+    const imageSrc = $image.attr("data-src") ?? $image.attr("src") ?? $image.attr("data-original");
     const imageUrl = resolveImageUrl(imageSrc, imageBaseUrl);
 
     figures.push({
@@ -149,25 +138,25 @@ function extractFigures(
   return figures;
 }
 
-export function parseAr5ivHtml(
-  html: string,
-  options?: ParseAr5ivOptions,
-): HtmlParseResult {
+export function parseAr5ivHtml(html: string, options?: ParseAr5ivOptions): HtmlParseResult {
   const $ = load(html);
-  const $root = $('article#document, article#ltx_document, body');
+  const $root = $("article#document, article#ltx_document, body");
   const sections: PaperSection[] = [];
   const imageBaseUrl = options?.imageBaseUrl ?? DEFAULT_IMAGE_BASE;
 
-  $root.find('section').each((index, element) => {
+  $root.find("section").each((index, element) => {
     const $section = $(element) as Cheerio<AnyNode>;
-    const sectionId = $section.attr('id') ?? `section-${index + 1}`;
+    const sectionId = $section.attr("id") ?? `section-${index + 1}`;
     const $heading = $section.find(HEADING_SELECTOR).first();
     const title = normalizeWhitespace($heading.text());
     if (!title) {
       return;
     }
 
-    const level = resolveSectionLevel($heading.prop('tagName')?.toLowerCase(), $section.attr('data-depth'));
+    const level = resolveSectionLevel(
+      $heading.prop("tagName")?.toLowerCase(),
+      $section.attr("data-depth"),
+    );
 
     const paragraphs = extractParagraphs($section, sectionId, $);
 

@@ -1,22 +1,25 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from "next/server";
 
-import { getIngestEnvironment } from '@/server/ingest/config';
-import { runDeepSeekOcr } from '@/server/ingest/ocr';
-import { extractPdfText, shouldUseOcr } from '@/server/ingest/pdf';
+import {
+  AUTH_REQUIRED_MESSAGE,
+  isAuthenticationRequiredError,
+  requireAuthenticatedUserId,
+} from "@/server/auth/user";
+import { getIngestEnvironment } from "@/server/ingest/config";
+import { runDeepSeekOcr } from "@/server/ingest/ocr";
+import { extractPdfText, shouldUseOcr } from "@/server/ingest/pdf";
 
-const TEXT_THRESHOLD =
-  Number(process.env.INGEST_PDF_TEXT_THRESHOLD ?? 1_000);
+const TEXT_THRESHOLD = Number(process.env.INGEST_PDF_TEXT_THRESHOLD ?? 1_000);
 
 export async function POST(request: NextRequest) {
   try {
+    await requireAuthenticatedUserId();
+
     const formData = await request.formData();
-    const file = formData.get('pdf') as File | null;
+    const file = formData.get("pdf") as File | null;
 
     if (!file) {
-      return NextResponse.json(
-        { error: 'No file provided' },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
     const bytes = await file.arrayBuffer();
@@ -26,19 +29,14 @@ export async function POST(request: NextRequest) {
 
     const hasOcrEndpoint =
       Boolean(environment.deepSeekOcrUrl) ||
-      (Boolean(environment.runpodApiKey) &&
-        Boolean(environment.runpodEndpointId));
+      (Boolean(environment.runpodApiKey) && Boolean(environment.runpodEndpointId));
 
     const allowOcr =
       environment.enableOcrFallback &&
       hasOcrEndpoint &&
-      shouldUseOcr(
-        pdfExtraction.analysis,
-        pdfExtraction.combinedText.length,
-        TEXT_THRESHOLD,
-      );
+      shouldUseOcr(pdfExtraction.analysis, pdfExtraction.combinedText.length, TEXT_THRESHOLD);
 
-    let method: 'pdfjs-dist' | 'deepseek-ocr' = 'pdfjs-dist';
+    let method: "pdfjs-dist" | "deepseek-ocr" = "pdfjs-dist";
     let extraction = pdfExtraction;
     let ocrAttempted = false;
 
@@ -47,11 +45,11 @@ export async function POST(request: NextRequest) {
       try {
         const ocrResult = await runDeepSeekOcr(bytes, environment);
         if (ocrResult) {
-          method = 'deepseek-ocr';
+          method = "deepseek-ocr";
           extraction = ocrResult;
         }
       } catch (error) {
-        console.warn('[extract-research-paper] DeepSeek OCR fallback failed', error);
+        console.warn("[extract-research-paper] DeepSeek OCR fallback failed", error);
       }
     }
 
@@ -81,10 +79,11 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('PDF extraction error:', error);
-    return NextResponse.json(
-      { error: 'Failed to extract PDF content' },
-      { status: 500 },
-    );
+    if (isAuthenticationRequiredError(error)) {
+      return NextResponse.json({ error: AUTH_REQUIRED_MESSAGE }, { status: 401 });
+    }
+
+    console.error("PDF extraction error:", error);
+    return NextResponse.json({ error: "Failed to extract PDF content" }, { status: 500 });
   }
 }

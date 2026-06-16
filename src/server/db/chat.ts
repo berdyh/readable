@@ -26,8 +26,13 @@ interface ChatMessageRow {
   content: string;
   citations: unknown;
   reasoning: string | null;
+  metadata: unknown;
   created_at: Date | string | number;
 }
+
+type PersistableChatMessageRecord = ChatMessageRecord & {
+  metadata?: unknown;
+};
 
 function toEpochMillis(value: Date | string | number): number {
   if (value instanceof Date) {
@@ -53,8 +58,9 @@ function mapMessageRow(row: ChatMessageRow): ChatMessageRecord {
     content: row.content,
     citations: Array.isArray(row.citations) ? row.citations : undefined,
     reasoning: row.reasoning ?? undefined,
+    metadata: row.metadata ?? undefined,
     createdAt: toEpochMillis(row.created_at),
-  };
+  } as ChatMessageRecord;
 }
 
 async function ensureOwnedChatSession(
@@ -116,7 +122,7 @@ export async function saveChatMessages(
   userId: string,
   paperId: string,
   sessionId: string,
-  messages: ChatMessageRecord[],
+  messages: PersistableChatMessageRecord[],
 ): Promise<number> {
   if (messages.length === 0) {
     return 0;
@@ -142,13 +148,15 @@ export async function saveChatMessages(
             content,
             citations,
             reasoning,
+            metadata,
             created_at
-          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
           ON CONFLICT (session_id, id) DO UPDATE SET
             role = EXCLUDED.role,
             content = EXCLUDED.content,
             citations = EXCLUDED.citations,
             reasoning = EXCLUDED.reasoning,
+            metadata = EXCLUDED.metadata,
             created_at = EXCLUDED.created_at
           `,
           [
@@ -160,6 +168,7 @@ export async function saveChatMessages(
             message.content,
             message.citations ? JSON.stringify(message.citations) : null,
             message.reasoning ?? null,
+            message.metadata ? JSON.stringify(message.metadata) : null,
             toTimestamp(message.createdAt),
           ],
         );
@@ -206,7 +215,7 @@ export async function getChatMessagesForSession(
     const { rows } = await client.query<ChatMessageRow>(
       `
       SELECT messages.session_id, messages.id, messages.role, messages.content,
-             messages.citations, messages.reasoning, messages.created_at
+             messages.citations, messages.reasoning, messages.metadata, messages.created_at
         FROM chat_messages messages
         JOIN chat_sessions sessions
           ON sessions.session_id = messages.session_id
@@ -246,7 +255,7 @@ export async function listChatSessionsForPaper(
     const sessionIds = sessionRows.map((row) => row.session_id);
     const { rows: messageRows } = await client.query<ChatMessageRow>(
       `
-      SELECT session_id, id, role, content, citations, reasoning, created_at
+      SELECT session_id, id, role, content, citations, reasoning, metadata, created_at
         FROM chat_messages
        WHERE user_id = $1
          AND session_id = ANY($2::text[])

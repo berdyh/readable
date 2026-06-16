@@ -1,16 +1,21 @@
-import { NextResponse, type NextRequest } from 'next/server';
+import { NextResponse, type NextRequest } from "next/server";
 
-import { ingestPaper, type IngestRequest } from '@/server/ingest';
+import {
+  AUTH_REQUIRED_MESSAGE,
+  isAuthenticationRequiredError,
+  requireAuthenticatedUserId,
+} from "@/server/auth/user";
+import { ingestPaper, type IngestRequest } from "@/server/ingest";
 
 function sanitizeIngestPayload(data: unknown): IngestRequest {
-  if (!data || typeof data !== 'object') {
-    throw new Error('Request body must be a JSON object.');
+  if (!data || typeof data !== "object") {
+    throw new Error("Request body must be a JSON object.");
   }
 
   const payload = data as Record<string, unknown>;
   const arxivIdRaw = payload.arxivId;
 
-  if (typeof arxivIdRaw !== 'string' || !arxivIdRaw.trim()) {
+  if (typeof arxivIdRaw !== "string" || !arxivIdRaw.trim()) {
     throw new Error('Field "arxivId" is required.');
   }
 
@@ -21,11 +26,11 @@ function sanitizeIngestPayload(data: unknown): IngestRequest {
     arxivId: arxivIdRaw.trim(),
   };
 
-  if (typeof contactEmailRaw === 'string' && contactEmailRaw.trim()) {
+  if (typeof contactEmailRaw === "string" && contactEmailRaw.trim()) {
     result.contactEmail = contactEmailRaw.trim();
   }
 
-  if (typeof forceOcrRaw === 'boolean') {
+  if (typeof forceOcrRaw === "boolean") {
     result.forceOcr = forceOcrRaw;
   }
 
@@ -36,10 +41,18 @@ export async function POST(request: NextRequest) {
   let payload: IngestRequest;
 
   try {
+    await requireAuthenticatedUserId();
+  } catch (error) {
+    if (isAuthenticationRequiredError(error)) {
+      return NextResponse.json({ error: AUTH_REQUIRED_MESSAGE }, { status: 401 });
+    }
+    throw error;
+  }
+
+  try {
     payload = sanitizeIngestPayload(await request.json());
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : 'Invalid request payload.';
+    const message = error instanceof Error ? error.message : "Invalid request payload.";
     return NextResponse.json(
       {
         error: message,
@@ -52,9 +65,8 @@ export async function POST(request: NextRequest) {
     const result = await ingestPaper(payload);
     return NextResponse.json(result, { status: 201 });
   } catch (error) {
-    console.error('[ingest] Failed to process request', error);
-    const message =
-      error instanceof Error ? error.message : 'Unexpected ingestion failure.';
+    console.error("[ingest] Failed to process request", error);
+    const message = error instanceof Error ? error.message : "Unexpected ingestion failure.";
     return NextResponse.json(
       {
         error: message,

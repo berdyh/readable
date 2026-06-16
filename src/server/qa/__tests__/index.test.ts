@@ -32,6 +32,10 @@ const mockEvidence = (overrides: Partial<QuestionEvidenceContext> = {}): Questio
   expandedWindow: [],
   figures: [],
   citations: [],
+  retrieval: {
+    vector: { status: 'ok', hitCount: 1 },
+    text: { status: 'ok', hitCount: 1 },
+  },
   selection: undefined,
   ...overrides,
 });
@@ -55,11 +59,29 @@ describe('answerPaperQuestion', () => {
     expect(mockedGenerate).toHaveBeenCalledOnce();
     expect(result).toEqual({
       answer: 'Self-attention lets each token weigh others (page 3).',
-      cites: [{ chunkId: 'chunk-1', page: 3, quote: 'Self-attention mechanism' }],
+      cites: [
+        {
+          chunkId: 'chunk-1',
+          page: 3,
+          quote: 'Self-attention mechanism',
+          sourceAvailable: true,
+        },
+      ],
+      trust: {
+        status: 'sourced',
+        hasEvidence: true,
+        validCitationCount: 1,
+        invalidCitationCount: 0,
+        warnings: [],
+        retrieval: {
+          vector: { status: 'ok', hitCount: 1 },
+          text: { status: 'ok', hitCount: 1 },
+        },
+      },
     });
   });
 
-  it('falls back to first hit when citations array is empty', async () => {
+  it('marks retrieved answers as uncited when citations array is empty', async () => {
     const evidence = mockEvidence({
       hits: [
         {
@@ -83,13 +105,57 @@ describe('answerPaperQuestion', () => {
 
     const result = await answerPaperQuestion('paper-1', 'How does the encoder operate?');
 
-    expect(result.cites).toEqual([
-      {
-        chunkId: 'chunk-2',
-        page: 4,
-        quote: 'The encoder uses multi-head attention.',
-      },
-    ]);
+    expect(result.cites).toEqual([]);
+    expect(result.trust.status).toBe('uncited');
+    expect(result.trust.validCitationCount).toBe(0);
+    expect(result.trust.warnings).toContain(
+      'The answer used retrieved evidence but has no valid source citation.',
+    );
+  });
+
+  it('drops citations that do not match current evidence', async () => {
+    mockedEvidence.mockResolvedValue(mockEvidence());
+    mockedGenerate.mockResolvedValue(
+      JSON.stringify({
+        answer: 'The model uses self-attention.',
+        citations: [{ chunk_id: 'not-a-current-chunk', page: 3, quote: 'Self-attention' }],
+      }),
+    );
+
+    const result = await answerPaperQuestion('paper-1', 'What does the model use?');
+
+    expect(result.cites).toEqual([]);
+    expect(result.trust).toMatchObject({
+      status: 'uncited',
+      validCitationCount: 0,
+      invalidCitationCount: 1,
+    });
+    expect(result.trust.warnings).toContain(
+      'Some model citations did not match current paper evidence.',
+    );
+  });
+
+  it('marks answers as refused when no paper evidence is retrieved', async () => {
+    mockedEvidence.mockResolvedValue(
+      mockEvidence({
+        hits: [],
+        expandedWindow: [],
+        retrieval: {
+          vector: { status: 'search_failed', hitCount: 0, reason: 'vector_search_failed' },
+          text: { status: 'empty', hitCount: 0 },
+        },
+      }),
+    );
+    mockedGenerate.mockResolvedValue(
+      JSON.stringify({ answer: 'The paper does not provide evidence for that question.' }),
+    );
+
+    const result = await answerPaperQuestion('paper-1', 'What about an unrelated claim?');
+
+    expect(result.cites).toEqual([]);
+    expect(result.trust.status).toBe('refused');
+    expect(result.trust.hasEvidence).toBe(false);
+    expect(result.trust.retrieval.vector.status).toBe('search_failed');
   });
 
   it('throws when the OpenAI payload cannot be parsed', async () => {

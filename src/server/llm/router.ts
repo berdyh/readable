@@ -3,6 +3,7 @@ import { OpenAiProvider } from "./providers/openai";
 import { AnthropicProvider } from "./providers/anthropic";
 import { GeminiProvider } from "./providers/gemini";
 import { OpenRouterProvider } from "./providers/openrouter";
+import { LocalCodingAgentProvider } from "./providers/local-coding-agent";
 import { getModel } from "@/server/llm-config/models";
 import {
   buildAuthProfileStore,
@@ -15,7 +16,14 @@ import {
   type RunFn,
 } from "./routing";
 
-const SUPPORTED_PROVIDERS: LlmProvider[] = ["openai", "anthropic", "gemini", "openrouter"];
+const SUPPORTED_PROVIDERS: LlmProvider[] = [
+  "openai",
+  "anthropic",
+  "gemini",
+  "openrouter",
+  "coding-agent",
+];
+const HTTP_ROUTING_PROVIDERS: LlmProvider[] = ["openai", "anthropic", "gemini", "openrouter"];
 
 /**
  * Get the default LLM provider from environment variables. OpenRouter
@@ -50,6 +58,8 @@ export function createLlmProvider(config?: LlmConfig, taskType?: string): LlmPro
       return new GeminiProvider(config, taskType);
     case "openrouter":
       return new OpenRouterProvider(config, taskType);
+    case "coding-agent":
+      return new LocalCodingAgentProvider(config, taskType);
     default:
       throw new Error(`Unsupported LLM provider: ${provider}`);
   }
@@ -86,7 +96,7 @@ function parseAllowedProviders(): LlmProvider[] {
   return raw
     .split(/[\s,;]+/)
     .map((entry) => entry.trim().toLowerCase())
-    .filter((entry): entry is LlmProvider => (SUPPORTED_PROVIDERS as string[]).includes(entry));
+    .filter((entry): entry is LlmProvider => (HTTP_ROUTING_PROVIDERS as string[]).includes(entry));
 }
 
 function taskSpecificModelEnvKeys(
@@ -129,6 +139,10 @@ function splitModelList(value: string | undefined): string[] {
 }
 
 function getRoutingModel(provider: LlmProvider, taskType: string | undefined): string {
+  if (provider === "coding-agent") {
+    return process.env.CODING_AGENT_MODEL?.trim() || "default";
+  }
+
   const providerUpper = provider.toUpperCase();
   const taskOverride = getFirstEnvValue(taskSpecificModelEnvKeys(provider, taskType));
   if (taskOverride) return taskOverride;
@@ -166,6 +180,7 @@ function shouldUseFallbackRouting(
   primaryProvider: LlmProvider,
   taskType: string | undefined,
 ): boolean {
+  if (primaryProvider === "coding-agent") return false;
   if (parseAllowedProviders().length > 0) return true;
   if (primaryProvider === "openrouter") return false;
   const primaryModel = getRoutingModel(primaryProvider, taskType);

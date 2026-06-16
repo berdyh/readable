@@ -14,7 +14,7 @@
  * everything else" overrides. (2)–(5) merge.
  */
 
-import type { RoutingProviderId } from './types';
+import type { RoutingProviderId } from "./types";
 
 interface ProviderKeyConfig {
   /**
@@ -26,24 +26,24 @@ interface ProviderKeyConfig {
   fallbackVars?: string[];
 }
 
-const PROVIDER_KEY_CONFIG: Record<RoutingProviderId, ProviderKeyConfig> = {
-  openai: { prefix: 'OPENAI' },
-  'openai-codex': {
-    prefix: 'OPENAI_CODEX',
+const PROVIDER_KEY_CONFIG: Partial<Record<RoutingProviderId, ProviderKeyConfig>> = {
+  openai: { prefix: "OPENAI" },
+  "openai-codex": {
+    prefix: "OPENAI_CODEX",
     // Codex normally authenticates via CLI OAuth; an env key is a manual
     // override.
     fallbackVars: [],
   },
-  anthropic: { prefix: 'ANTHROPIC' },
+  anthropic: { prefix: "ANTHROPIC" },
   gemini: {
-    prefix: 'GEMINI',
-    fallbackVars: ['GOOGLE_API_KEY'],
+    prefix: "GEMINI",
+    fallbackVars: ["GOOGLE_API_KEY"],
   },
-  'google-vertex': {
-    prefix: 'GOOGLE_VERTEX',
-    fallbackVars: ['GOOGLE_API_KEY'],
+  "google-vertex": {
+    prefix: "GOOGLE_VERTEX",
+    fallbackVars: ["GOOGLE_API_KEY"],
   },
-  openrouter: { prefix: 'OPENROUTER' },
+  openrouter: { prefix: "OPENROUTER" },
 };
 
 /**
@@ -57,25 +57,34 @@ function parseKeyList(raw: string | undefined): string[] {
   return raw
     .split(/[\s,;]+/)
     .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0);
+    .filter((entry) => entry.length > 0 && !isPlaceholderKey(entry));
 }
 
-function readSingleKey(
-  name: string,
-  env: Record<string, string | undefined>,
-): string | undefined {
+function readSingleKey(name: string, env: Record<string, string | undefined>): string | undefined {
   const raw = env[name];
-  if (typeof raw !== 'string') {
+  if (typeof raw !== "string") {
     return undefined;
   }
   const trimmed = raw.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
+  return trimmed.length > 0 && !isPlaceholderKey(trimmed) ? trimmed : undefined;
 }
 
-function readNumberedKeys(
-  prefix: string,
-  env: Record<string, string | undefined>,
-): string[] {
+function isPlaceholderKey(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return true;
+  }
+
+  return (
+    normalized.includes("...") ||
+    normalized.startsWith("your-") ||
+    normalized.startsWith("your_") ||
+    normalized === "your-api-key" ||
+    normalized === "your_api_key"
+  );
+}
+
+function readNumberedKeys(prefix: string, env: Record<string, string | undefined>): string[] {
   const namePrefix = `${prefix}_API_KEY_`;
   const matches: Array<{ name: string; value: string }> = [];
   for (const name of Object.keys(env)) {
@@ -83,11 +92,11 @@ function readNumberedKeys(
       continue;
     }
     const value = env[name];
-    if (typeof value !== 'string') {
+    if (typeof value !== "string") {
       continue;
     }
     const trimmed = value.trim();
-    if (trimmed.length === 0) {
+    if (trimmed.length === 0 || isPlaceholderKey(trimmed)) {
       continue;
     }
     matches.push({ name, value: trimmed });
@@ -105,12 +114,7 @@ export interface ResolvedProviderKey {
    * Where it came from. `live` means the short-circuit env was set.
    * Useful when constructing AuthProfile.id for stable round-robin.
    */
-  source:
-    | 'live'
-    | 'list'
-    | 'primary'
-    | `numbered:${string}`
-    | `fallback:${string}`;
+  source: "live" | "list" | "primary" | `numbered:${string}` | `fallback:${string}`;
 }
 
 export interface CollectKeysOptions {
@@ -138,13 +142,13 @@ export function collectProviderApiKeys(
   // (1) Short-circuit override.
   const liveKey = readSingleKey(`READABLE_LIVE_${config.prefix}_KEY`, env);
   if (liveKey) {
-    return [{ key: liveKey, source: 'live' }];
+    return [{ key: liveKey, source: "live" }];
   }
 
   const out: ResolvedProviderKey[] = [];
   const seen = new Set<string>();
 
-  const push = (key: string, source: ResolvedProviderKey['source']) => {
+  const push = (key: string, source: ResolvedProviderKey["source"]) => {
     if (!seen.has(key)) {
       seen.add(key);
       out.push({ key, source });
@@ -153,13 +157,13 @@ export function collectProviderApiKeys(
 
   // (2) List form.
   for (const key of parseKeyList(env[`${config.prefix}_API_KEYS`])) {
-    push(key, 'list');
+    push(key, "list");
   }
 
   // (3) Primary single.
   const primary = readSingleKey(`${config.prefix}_API_KEY`, env);
   if (primary) {
-    push(primary, 'primary');
+    push(primary, "primary");
   }
 
   // (4) Numbered variants.

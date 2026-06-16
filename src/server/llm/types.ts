@@ -2,7 +2,7 @@
  * Common types and interfaces for LLM providers
  */
 
-export type LlmProvider = 'openai' | 'anthropic' | 'gemini' | 'openrouter';
+export type LlmProvider = "openai" | "anthropic" | "gemini" | "openrouter" | "coding-agent";
 
 export interface LlmRequest {
   systemPrompt: string;
@@ -20,10 +20,7 @@ export interface LlmProviderInterface {
   /**
    * Generate a response with structured JSON output
    */
-  generateJson(
-    request: LlmRequest,
-    options?: { taskName?: string },
-  ): Promise<string>;
+  generateJson(request: LlmRequest, options?: { taskName?: string }): Promise<string>;
 
   /**
    * Generate a plain text response
@@ -44,4 +41,3 @@ export interface LlmConfig {
   timeoutMs?: number;
   [key: string]: unknown; // Allow provider-specific config
 }
-

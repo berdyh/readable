@@ -75,6 +75,7 @@ export interface ChatMessageRecord {
   content: string;
   citations?: unknown[];
   reasoning?: string;
+  metadata?: unknown;
   createdAt: number;
 }
 

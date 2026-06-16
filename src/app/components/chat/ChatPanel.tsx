@@ -5,6 +5,7 @@ import { SignInButton, SignUpButton, useUser } from "@clerk/nextjs";
 
 import type { AnswerResult, QuestionSelection } from "@/server/qa/types";
 
+import { AnswerCard, type AnswerTrustMetadata } from "../ai-chatbot/answer-card";
 import SlashCommandMenu, { type SlashCommandOption } from "./SlashCommandMenu";
 import { EDITOR_INTENT_EVENT, type EditorIntentDetail } from "../block-editor/intents";
 
@@ -16,6 +17,7 @@ interface ChatMessage {
   content: string;
   createdAt: number;
   citations?: AnswerResult["cites"];
+  trust?: AnswerTrustMetadata;
 }
 
 export interface ChatPanelProps {
@@ -166,30 +168,25 @@ const slashCommandDefinitions: SlashCommandDefinition[] = [
   },
 ];
 
-const MessageBubble = ({ message }: { message: ChatMessage }) => {
+const MessageBubble = ({ message, paperId }: { message: ChatMessage; paperId: string }) => {
   const isUser = message.role === "user";
 
+  if (isUser) {
+    return (
+      <div className="flex max-w-[88%] flex-col gap-3 self-end rounded-lg bg-zinc-900 px-4 py-3 text-sm leading-relaxed text-white shadow-sm dark:bg-zinc-100 dark:text-zinc-950">
+        <div className="whitespace-pre-wrap">{message.content}</div>
+      </div>
+    );
+  }
+
   return (
-    <div
-      className={`flex max-w-[88%] flex-col gap-3 rounded-lg px-4 py-3 text-sm leading-relaxed shadow-sm ${isUser ? "self-end bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950" : "self-start border border-zinc-200 bg-white text-zinc-800 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100"}`}
-    >
-      <div className="whitespace-pre-wrap">{message.content}</div>
-      {!isUser && message.citations?.length ? (
-        <div className="flex flex-wrap gap-2">
-          {message.citations.map((cite) => (
-            <span
-              key={`${cite.chunkId}-${cite.page ?? "?"}`}
-              className="inline-flex items-center gap-1 rounded-full border border-blue-100 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-200"
-            >
-              {cite.page ? `p.${cite.page}` : "p.?"}
-              <span className="text-[10px] uppercase tracking-wide text-blue-500">
-                {cite.chunkId}
-              </span>
-            </span>
-          ))}
-        </div>
-      ) : null}
-    </div>
+    <AnswerCard
+      className="max-w-[88%] self-start"
+      content={message.content}
+      citations={message.citations}
+      trust={message.trust}
+      paperId={paperId}
+    />
   );
 };
 
@@ -385,6 +382,7 @@ const ChatPanel = ({
           content: result.answer,
           createdAt: Date.now(),
           citations: result.cites,
+          trust: result.trust,
         };
 
         setMessages((prev) => [...prev, assistantMessage]);
@@ -530,70 +528,81 @@ const ChatPanel = ({
         </div>
       )}
 
-      <div
-        ref={scrollRef}
-        className="flex min-h-[220px] flex-1 flex-col gap-3 overflow-y-auto rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900"
-        aria-live="polite"
-      >
-        {messages.length === 0 ? (
-          <div className="flex h-full items-center justify-center text-sm text-zinc-400 dark:text-zinc-500">
-            Start by asking how the Transformer differs from attention-only baselines.
-          </div>
-        ) : (
-          messages.map((message) => <MessageBubble key={message.id} message={message} />)
-        )}
-      </div>
-
-      <SelectionCallout selection={selection} onClear={selection ? onSelectionClear : undefined} />
-
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-600 dark:border-red-900/70 dark:bg-red-950/30 dark:text-red-200">
-          {error}
-        </div>
-      )}
-
-      <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
-        <label
-          htmlFor={textareaId}
-          className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400"
-        >
-          Ask a question
-        </label>
-        <div className="relative">
-          <textarea
-            ref={textareaRef}
-            id={textareaId}
-            value={draft}
-            onChange={(event) => onDraftChange(event.target.value)}
-            onKeyDown={onKeyDown}
-            placeholder="Ask how self-attention compares to recurrence…"
-            disabled={!isLoaded || !isSignedIn || isSubmitting}
-            className="min-h-[96px] w-full resize-y rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm leading-relaxed text-zinc-800 outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-600 dark:focus:ring-zinc-800"
-          />
-          {showSlashMenu && filteredCommands.length > 0 && (
-            <SlashCommandMenu
-              options={filteredCommands.map((definition) => definition.option)}
-              activeIndex={slashActiveIndex}
-              onSelect={(option) => {
-                const definition = filteredCommands.find((item) => item.option.id === option.id);
-                if (definition) {
-                  applySlashCommand(definition);
-                }
-              }}
-              onHighlight={setSlashActiveIndex}
-            />
-          )}
-        </div>
-        <div className="flex items-center justify-end text-xs text-zinc-500 dark:text-zinc-400">
-          <button
-            type="submit"
-            disabled={isSubmitting || !draft.trim() || !isLoaded || !isSignedIn}
-            className="inline-flex items-center gap-2 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
+      {isLoaded && isSignedIn && (
+        <>
+          <div
+            ref={scrollRef}
+            className="flex min-h-[220px] flex-1 flex-col gap-3 overflow-y-auto rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900"
+            aria-live="polite"
           >
-            {isSubmitting ? "Sending…" : "Send"}
-          </button>
-        </div>
-      </form>
+            {messages.length === 0 ? (
+              <div className="flex h-full items-center justify-center text-sm text-zinc-400 dark:text-zinc-500">
+                Start by asking how the Transformer differs from attention-only baselines.
+              </div>
+            ) : (
+              messages.map((message) => (
+                <MessageBubble key={message.id} message={message} paperId={paperId} />
+              ))
+            )}
+          </div>
+
+          <SelectionCallout
+            selection={selection}
+            onClear={selection ? onSelectionClear : undefined}
+          />
+
+          {error && (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-600 dark:border-red-900/70 dark:bg-red-950/30 dark:text-red-200">
+              {error}
+            </div>
+          )}
+
+          <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
+            <label
+              htmlFor={textareaId}
+              className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400"
+            >
+              Ask a question
+            </label>
+            <div className="relative">
+              <textarea
+                ref={textareaRef}
+                id={textareaId}
+                value={draft}
+                onChange={(event) => onDraftChange(event.target.value)}
+                onKeyDown={onKeyDown}
+                placeholder="Ask how self-attention compares to recurrence…"
+                disabled={isSubmitting}
+                className="min-h-[96px] w-full resize-y rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm leading-relaxed text-zinc-800 outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-600 dark:focus:ring-zinc-800"
+              />
+              {showSlashMenu && filteredCommands.length > 0 && (
+                <SlashCommandMenu
+                  options={filteredCommands.map((definition) => definition.option)}
+                  activeIndex={slashActiveIndex}
+                  onSelect={(option) => {
+                    const definition = filteredCommands.find(
+                      (item) => item.option.id === option.id,
+                    );
+                    if (definition) {
+                      applySlashCommand(definition);
+                    }
+                  }}
+                  onHighlight={setSlashActiveIndex}
+                />
+              )}
+            </div>
+            <div className="flex items-center justify-end text-xs text-zinc-500 dark:text-zinc-400">
+              <button
+                type="submit"
+                disabled={isSubmitting || !draft.trim()}
+                className="inline-flex items-center gap-2 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
+              >
+                {isSubmitting ? "Sending…" : "Send"}
+              </button>
+            </div>
+          </form>
+        </>
+      )}
     </div>
   );
 };

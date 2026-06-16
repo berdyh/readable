@@ -15,14 +15,14 @@
  * accept a pasted API key.
  */
 
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import readline from 'node:readline/promises';
-import { stdin, stdout } from 'node:process';
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import readline from "node:readline/promises";
+import { stdin, stdout } from "node:process";
 
-import { config as loadDotenv } from 'dotenv';
+import { config as loadDotenv } from "dotenv";
 
-loadDotenv({ path: '.env.local' });
+loadDotenv({ path: ".env.local" });
 loadDotenv();
 
 import {
@@ -32,46 +32,56 @@ import {
   listAvailableProviders,
   type ProviderAvailability,
   type RoutingProviderId,
-} from '@/server/llm/routing';
+} from "@/server/llm/routing";
+import {
+  listAvailableLocalCodingAgents,
+  type CodingAgentId,
+} from "@/server/llm/providers/local-coding-agent";
 
-const ENV_FILE = path.join(process.cwd(), '.env.local');
+const ENV_FILE = path.join(process.cwd(), ".env.local");
 
 const SUPPORTED_PROVIDERS: RoutingProviderId[] = [
-  'anthropic',
-  'openai',
-  'openai-codex',
-  'gemini',
-  'google-vertex',
-  'openrouter',
+  "coding-agent",
+  "anthropic",
+  "openai",
+  "openai-codex",
+  "gemini",
+  "google-vertex",
+  "openrouter",
 ];
 
-const PROVIDER_LABELS: Record<RoutingProviderId, string> = {
-  anthropic: 'Anthropic Claude (anthropic)',
-  openai: 'OpenAI GPT (openai)',
-  'openai-codex': 'OpenAI via Codex CLI subscription (openai-codex)',
-  gemini: 'Google Gemini API (gemini)',
-  'google-vertex': 'Google Vertex AI / gcloud ADC (google-vertex)',
-  openrouter: 'OpenRouter (free + paid models) (openrouter)',
+const PROVIDER_LABELS: Partial<Record<RoutingProviderId, string>> = {
+  "coding-agent": "Local coding-agent CLIs (coding-agent)",
+  anthropic: "Anthropic Claude (anthropic)",
+  openai: "OpenAI GPT (openai)",
+  "openai-codex": "OpenAI via Codex CLI subscription (openai-codex)",
+  gemini: "Google Gemini API (gemini)",
+  "google-vertex": "Google Vertex AI / gcloud ADC (google-vertex)",
+  openrouter: "OpenRouter (free + paid models) (openrouter)",
 };
 
+function providerLabel(provider: RoutingProviderId): string {
+  return PROVIDER_LABELS[provider] ?? provider;
+}
+
 /**
- * Providers we have an SDK class for today. Others are detected but not
- * selectable as primary. Order is the recommendation order — OpenRouter
- * leads because it has a no-cost free tier that works without any other
- * provider configured.
+ * Providers we have an SDK class or local provider for today. Others are
+ * detected but not selectable as primary. Order keeps OpenRouter first for
+ * API-key setups, while exposing local coding-agent mode for no-key dev runs.
  */
 const ROUTABLE_PROVIDERS: RoutingProviderId[] = [
-  'openrouter',
-  'anthropic',
-  'openai',
-  'gemini',
+  "openrouter",
+  "coding-agent",
+  "anthropic",
+  "openai",
+  "gemini",
 ];
 
 const ENV_KEY_FOR_PROVIDER: Partial<Record<RoutingProviderId, string>> = {
-  anthropic: 'ANTHROPIC_API_KEY',
-  openai: 'OPENAI_API_KEY',
-  gemini: 'GEMINI_API_KEY',
-  openrouter: 'OPENROUTER_API_KEY',
+  anthropic: "ANTHROPIC_API_KEY",
+  openai: "OPENAI_API_KEY",
+  gemini: "GEMINI_API_KEY",
+  openrouter: "OPENROUTER_API_KEY",
 };
 
 interface AvailabilityRow {
@@ -79,60 +89,72 @@ interface AvailabilityRow {
   hasCli: boolean;
   hasEnv: boolean;
   available: ProviderAvailability | undefined;
+  localAgents?: CodingAgentId[];
 }
 
 async function describeAvailability(): Promise<AvailabilityRow[]> {
   const store = await buildAuthProfileStore();
   const available = listAvailableProviders(store);
   const byProvider = new Map(available.map((entry) => [entry.provider, entry]));
+  const localAgents = listAvailableLocalCodingAgents().map((entry) => entry.agent);
   return SUPPORTED_PROVIDERS.map((provider) => ({
     provider,
-    hasCli: byProvider.get(provider)?.hasCli ?? false,
-    hasEnv: byProvider.get(provider)?.hasEnv ?? hasAnyProviderKey(provider),
+    hasCli:
+      provider === "coding-agent"
+        ? localAgents.length > 0
+        : (byProvider.get(provider)?.hasCli ?? false),
+    hasEnv:
+      provider === "coding-agent"
+        ? false
+        : (byProvider.get(provider)?.hasEnv ?? hasAnyProviderKey(provider)),
     available: byProvider.get(provider),
+    localAgents: provider === "coding-agent" ? localAgents : undefined,
   }));
 }
 
 function statusBadge(row: AvailabilityRow): string {
-  if (row.hasCli && row.hasEnv) return 'CLI + env';
-  if (row.hasCli) return 'CLI';
-  if (row.hasEnv) return 'env';
-  return '— missing —';
+  if (row.provider === "coding-agent") {
+    return row.localAgents && row.localAgents.length > 0
+      ? `local CLI: ${row.localAgents.join(",")}`
+      : "— missing local CLI —";
+  }
+  if (row.hasCli && row.hasEnv) return "CLI + env";
+  if (row.hasCli) return "CLI";
+  if (row.hasEnv) return "env";
+  return "— missing —";
 }
 
 function printAvailabilityTable(rows: AvailabilityRow[]): void {
-  const longestLabel = Math.max(
-    ...rows.map((r) => PROVIDER_LABELS[r.provider].length),
-  );
-  console.log('\nDetected providers:');
+  const longestLabel = Math.max(...rows.map((r) => providerLabel(r.provider).length));
+  console.log("\nDetected providers:");
   for (const row of rows) {
-    const label = PROVIDER_LABELS[row.provider].padEnd(longestLabel + 2);
+    const label = providerLabel(row.provider).padEnd(longestLabel + 2);
     const badge = statusBadge(row);
-    const marker = row.hasCli || row.hasEnv ? '✓' : ' ';
+    const marker = row.hasCli || row.hasEnv ? "✓" : " ";
     console.log(`  ${marker} ${label}${badge}`);
   }
-  console.log('');
+  console.log("");
 }
 
 async function readEnvFile(): Promise<string> {
   try {
-    return await fs.readFile(ENV_FILE, 'utf-8');
+    return await fs.readFile(ENV_FILE, "utf-8");
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return '# Generated by `pnpm setup` — see .env.local.example for the full reference.\n';
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return "# Generated by `pnpm setup` — see .env.local.example for the full reference.\n";
     }
     throw error;
   }
 }
 
 function upsertEnvLine(content: string, key: string, value: string): string {
-  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const pattern = new RegExp(`^${escaped}=.*$`, 'm');
+  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`^${escaped}=.*$`, "m");
   const next = `${key}=${value}`;
   if (pattern.test(content)) {
     return content.replace(pattern, next);
   }
-  const sep = content.endsWith('\n') || content.length === 0 ? '' : '\n';
+  const sep = content.endsWith("\n") || content.length === 0 ? "" : "\n";
   return `${content}${sep}${next}\n`;
 }
 
@@ -148,18 +170,19 @@ async function promptChoice(
 ): Promise<number> {
   console.log(question);
   options.forEach((option, idx) => {
-    const marker = idx === defaultIndex ? '›' : ' ';
+    const marker = idx === defaultIndex ? "›" : " ";
     console.log(`  ${marker} [${idx + 1}] ${option}`);
   });
   while (true) {
-    const raw = (await rl.question(`Pick [1-${options.length}] (default ${defaultIndex + 1}): `))
-      .trim();
-    if (raw === '') return defaultIndex;
+    const raw = (
+      await rl.question(`Pick [1-${options.length}] (default ${defaultIndex + 1}): `)
+    ).trim();
+    if (raw === "") return defaultIndex;
     const numeric = Number(raw);
     if (Number.isInteger(numeric) && numeric >= 1 && numeric <= options.length) {
       return numeric - 1;
     }
-    console.log('  ⚠ please enter a number from the list.');
+    console.log("  ⚠ please enter a number from the list.");
   }
 }
 
@@ -168,13 +191,13 @@ async function promptYesNo(
   question: string,
   defaultYes = true,
 ): Promise<boolean> {
-  const hint = defaultYes ? 'Y/n' : 'y/N';
+  const hint = defaultYes ? "Y/n" : "y/N";
   while (true) {
     const raw = (await rl.question(`${question} [${hint}]: `)).trim().toLowerCase();
-    if (raw === '') return defaultYes;
-    if (raw === 'y' || raw === 'yes') return true;
-    if (raw === 'n' || raw === 'no') return false;
-    console.log('  ⚠ please answer y or n.');
+    if (raw === "") return defaultYes;
+    if (raw === "y" || raw === "yes") return true;
+    if (raw === "n" || raw === "no") return false;
+    console.log("  ⚠ please answer y or n.");
   }
 }
 
@@ -198,17 +221,18 @@ async function pickPrimary(
 ): Promise<RoutingProviderId> {
   const labels = ROUTABLE_PROVIDERS.map((provider) => {
     const row = rows.find((r) => r.provider === provider);
-    const status = row ? statusBadge(row) : 'missing';
-    return `${PROVIDER_LABELS[provider]} — ${status}`;
+    const status = row ? statusBadge(row) : "missing";
+    return `${providerLabel(provider)} — ${status}`;
   });
   const idx = await promptChoice(
     rl,
-    '\nPick a primary provider for chat / summary / Q&A:',
+    "\nPick a primary provider for chat / summary / Q&A:",
     labels,
     Math.max(
       0,
       ROUTABLE_PROVIDERS.findIndex(
-        (p) => rows.find((r) => r.provider === p)?.hasCli || rows.find((r) => r.provider === p)?.hasEnv,
+        (p) =>
+          rows.find((r) => r.provider === p)?.hasCli || rows.find((r) => r.provider === p)?.hasEnv,
       ),
     ),
   );
@@ -220,25 +244,29 @@ async function pickFallbacks(
   primary: RoutingProviderId,
   rows: AvailabilityRow[],
 ): Promise<RoutingProviderId[]> {
-  const candidates = ROUTABLE_PROVIDERS.filter((p) => p !== primary).filter(
-    (p) => rows.find((r) => r.provider === p)?.hasCli || rows.find((r) => r.provider === p)?.hasEnv,
-  );
-  if (candidates.length === 0) {
-    console.log('\n(No additional providers detected; skipping fallback chain.)');
+  if (primary === "coding-agent") {
+    console.log("\nLocal coding-agent mode uses LLM_LOCAL_AGENTS for CLI fallback order.");
     return [];
   }
-  console.log('\nDetected providers you can use as fallbacks:');
+  const candidates = ROUTABLE_PROVIDERS.filter((p) => p !== primary).filter(
+    (p) =>
+      p !== "coding-agent" &&
+      (rows.find((r) => r.provider === p)?.hasCli || rows.find((r) => r.provider === p)?.hasEnv),
+  );
+  if (candidates.length === 0) {
+    console.log("\n(No additional providers detected; skipping fallback chain.)");
+    return [];
+  }
+  console.log("\nDetected providers you can use as fallbacks:");
   candidates.forEach((p, idx) => {
-    console.log(`  [${idx + 1}] ${PROVIDER_LABELS[p]}`);
+    console.log(`  [${idx + 1}] ${providerLabel(p)}`);
   });
   const raw = (
-    await rl.question(
-      'Comma-separated numbers, in fallback order (or blank for none): ',
-    )
+    await rl.question("Comma-separated numbers, in fallback order (or blank for none): ")
   ).trim();
   if (raw.length === 0) return [];
   const indices = raw
-    .split(',')
+    .split(",")
     .map((entry) => Number(entry.trim()))
     .filter((n) => Number.isInteger(n) && n >= 1 && n <= candidates.length);
   return indices.map((n) => candidates[n - 1]);
@@ -253,14 +281,12 @@ async function ensureCredentialFor(
   if (row?.hasCli || row?.hasEnv) {
     return { envUpdates: {} };
   }
-  console.log(
-    `\n${PROVIDER_LABELS[provider]} has no credential configured.`,
-  );
+  console.log(`\n${providerLabel(provider)} has no credential configured.`);
   const hint = getInstallHint(provider);
   const envName = ENV_KEY_FOR_PROVIDER[provider];
   if (!envName) {
     if (hint) console.log(`  ${hint}`);
-    console.log('  Skipping (no env-key path for this provider).');
+    console.log("  Skipping (no env-key path for this provider).");
     return { envUpdates: {} };
   }
   const accept = await promptYesNo(rl, `Paste an API key for ${envName} now?`, true);
@@ -274,7 +300,7 @@ async function ensureCredentialFor(
 }
 
 async function main(): Promise<void> {
-  console.log('Readable setup\n--------------');
+  console.log("Readable setup\n--------------");
   const rows = await describeAvailability();
   printAvailabilityTable(rows);
 
@@ -290,11 +316,18 @@ async function main(): Promise<void> {
       Object.assign(fallbackCreds, result.envUpdates);
     }
 
-    const allowedList = [primary, ...fallbacks].join(',');
+    const allowedList = primary === "coding-agent" ? "" : [primary, ...fallbacks].join(",");
+    const localAgentList =
+      primary === "coding-agent"
+        ? rows.find((r) => r.provider === "coding-agent")?.localAgents?.join(",") || "codex-cli"
+        : undefined;
 
     let env = await readEnvFile();
-    env = upsertEnvLine(env, 'LLM_PROVIDER', primary);
-    env = upsertEnvLine(env, 'LLM_ALLOWED_PROVIDERS', allowedList);
+    env = upsertEnvLine(env, "LLM_PROVIDER", primary);
+    env = upsertEnvLine(env, "LLM_ALLOWED_PROVIDERS", allowedList);
+    if (localAgentList) {
+      env = upsertEnvLine(env, "LLM_LOCAL_AGENTS", localAgentList);
+    }
     for (const [key, value] of Object.entries({
       ...primaryCred.envUpdates,
       ...fallbackCreds,
@@ -303,22 +336,29 @@ async function main(): Promise<void> {
     }
     await writeEnvFile(env);
 
-    console.log('\n✓ Wrote .env.local');
+    console.log("\n✓ Wrote .env.local");
     console.log(`  LLM_PROVIDER=${primary}`);
     console.log(`  LLM_ALLOWED_PROVIDERS=${allowedList}`);
+    if (localAgentList) {
+      console.log(`  LLM_LOCAL_AGENTS=${localAgentList}`);
+    }
 
-    if (Object.keys(primaryCred.envUpdates).length === 0 && !rows.find((r) => r.provider === primary)?.hasCli && !rows.find((r) => r.provider === primary)?.hasEnv) {
+    if (
+      Object.keys(primaryCred.envUpdates).length === 0 &&
+      !rows.find((r) => r.provider === primary)?.hasCli &&
+      !rows.find((r) => r.provider === primary)?.hasEnv
+    ) {
       console.log(
         `\n⚠ Primary provider ${primary} still has no credential. Calls will fail until you set it.`,
       );
     }
-    console.log('\nNext: pnpm db:migrate && pnpm dev');
+    console.log("\nNext: pnpm db:migrate && pnpm dev");
   } finally {
     rl.close();
   }
 }
 
 main().catch((error) => {
-  console.error('[setup] failed:', error instanceof Error ? error.message : error);
+  console.error("[setup] failed:", error instanceof Error ? error.message : error);
   process.exit(1);
 });

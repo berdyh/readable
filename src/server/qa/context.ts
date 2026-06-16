@@ -374,7 +374,7 @@ export async function loadQuestionEvidence(
   const selection = normalizeSelection(options.selection);
   const query = buildHybridQuery(normalizedQuestion, selection);
 
-  const { hits, expandedWindow } = await hybridPaperChunkSearch({
+  const { hits, expandedWindow, retrieval } = await hybridPaperChunkSearch({
     paperId,
     query,
     limit: options.limit ?? DEFAULT_HYBRID_LIMIT,
@@ -398,6 +398,7 @@ export async function loadQuestionEvidence(
     expandedWindow: mappedWindow,
     figures,
     citations,
+    retrieval,
     selection,
   };
 }

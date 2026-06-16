@@ -37,6 +37,27 @@ export interface HybridPaperChunkHit {
 export interface HybridPaperChunkQueryResult {
   hits: HybridPaperChunkHit[];
   expandedWindow: HybridPaperChunkHit[];
+  retrieval: HybridRetrievalDiagnostics;
+}
+
+export type HybridVectorRetrievalStatus =
+  | 'ok'
+  | 'skipped'
+  | 'embedding_failed'
+  | 'search_failed';
+
+export type HybridTextRetrievalStatus = 'ok' | 'empty';
+
+export interface HybridRetrievalDiagnostics {
+  vector: {
+    status: HybridVectorRetrievalStatus;
+    hitCount: number;
+    reason?: string;
+  };
+  text: {
+    status: HybridTextRetrievalStatus;
+    hitCount: number;
+  };
 }
 
 const DEFAULT_LIMIT = 10;
@@ -112,7 +133,10 @@ async function runVectorSearch(
   query: string,
   vector: number[] | undefined,
   limit: number,
-): Promise<QdrantSearchHit[]> {
+): Promise<{
+  hits: QdrantSearchHit[];
+  diagnostics: HybridRetrievalDiagnostics['vector'];
+}> {
   let queryVector = vector;
 
   if (!queryVector || queryVector.length === 0) {
@@ -120,23 +144,51 @@ async function runVectorSearch(
       queryVector = await embedQuery(query);
     } catch (error) {
       console.warn('[hybrid] Embedding generation failed; falling back to text-only search.', error);
-      return [];
+      return {
+        hits: [],
+        diagnostics: {
+          status: 'embedding_failed',
+          hitCount: 0,
+          reason: 'embedding_generation_failed',
+        },
+      };
     }
   }
 
   if (!queryVector?.length) {
-    return [];
+    return {
+      hits: [],
+      diagnostics: {
+        status: 'skipped',
+        hitCount: 0,
+        reason: 'missing_query_vector',
+      },
+    };
   }
 
   try {
-    return await searchPaperChunkVectors({
+    const hits = await searchPaperChunkVectors({
       paperId,
       vector: queryVector,
       limit,
     });
+    return {
+      hits,
+      diagnostics: {
+        status: 'ok',
+        hitCount: hits.length,
+      },
+    };
   } catch (error) {
     console.warn('[hybrid] Qdrant search failed; falling back to text-only.', error);
-    return [];
+    return {
+      hits: [],
+      diagnostics: {
+        status: 'search_failed',
+        hitCount: 0,
+        reason: 'vector_search_failed',
+      },
+    };
   }
 }
 
@@ -147,15 +199,23 @@ export async function hybridPaperChunkSearch(
   const alpha = options.alpha ?? DEFAULT_ALPHA;
   const fetchLimit = Math.max(limit * 3, limit + 5);
 
-  const [vectorHits, textHits] = await Promise.all([
+  const [vectorResult, textHits] = await Promise.all([
     runVectorSearch(options.paperId, options.query, options.vector, fetchLimit),
     searchPaperChunksByText(options.paperId, options.query, fetchLimit),
   ]);
+  const vectorHits = vectorResult.hits;
+  const retrieval: HybridRetrievalDiagnostics = {
+    vector: vectorResult.diagnostics,
+    text: {
+      status: textHits.length > 0 ? 'ok' : 'empty',
+      hitCount: textHits.length,
+    },
+  };
 
   const ranked = combineRanks(vectorHits, textHits, alpha).slice(0, limit);
 
   if (ranked.length === 0) {
-    return { hits: [], expandedWindow: [] };
+    return { hits: [], expandedWindow: [], retrieval };
   }
 
   const chunkRecords = await fetchChunksByIds(ranked.map((entry) => entry.id));
@@ -170,7 +230,7 @@ export async function hybridPaperChunkSearch(
   }
 
   if (!options.pageWindow || options.pageWindow <= 0) {
-    return { hits, expandedWindow: [] };
+    return { hits, expandedWindow: [], retrieval };
   }
 
   const targetPages = new Set<number>();
@@ -190,7 +250,7 @@ export async function hybridPaperChunkSearch(
   }
 
   if (targetPages.size === 0) {
-    return { hits, expandedWindow: [] };
+    return { hits, expandedWindow: [], retrieval };
   }
 
   const windowChunks = await fetchChunksByPageWindow(
@@ -209,5 +269,5 @@ export async function hybridPaperChunkSearch(
     expandedWindow.push(buildHitFromChunk(chunk, undefined));
   }
 
-  return { hits, expandedWindow };
+  return { hits, expandedWindow, retrieval };
 }

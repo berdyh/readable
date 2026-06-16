@@ -151,7 +151,10 @@ describe("OpenRouterProvider model resolution", () => {
       schema: { type: "object" },
     });
 
-    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    const fetchCalls = fetchMock.mock.calls as unknown as Array<
+      [input: RequestInfo | URL, init?: RequestInit]
+    >;
+    const init = fetchCalls[0]?.[1];
     expect(init).toBeDefined();
     expect(init?.headers).toMatchObject({
       "HTTP-Referer": "https://example.test",

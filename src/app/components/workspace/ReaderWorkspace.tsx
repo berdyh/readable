@@ -90,7 +90,9 @@ const ReaderWorkspace = ({ paperId, pdfUrl }: ReaderWorkspaceProps) => {
     <div className="flex min-h-screen flex-col font-sans bg-zinc-50 text-zinc-900 dark:bg-neutral-950 dark:text-neutral-100">
       <main
         className={clsx(
-          "mx-auto flex w-full flex-1 flex-col px-5 py-10 transition-[max-width] duration-200",
+          // pt-20 clears the fixed account chip in the root layout, which used
+          // to sit on top of the skills panel and the chat panel header.
+          "mx-auto flex w-full flex-1 flex-col px-5 pb-10 pt-20 transition-[max-width] duration-200",
           isResearchChatOpen ? "max-w-7xl" : "max-w-6xl",
         )}
       >

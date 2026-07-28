@@ -90,21 +90,47 @@ check env overrides first.
   opts out of that isolation. `EMBEDDING_PROVIDER=auto` uses OpenRouter when `OPENROUTER_API_KEY` is set,
   otherwise the built-in local hash embedder (384-dim).
 
-### Editor surface (`src/app/components/block-editor/`)
+### Client modules (`src/app/components/`)
 
-The single editor implementation; the legacy `src/app/components/editor/` tree is gone.
+Three sibling modules — editor, chat, reading surface. The legacy `components/editor/` tree is gone, as are
+`components/ai-chatbot/`, `components/pdf/`, and `components/summary/` (folded into the modules below).
 
-- `ReaderWorkspace` (workspace/) composes `ThreePassBar` + `BlockEditor` + `PdfPanel` + `SkillsPanel`.
+**`block-editor/` — the single editor implementation.**
+
 - Content is a flat array of typed `Block`s (`types.ts`), rendered by `blocks/*`; only `TipTapBlock` uses
   TipTap, for rich-text paragraphs.
 - Slash commands are declared in `commandRegistry.ts`, dispatched by `commands.ts`; commands with a
   `backendCommand` route through `apiHandlers.ts` to the `/api/editor/*` routes.
 - Blocks produced by API calls carry `metadata.locked` and are read-only until explicitly unlocked — see
   `LOCKED_BLOCKS.md`. Slash commands inside a locked block insert their result *after* it.
-- Cross-component editor actions are a DOM CustomEvent contract in `intents.ts` (`editor-ai-action`), not
-  props or context.
 - Markdown round-tripping rules are in `MARKDOWN_FORMAT.md`; parsing lives in `parsers.ts` and
   `utils/markdown.ts`.
+
+**`chat/` — the chat sidecar. Import only through `chat/index.ts`.** Internals are private, and the one
+consumer outside the module is `BlockEditor.tsx`. The submodules are split by what they may touch, which is
+the rule to check a new file against:
+
+| Submodule | May touch | Must not |
+| --- | --- | --- |
+| `model/` | data shapes, string/number rules | React, fetch, DOM |
+| `api/` | `fetch` to `/api/chat/*`, `/api/qa` | component state, DOM |
+| `hooks/` | client state, effects | direct DOM styling |
+| `primitives/` | props → markup | fetch, app state |
+| `sidecar/`, `inline/` | composition of the above | new network calls |
+
+**`workspace/` — the paper reading surface.** `ReaderWorkspace` composes `ThreePassBar` + `BlockEditor` +
+`SkillsPanel` + `workspace/pdf/PdfPanel`; the pass/paper/status hooks live beside it.
+
+**The editor↔chat seam is two DOM CustomEvent contracts, both owned by the editor** — not props, not
+context, because the trees are siblings:
+
+- `block-editor/intents.ts` — editor → chat (`editor-ai-action`): summarize-selection, go-deeper, condense.
+- `block-editor/navigation.ts` — chat → editor (`block-editor-navigate` + `-result`): reveal the block
+  behind a citation, and answer whether it could. Request/response is correlated by `requestId`.
+  Resolution is pure and unit-tested in `blockNavigation.ts` (quote → page → section ladder); the DOM half
+  (scroll, focus, highlight) is `useBlockNavigation.ts`.
+
+Add new cross-tree communication to these contracts rather than inventing a third channel.
 
 ### Auth
 

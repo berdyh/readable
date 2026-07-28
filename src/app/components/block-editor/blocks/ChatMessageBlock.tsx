@@ -4,7 +4,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { MessageSquare, Send, X } from "lucide-react";
 import { clsx } from "clsx";
 import type { Block } from "../types";
-import ChatPanel from "../../chat/ChatPanel";
+import { InlineChatPanel } from "../../chat";
 
 interface ChatMessageBlockProps {
   block: Block;
@@ -166,10 +166,10 @@ export function ChatMessageBlock({
         </div>
       )}
 
-      {/* Embedded ChatPanel */}
+      {/* Embedded chat */}
       <div className="p-2">
         {paperId ? (
-          <ChatPanel
+          <InlineChatPanel
             paperId={paperId}
             draft={chatDraft}
             onDraftChange={setChatDraft}

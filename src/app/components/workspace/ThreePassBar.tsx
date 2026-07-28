@@ -44,8 +44,11 @@ export function ThreePassBar({ pass, onPassChange }: ThreePassBarProps) {
     "text-neutral-500 hover:bg-neutral-100 " +
     "dark:text-neutral-400 dark:hover:bg-neutral-800";
 
+  // The active pill inverts its own foreground, so the step bubble has to
+  // invert back or the number paints on top of its own colour and vanishes.
   const numberBubbleActive =
-    "bg-current text-white dark:text-neutral-900";
+    "bg-white/25 text-white " +
+    "dark:bg-neutral-900/20 dark:text-neutral-900";
 
   return (
     <section

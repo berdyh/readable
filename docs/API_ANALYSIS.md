@@ -1,114 +1,75 @@
-# API Endpoints Analysis
+# API Route Inventory
 
-This document analyzes all API endpoints in the application to identify which are actively used and which might be redundant or unused.
+Every HTTP surface the app exposes, derived from the handlers under
+`src/app/api/**/route.ts`. Verify against those files — they are the source of truth.
 
-## Currently Used APIs ✅
+For how to exercise these endpoints, see [`API_TESTING.md`](./API_TESTING.md).
 
-### Core Functionality
+## Authentication model
 
-1. **`/api/summarize`** - **USED**
-   - Used in: `ReaderWorkspace.tsx`, `apiHandlers.ts`, `commandHandlers.ts`
-   - Purpose: Generate structured summaries of research papers
-   - Status: ✅ Active and functional
+There is **no `middleware.ts`**. Protection is applied per handler by calling
+`requireAuthenticatedUserId()` from `src/server/auth/user.ts`, which throws
+`AuthenticationRequiredError`; each handler catches it with
+`isAuthenticationRequiredError()` and returns `401` with `AUTH_REQUIRED_MESSAGE`.
 
-2. **`/api/qa`** - **USED**
-   - Used in: `ChatPanel.tsx`, `ChatIntegration.tsx`
-   - Purpose: Answer questions about papers with citations
-   - Status: ✅ Active and functional
+The consequence is that **auth is opt-in per route**. A new route is public until
+its handler calls `requireAuthenticatedUserId()`. Adding a route does not
+automatically place it behind Clerk.
 
-3. **`/api/ingest`** - **USED**
-   - Used in: `IngestLanding.tsx`
-   - Purpose: Ingest arXiv papers into the system
-   - Status: ✅ Active and functional
+Anonymous reads of public paper text are intentionally allowed; anything that
+generates a summary, touches chat, or reads the user's persona is gated.
 
-4. **`/api/extract-research-paper`** - **USED**
-   - Used in: `IngestLanding.tsx`
-   - Purpose: Extract text, figures, tables from PDF files
-   - Status: ✅ Active and functional
+## Routes
 
-### Editor Selection APIs
+| Route | Methods | Auth | Purpose |
+| --- | --- | --- | --- |
+| `/api/health` | `GET` | public | Liveness probe. Returns `{ status, timestamp }`. No dependencies. |
+| `/api/ingest` | `POST` | **required** | Ingest an arXiv paper into Postgres + Qdrant. |
+| `/api/extract-research-paper` | `POST` | **required** | Extract text/figures/tables from an uploaded PDF (`multipart/form-data`). |
+| `/api/summarize` | `POST` | **required** | Structured paper summary; upserts extracted `concepts` into `persona_concepts`. |
+| `/api/qa` | `POST` | **required** | Grounded Q&A with citations. Also emits a `[qa] trust_counter` log line per call. |
+| `/api/editor/selection/summary` | `POST` | **required** | Summarize a text selection into a callout with citations. |
+| `/api/editor/selection/figures` | `POST` | public | Figures related to a text selection. |
+| `/api/editor/selection/citations` | `POST` | public | Citations related to a text selection. |
+| `/api/editor/ingest/arxiv` | `POST` | public | Inline arXiv ingestion from the editor. |
+| `/api/chat/session` | `POST` | **required** | Create a per-paper chat session. |
+| `/api/chat/history` | `GET`, `POST`, `DELETE` | **required** | Read / append / delete persisted chat messages. Ownership enforced via `ChatSessionOwnershipError` → `403`. |
+| `/api/skills` | `GET` | **required** | The authenticated user's `persona_concepts` (max 200). |
+| `/api/skills/[userId]` | `GET` | n/a | **Retired.** Always returns `410 Gone` pointing at `/api/skills`. Kept so old clients get a clear signal rather than a 404. |
 
-5. **`/api/editor/selection/summary`** - **USED**
-   - Used in: `useResearchCommands.ts`, `apiHandlers.ts`
-   - Purpose: Summarize selected text from papers
-   - Status: ✅ Active and functional
+Client consumers are deliberately not listed here: the component tree under
+`src/app/components/` is refactored often and any such list goes stale within a
+release. Use `rg '/api/<route>' src/app` to find current callers.
 
-6. **`/api/editor/selection/figures`** - **USED**
-   - Used in: `useResearchCommands.ts`, `apiHandlers.ts`
-   - Purpose: Get figures related to selected text
-   - Status: ✅ Active and functional
+`/api/health` is not called by the frontend. It is kept on purpose for
+load-balancer and deployment probes.
 
-7. **`/api/editor/selection/citations`** - **USED**
-   - Used in: `useResearchCommands.ts`, `apiHandlers.ts`
-   - Purpose: Get citations related to selected text
-   - Status: ✅ Active and functional
+## Response invariants
 
-8. **`/api/editor/ingest/arxiv`** - **USED**
-   - Used in: `useResearchCommands.ts`
-   - Purpose: Ingest arXiv content inline in the editor
-   - Status: ✅ Active and functional
+These are contracts the handlers are required to uphold. Both were the subject of
+past bug fixes (recorded in `archive/SCHEMA_FIX_VERIFICATION.md` and
+`archive/BUG_FIX_UNKNOWN_CITATION.md`); the rules are restated here because they
+still constrain `src/server/editor/selection.ts` today.
 
-### Chat APIs
+**Citations in `/api/editor/selection/summary` are always complete.**
+`SELECTION_SUMMARY_SCHEMA` marks `chunk_id`, `page`, and `quote` as `required`,
+with `page` an `integer` `minimum: 1` and `quote` a string of `minLength: 1`.
+The LLM cannot be trusted to honour that, so `normalizeCitations()` validates and
+**drops** citations that fail it rather than passing partial objects through, and
+`createCitationFromChunk()` — used for citations the server synthesizes — defaults
+`page` to `1` and always supplies a non-empty `quote`.
 
-9. **`/api/chat/history`** - **USED**
-   - Used in: `ChatIntegration.tsx`
-   - Purpose: Get, save, and delete chat history
-   - Status: ✅ Active and functional
-
-10. **`/api/chat/session`** - **USED**
-    - Used in: `ChatIntegration.tsx`
-    - Purpose: Create new chat sessions
-    - Status: ✅ Active and functional
-
-## Potentially Unused/Redundant APIs ⚠️
-
-### Removed APIs
-
-1. **`/api/editor/page`** - **REMOVED** ✅
-   - **Status**: Removed - was never used in frontend
-   - **Reason**: Placeholder implementation with no database persistence
-   - **Action Taken**: Endpoint and route file deleted
-
-### Unused APIs
-
-1. **`/api/health`** - **KEPT** ✅
-   - **Status**: Not called from frontend, but kept as requested
-   - **Purpose**: Health check endpoint
-   - **Analysis**:
-     - Simple status check returning timestamp
-     - Useful for monitoring/deployment checks
-     - **Decision**: Kept for potential future use with monitoring tools or load balancers
-
-## Summary
-
-**Total APIs**: 11 (after cleanup)
-
-- **Actively Used**: 10
-- **Health Check**: 1 (kept for monitoring)
-- **Removed**: 1 (`/api/editor/page`)
-
-## Cleanup Actions Taken
-
-1. ✅ **Removed `/api/editor/page` endpoint**
-   - Deleted `src/app/api/editor/page/route.ts`
-   - Removed empty directory
-
-2. ✅ **Kept `/api/health` endpoint**
-   - Retained as requested for potential monitoring use
-
-3. ✅ **Created test script**
-   - Added `scripts/test-api-endpoints.ts` to verify all endpoints
+**A bullet never references a citation that does not exist.**
+Bullets carry `citationIds`, and every id in that array must have a matching entry
+in the citations map. The failure mode this guards against: the fallback path
+(taken when the LLM returns no bullets) used to push a bullet with
+`citationIds: ['unknown']` while only registering a real citation when
+`evidence.hits[0]` existed — so with no evidence the bullet pointed at a citation
+that was never created. The rule is to emit `citationIds: []` when there is no
+chunk to cite, never a placeholder id.
 
 ## Testing
 
-Use the test script to verify all endpoints:
-
-```bash
-# Start dev server
-pnpm dev
-
-# In another terminal, run tests
-pnpm exec tsx scripts/test-api-endpoints.ts
-```
-
-Note: Some endpoints require environment variables (OpenAI, Postgres `DATABASE_URL`, `QDRANT_URL`, etc.) to function fully. The test script will verify routing and error handling even without full configuration.
+`pnpm test:api` runs offline route/auth/validation checks against a running dev
+server; `pnpm test:api -- --live` additionally exercises the provider-backed
+paths. See [`API_TESTING.md`](./API_TESTING.md) for the required environment.

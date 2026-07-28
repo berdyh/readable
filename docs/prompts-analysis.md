@@ -1,115 +1,91 @@
-# Prompts Analysis for Summarization Backend
+# Prompts
 
-This document lists all prompts used in the summarization backend.
+Every system prompt, user-prompt requirement, and context limit lives in
+**`src/server/llm-config/prompts.json`** and is read through the accessors in
+`src/server/llm-config/index.ts`. Per-task model choices live alongside it in
+`models.json` / `models.ts`.
 
-## 1. Paper Summarization Prompt (`src/server/summarize/index.ts`)
+> **Rule:** never inline a prompt string or a model id at a call site. Add it to
+> `prompts.json` / `models.json` and read it through the accessor.
 
-### System Prompt (BASE_SYSTEM_PROMPT)
-```typescript
-BASE_SYSTEM_PROMPT = "You are Readable's persona-aware research assistant. Your job is to guide a reader through a technical paper by explaining the reasoning first and the results second. Always surface: what the authors are trying to achieve, why the approach makes sense, how evidence supports claims, and what limitations or open questions remain. Keep the tone professional, helpful, and grounded in the supplied material—never invent citations or facts."
-```
+There is no `src/server/prompts/` module. One existed as a duplicate of
+`llm-config/` and has been deleted; if you find a reference to it, it is stale.
 
-**Location**: Line 15 in `src/server/summarize/index.ts`
+## Accessors
 
-### User Prompt Structure
-The user prompt is built from:
-1. **Metadata Block**: Title, authors, primary category, published date, abstract
-2. **Section Outline**: Up to 10 sections with:
-   - Section ID, title, page span
-   - Referenced figure IDs
-   - Key paragraphs (up to 3 per section, truncated to 360 chars)
-3. **Figure Context**: Up to 6 figures with:
-   - Figure ID, caption (truncated to 280 chars), page number
-   - Referenced section IDs
-   - Supporting paragraphs (truncated to 320 chars)
-4. **Task Requirements**:
-   - Return JSON with keys: sections[], key_findings[], figures[]
-   - Always produce at least three sections
-   - Lead each section with authors' reasoning/goal, then methods, then results
-   - key_findings[] should cite supporting_sections using IDs (e.g., S1)
-   - figures[] must explain why the figure matters
-   - Do not invent IDs or page numbers
-   - Keep explanations concise but information-dense
+| Function | Returns |
+| --- | --- |
+| `getSystemPrompt(task)` | The base system prompt for `'paper_summary' \| 'selection_summary' \| 'qa'`. |
+| `getPaperSummaryRequirements()` | The `string[]` of task requirements injected into the paper-summary user prompt. |
+| `getPromptLimits()` | The truncation/count limits below. |
+| `getPromptsConfig()` | The whole typed `PromptConfig` object. |
+| `getModel(task)` | The model id for a task (from `models.json`). |
 
-**Function**: `buildUserPrompt()` (Line 274)
+## The three prompt tasks
 
-### Persona Prompt Merging
-- Fetches from Kontext API (optional)
-- If persona prompt exists: `${personaPrompt}\n\n---\n${BASE_SYSTEM_PROMPT}`
-- If not: Uses `BASE_SYSTEM_PROMPT` only
+### `paper_summary` — `src/server/summarize/index.ts`
 
-**Function**: `mergeSystemPrompt()` (Line 306)
+- System prompt: `getSystemPrompt('paper_summary')`.
+- User prompt: `buildUserPrompt()` assembles a metadata block (title, authors,
+  primary category, published date, abstract), a section outline, figure context,
+  and finally the requirement list from `getPaperSummaryRequirements()`.
+- The requirements drive the output shape: JSON with `sections[]`,
+  `key_findings[]`, `figures[]`; at least three sections; reasoning before
+  results; `supporting_sections` cited by provided ID (e.g. `S1`); no invented IDs
+  or page numbers.
 
-## 2. Selection Summary Prompt (`src/server/editor/selection.ts`)
+### `selection_summary` — `src/server/editor/selection.ts`
 
-### System Prompt (BASE_SUMMARY_SYSTEM_PROMPT)
-```typescript
-BASE_SUMMARY_SYSTEM_PROMPT = "You are Readable's inline summarizer. Given a reader's highlighted passage and the retrieved chunks from the paper, produce:
-- A tight list of 3-5 bullet insights grounded in the evidence.
-- A short 'deeper dive' section (1-3 paragraphs) that expands on the nuance.
-Use only the supplied evidence chunks and cite them by chunk_id."
-```
+- System prompt: `getSystemPrompt('selection_summary')` — 3–5 grounded bullets
+  plus a short "deeper dive", citing evidence by `chunk_id`.
+- User prompt: `buildSelectionUserPrompt(paperId, selection, evidence)` — the
+  paper ID, the highlighted text, and the retrieved chunks (id, section, page,
+  text truncated to `limits.text_truncate`, inline citations).
+- The response schema forces complete citations; see the response invariants in
+  [`API_ANALYSIS.md`](./API_ANALYSIS.md).
 
-**Location**: Line 19 in `src/server/editor/selection.ts`
+### `qa` — `src/server/qa/index.ts`
 
-### User Prompt Structure
-The user prompt includes:
-1. **Paper ID**
-2. **Selected Text**: The highlighted passage
-3. **Evidence Chunks**: Retrieved chunks with:
-   - Chunk ID, section, page number
-   - Full text (truncated to 420 chars)
-   - Citations referenced in chunk
+- System prompt: `getSystemPrompt('qa')` — answer only from supplied evidence,
+  cite page numbers inline as `(page N)`, say so explicitly when the evidence
+  does not contain the answer, and obey the JSON schema exactly.
+- User prompt: `buildQaUserPrompt(question, evidence)` — the question, the
+  retrieved evidence chunks, relevant citations (optionally enriched via Semantic
+  Scholar) and figures.
 
-**Function**: `buildSelectionUserPrompt()` (Line 113)
+## Limits
 
-### Persona Prompt Merging
-- Fetches from Kontext API with taskId: `'inline_research_summary'`
-- Format: `${BASE_SUMMARY_SYSTEM_PROMPT}\n\nPersona guidance:\n${personaPrompt}`
+From `prompts.json` → `limits`, read via `getPromptLimits()`:
 
-## 3. QA Response Prompt (`src/server/qa/index.ts`)
+| Key | Value | Applies to |
+| --- | --- | --- |
+| `section` | 10 | max sections in the summary outline |
+| `paragraph` | 3 | max key paragraphs per section |
+| `figure` | 6 | max figures in figure context |
+| `paragraph_truncate` | 360 | chars per outline paragraph |
+| `figure_caption_truncate` | 280 | chars per figure caption |
+| `figure_context_truncate` | 320 | chars per figure supporting paragraph |
+| `abstract_truncate` | 1200 | chars of abstract |
+| `text_truncate` | 420 | chars per evidence chunk |
 
-### System Prompt
-The QA system prompt is built dynamically and includes:
-1. Base instruction to answer questions based on evidence chunks
-2. Optional persona guidance from Kontext API
+These exist to keep prompts inside the context window; change them in
+`prompts.json`, not at the call site.
 
-**Location**: `buildQaSystemPrompt()` function
+## Persona prefixes (currently inert)
 
-### User Prompt Structure
-Includes:
-1. **Question**
-2. **Evidence Chunks**: Retrieved chunks with full context
-3. **Relevant Citations**: Top 4 citations with enrichment from arXiv
-4. **Relevant Figures**: Figures referenced in chunks
-5. **Instructions**: To cite chunks and use evidence
+Each task in `prompts.json` still carries a `persona_prefix` field, left over from
+the removed Kontext.dev integration that fetched a persona-specific system prompt
+and merged it with the base. **That integration is gone**, along with the
+`kontext_prompts` cache table. `getSystemPrompt()` returns the base prompt as-is
+and never reads `persona_prefix`.
 
-**Function**: `buildQaUserPrompt()` (Line 127)
+Persona data is still collected — every Q&A and summarize response is required by
+schema to return a `concepts[]` list, which `src/server/persona/record.ts` upserts
+into `persona_concepts` — but it is not currently fed back into prompts.
 
-## 4. Kontext API Integration (`src/server/summarize/kontext.ts`)
+## Common patterns
 
-### Request Structure
-Fetches persona-aware system prompts from Kontext API:
-- **Task IDs used**:
-  - `'summarize_research_paper'` - For full paper summaries
-  - `'inline_research_summary'` - For selection summaries
-- **Parameters**: `taskId`, `paperId`, `userId`, `personaId`
-- **Returns**: System prompt string or undefined (falls back gracefully)
-
-**Default timeout**: 8 seconds
-**Base URL**: `https://api.kontext.dev`
-
-## Summary
-
-### Prompt Locations:
-1. **Paper Summarization**: `src/server/summarize/index.ts` (Lines 15, 274, 306)
-2. **Selection Summary**: `src/server/editor/selection.ts` (Lines 19, 113, 347)
-3. **QA Responses**: `src/server/qa/index.ts` (Line 127)
-
-### Common Patterns:
-- All prompts use structured JSON schemas for responses
-- Persona prompts are optional and merge with base prompts
-- Evidence chunks are always included with citations
-- Page numbers and section IDs are emphasized for grounding
-- Truncation limits ensure prompts don't exceed token limits
-
+- All three tasks use a strict JSON response schema; free-form text is not accepted.
+- Evidence chunks are always supplied with their IDs so answers can be grounded.
+- Page numbers and section IDs are emphasized so the model cannot invent anchors.
+- Truncation limits are centralized rather than hard-coded per call site.

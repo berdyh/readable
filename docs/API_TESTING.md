@@ -5,6 +5,10 @@ Readable has two API proof loops:
 - Offline route checks: validate routing, payload errors, and Clerk auth gates without external services.
 - Live API checks: call real Clerk-protected and provider-backed endpoints.
 
+Auth is enforced per handler via `requireAuthenticatedUserId()`, not by a
+`middleware.ts` (there isn't one), so each route below states its own gate. The
+full route inventory is in [`API_ANALYSIS.md`](./API_ANALYSIS.md).
+
 ## Offline Route Checks
 
 Start the dev server, then run the default API harness:
@@ -167,14 +171,35 @@ curl "http://localhost:3000/api/chat/history?paperId=your-paper-id" \
   -H "Authorization: Bearer $TEST_AUTH_TOKEN"
 ```
 
+### Skills
+
+`GET /api/skills`
+
+Requires Clerk auth and Postgres. Returns the authenticated user's tracked
+`persona_concepts` (capped at 200). The user is taken from the Clerk session, not
+from the URL.
+
+```bash
+curl http://localhost:3000/api/skills \
+  -H "Authorization: Bearer $TEST_AUTH_TOKEN"
+```
+
+`GET /api/skills/[userId]` is retired and always returns `410 Gone` telling the
+caller to use `/api/skills`. Do not add coverage that expects it to work.
+
 ## Error Taxonomy
 
 - `400 Bad Request`: malformed JSON, missing required fields, or invalid message/selection payloads.
 - `401 Unauthorized`: Clerk session is missing or invalid on protected routes.
 - `403 Forbidden`: authenticated user is trying to mutate a chat session they do not own.
 - `404 Not Found`: requested paper content does not exist for summary-style reads.
+- `410 Gone`: retired endpoint (`/api/skills/[userId]`).
+- `429 Too Many Requests`: upstream provider or arXiv rate limit.
+- `402 Payment Required`: LLM provider reports exhausted credit/quota.
 - `500 Internal Server Error`: local configuration or persistence failure.
 - `502 Bad Gateway`: upstream provider, arXiv, ingest, vector, or LLM failure.
+- `503 Service Unavailable`: no usable LLM provider is currently configured or reachable.
+- `504 Gateway Timeout`: upstream provider or arXiv request timed out.
 
 ## Source-Click Accessibility QA
 

@@ -6,7 +6,14 @@ import { clsx } from "clsx";
 import { Reasoning } from "./reasoning";
 import { Sources, type Source } from "./sources";
 
-export interface AnswerTrustMetadata {
+/**
+ * The render-time view of trust, deliberately wider than any single wire shape:
+ * it has to accept a fresh `/api/qa` answer (`AnswerTrustMetadata` in
+ * `@/server/qa/types`), a persisted history row (`ChatTrustMetadata` in
+ * `@/server/chat/types`), and older rows that predate both. `model/types.ts`
+ * asserts at compile time that both wire shapes still fit here.
+ */
+export interface TrustDisplayMetadata {
   state?: string;
   status?: string;
   label?: string;
@@ -29,7 +36,7 @@ function getTrustState({
   sourceCount,
 }: {
   status?: "error";
-  trust?: AnswerTrustMetadata;
+  trust?: TrustDisplayMetadata;
   sourceCount: number;
 }): { tone: TrustTone; label: string; detail: string } {
   if (status === "error") {
@@ -102,7 +109,7 @@ function AnswerTrustStrip({
   sourceCount,
 }: {
   status?: "error";
-  trust?: AnswerTrustMetadata;
+  trust?: TrustDisplayMetadata;
   sourceCount: number;
 }) {
   const trustState = getTrustState({ status, trust, sourceCount });
@@ -140,7 +147,7 @@ export function AnswerCard({
 }: {
   content: string;
   citations?: Source[];
-  trust?: AnswerTrustMetadata;
+  trust?: TrustDisplayMetadata;
   reasoning?: string;
   paperId: string;
   status?: "error";

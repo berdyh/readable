@@ -9,6 +9,6 @@
 export { ChatButton } from "./sidecar/ChatButton";
 export { ChatSidePanel, type ChatSidePanelProps } from "./sidecar/ChatSidePanel";
 export { InlineChatPanel, type InlineChatPanelProps } from "./inline/InlineChatPanel";
-export type { AnswerTrustMetadata } from "./primitives/answer-card";
+export type { TrustDisplayMetadata } from "./primitives/answer-card";
 export type { Source } from "./primitives/sources";
 export type { ChatMessage, ChatTab } from "./model/types";

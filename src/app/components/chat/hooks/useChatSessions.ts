@@ -15,7 +15,7 @@ import {
 import {
   createDraftTab,
   createLocalId,
-  normalizeHistoryMessage,
+  fromWireMessage,
   titleFromQuestion,
   type ChatMessage,
   type ChatTab,
@@ -84,7 +84,7 @@ export function useChatSessions({
               session.messages.find((message) => message.role === "user")?.content ??
                 `Chat ${index + 1}`,
             ),
-            messages: session.messages.map(normalizeHistoryMessage),
+            messages: session.messages.map(fromWireMessage),
             sessionId: session.sessionId,
           }));
           setTabs(loadedTabs);

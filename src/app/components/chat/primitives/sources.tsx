@@ -4,6 +4,12 @@ import { useState } from "react";
 import { clsx } from "clsx";
 import { CheckCircle2, ChevronDown, ChevronUp, ExternalLink, FileText, XCircle } from "lucide-react";
 
+import {
+  emitBlockNavigate,
+  onBlockNavigateResult,
+  type BlockNavigateStatus,
+} from "../../block-editor/navigation";
+
 // Support both the legacy Source format and the AnswerCitation format.
 interface LegacySource {
   id: string;
@@ -20,12 +26,7 @@ interface AnswerCitationSource {
 
 export type Source = LegacySource | AnswerCitationSource;
 
-type SourceNavigationState = "idle" | "pending" | "success" | "unavailable";
-
-interface SourceNavigationResult {
-  requestId: string;
-  status: "success" | "unavailable";
-}
+type SourceNavigationState = "idle" | "pending" | BlockNavigateStatus;
 
 /** How long to wait for the editor to answer a navigate request before giving up. */
 const NAVIGATION_TIMEOUT_MS = 1500;
@@ -33,14 +34,6 @@ const QUOTE_CLAMP_LENGTH = 150;
 
 function isAnswerCitation(source: Source): source is AnswerCitationSource {
   return "chunkId" in source;
-}
-
-function createNavigationRequestId(): string {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
-  }
-
-  return `source-nav-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 function getSourceKey(source: Source, index: number): string {
@@ -97,39 +90,23 @@ function CitationRow({ source, paperId }: { source: AnswerCitationSource; paperI
     setNavigationState("pending");
     emitSourceProofCounter({ status: "pending", sourceType: "answer-citation", hasPage });
 
-    const requestId = createNavigationRequestId();
+    const requestId = emitBlockNavigate({
+      paperId,
+      chunkId: source.chunkId,
+      page: source.page,
+      quote: source.quote,
+    });
 
     let completed = false;
-    const handleResult = (resultEvent: Event) => {
-      const detail = (resultEvent as CustomEvent<SourceNavigationResult>).detail;
-      if (!detail || detail.requestId !== requestId) {
-        return;
-      }
-
+    const stopListening = onBlockNavigateResult(requestId, (status) => {
       completed = true;
-      window.removeEventListener("block-editor-navigate-result", handleResult);
-      const status = detail.status === "success" ? "success" : "unavailable";
       setNavigationState(status);
       emitSourceProofCounter({ status, sourceType: "answer-citation", hasPage });
-    };
-
-    window.addEventListener("block-editor-navigate-result", handleResult);
-
-    window.dispatchEvent(
-      new CustomEvent("block-editor-navigate", {
-        detail: {
-          requestId,
-          paperId,
-          chunkId: source.chunkId,
-          page: source.page,
-          quote: source.quote,
-        },
-      }),
-    );
+    });
 
     window.setTimeout(() => {
       if (completed) return;
-      window.removeEventListener("block-editor-navigate-result", handleResult);
+      stopListening();
       setNavigationState((current) => (current === "pending" ? "unavailable" : current));
       emitSourceProofCounter({ status: "unavailable", sourceType: "answer-citation", hasPage });
     }, NAVIGATION_TIMEOUT_MS);

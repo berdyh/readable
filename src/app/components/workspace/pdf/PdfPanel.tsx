@@ -17,16 +17,14 @@ interface WorkspaceModalProps {
   open: boolean;
   onClose: () => void;
   children: ReactNode;
-  isDarkMode?: boolean;
 }
 
-const WorkspaceModal = ({
-  title,
-  open,
-  onClose,
-  children,
-  isDarkMode = false,
-}: WorkspaceModalProps) => {
+/**
+ * Theming is Tailwind `dark:` variants rather than a JS `isDarkMode` flag, so
+ * the server and the first client render emit identical class strings — the
+ * same hydration-safe rule the rest of the reader follows.
+ */
+const WorkspaceModal = ({ title, open, onClose, children }: WorkspaceModalProps) => {
   useEffect(() => {
     if (!open) {
       return;
@@ -47,48 +45,31 @@ const WorkspaceModal = ({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-10">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      className="fixed inset-0 z-50 flex items-center justify-center px-4 py-10"
+    >
       <button
         type="button"
         aria-label="Close overlay"
         onClick={onClose}
-        className="absolute inset-0 bg-black/40"
+        className="absolute inset-0 bg-zinc-950/50 backdrop-blur-[2px]"
       />
-      <div
-        className={`relative z-10 flex w-full max-w-7xl flex-col overflow-hidden rounded-lg border shadow-2xl ${
-          isDarkMode ? "border-neutral-700 bg-neutral-900" : "border-zinc-200 bg-white"
-        }`}
-      >
-        <div
-          className={`flex items-center justify-between border-b px-5 py-3 ${
-            isDarkMode ? "border-neutral-700" : "border-zinc-200"
-          }`}
-        >
-          <h2
-            className={`text-sm font-semibold uppercase tracking-wide ${
-              isDarkMode ? "text-zinc-400" : "text-zinc-500"
-            }`}
-          >
-            {title}
-          </h2>
+      <div className="relative z-10 flex w-full max-w-7xl flex-col overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-3 dark:border-zinc-800">
+          <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">{title}</h2>
           <button
             type="button"
             onClick={onClose}
-            className={`inline-flex h-8 w-8 items-center justify-center rounded-full border transition ${
-              isDarkMode
-                ? "border-neutral-600 text-zinc-400 hover:border-neutral-500 hover:text-zinc-300"
-                : "border-zinc-300 text-zinc-500 hover:border-zinc-400 hover:text-zinc-700"
-            }`}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-zinc-300 text-zinc-500 transition-colors duration-150 hover:border-zinc-400 hover:text-zinc-800 dark:border-zinc-700 dark:text-zinc-400 dark:hover:border-zinc-600 dark:hover:text-zinc-100"
             aria-label="Close"
           >
-            <X className="h-4 w-4" />
+            <X className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
-        <div
-          className={`max-h-[82vh] overflow-y-auto p-4 ${
-            isDarkMode ? "bg-neutral-950" : "bg-zinc-50"
-          }`}
-        >
+        <div className="max-h-[82vh] overflow-y-auto bg-zinc-50 p-4 dark:bg-zinc-950">
           {children}
         </div>
       </div>
@@ -114,11 +95,10 @@ interface PdfPanelProps {
   pdfUrl: string;
   summary: SummaryResult | null;
   arxivHtmlContent: InlineArxivIngestResult | null;
-  isDarkMode: boolean;
   onStatus: (message: string) => void;
 }
 
-const PdfPanel = ({ pdfUrl, summary, arxivHtmlContent, isDarkMode, onStatus }: PdfPanelProps) => {
+const PdfPanel = ({ pdfUrl, summary, arxivHtmlContent, onStatus }: PdfPanelProps) => {
   const viewerRef = useRef<PdfViewerHandle>(null);
   const [isOpen, setIsOpen] = useState(false);
 
@@ -217,27 +197,16 @@ const PdfPanel = ({ pdfUrl, summary, arxivHtmlContent, isDarkMode, onStatus }: P
       <button
         type="button"
         onClick={() => setIsOpen(true)}
-        className={`inline-flex h-9 items-center gap-2 rounded-full border px-3 text-xs font-semibold transition ${
-          isDarkMode
-            ? "border-neutral-700 bg-neutral-900 text-neutral-200 hover:border-neutral-600 hover:bg-neutral-800"
-            : "border-zinc-300 bg-white text-zinc-700 hover:border-zinc-400 hover:text-zinc-900"
-        }`}
+        className="inline-flex h-9 items-center gap-2 rounded-full border border-zinc-300 bg-white px-3 text-xs font-semibold text-zinc-700 transition-colors duration-150 hover:border-zinc-400 hover:text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
       >
         <FileText className="h-3.5 w-3.5" aria-hidden="true" />
         Figures / PDF
       </button>
 
-      <WorkspaceModal
-        title="Figures & PDF"
-        open={isOpen}
-        onClose={() => setIsOpen(false)}
-        isDarkMode={isDarkMode}
-      >
+      <WorkspaceModal title="Figures & PDF" open={isOpen} onClose={() => setIsOpen(false)}>
         <div className="grid min-h-[70vh] gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,22rem)]">
           <section
-            className={`min-w-0 overflow-hidden rounded-lg border ${
-              isDarkMode ? "border-neutral-700 bg-neutral-900" : "border-zinc-200 bg-white"
-            }`}
+            className="min-w-0 overflow-hidden rounded-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900"
             aria-label="PDF viewer"
           >
             <PdfViewerWithHighlights
@@ -248,9 +217,7 @@ const PdfPanel = ({ pdfUrl, summary, arxivHtmlContent, isDarkMode, onStatus }: P
             />
           </section>
           <aside
-            className={`min-h-0 overflow-y-auto border-t pt-4 lg:max-h-[70vh] lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0 ${
-              isDarkMode ? "border-neutral-800" : "border-zinc-200"
-            }`}
+            className="min-h-0 overflow-y-auto border-t border-zinc-200 pt-4 lg:max-h-[70vh] lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0 dark:border-zinc-800"
             aria-label="Figure callouts"
           >
             <FigureCallouts figures={figureCallouts} onShow={handleFigureNavigation} />

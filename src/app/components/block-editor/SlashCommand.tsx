@@ -116,7 +116,7 @@ const SlashCommandList = forwardRef<
 
   if (!items.length) {
     return (
-      <div className="min-w-[240px] rounded-lg border border-neutral-200 bg-white p-3 text-sm text-neutral-500 shadow-lg dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400">
+      <div className="min-w-[240px] rounded-lg border border-zinc-200 bg-white p-3 text-sm text-zinc-500 shadow-lg dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400">
         No matches. Try searching for commands.
       </div>
     );
@@ -136,12 +136,12 @@ const SlashCommandList = forwardRef<
   );
 
   return (
-    <div className="min-w-[280px] max-w-[320px] rounded-xl border border-neutral-200 bg-white p-2 shadow-xl ring-1 ring-neutral-950/5 dark:border-neutral-700 dark:bg-neutral-900 dark:ring-white/10 backdrop-blur-sm">
+    <div className="min-w-[280px] max-w-[320px] rounded-xl border border-zinc-200 bg-white p-2 shadow-xl ring-1 ring-zinc-950/5 dark:border-zinc-700 dark:bg-zinc-900 dark:ring-white/10 backdrop-blur-sm">
       <ul className="flex flex-col gap-1">
         {Object.entries(groupedItems).map(([category, categoryItems]) => (
           <li key={category}>
             {Object.keys(groupedItems).length > 1 && (
-              <div className="px-2 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
+              <div className="px-2 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
                 {category}
               </div>
             )}
@@ -161,20 +161,20 @@ const SlashCommandList = forwardRef<
                     "flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-all duration-150",
                     selectedIndex === globalIndex
                       ? "bg-blue-100 text-blue-700 shadow-sm dark:bg-blue-500/20 dark:text-blue-200 dark:shadow-blue-500/10"
-                      : "text-neutral-700 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-neutral-800 active:scale-[0.98]",
+                      : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800 active:scale-[0.98]",
                   )}
                 >
                   <span className={clsx(
                     "flex h-8 w-8 items-center justify-center rounded-md transition-colors duration-150",
                     selectedIndex === globalIndex
                       ? "bg-blue-200 text-blue-700 dark:bg-blue-500/30 dark:text-blue-200"
-                      : "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300",
+                      : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300",
                   )}>
                     <Icon className="h-4 w-4" />
                   </span>
                   <span className="flex flex-1 flex-col">
                     <span className="font-medium">{item.title}</span>
-                    <span className="text-xs text-neutral-500 dark:text-neutral-400">
+                    <span className="text-xs text-zinc-500 dark:text-zinc-400">
                       {item.description}
                     </span>
                   </span>

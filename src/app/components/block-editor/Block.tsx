@@ -352,7 +352,7 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
           />
         );
       case "divider":
-        return <DividerBlock block={block} />;
+        return <DividerBlock />;
       case "callout":
         return (
           <CalloutBlock
@@ -421,8 +421,8 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
       ref={containerRef}
       className={clsx(
         "group relative flex items-start gap-2 rounded-md px-2 py-1 transition-all duration-150",
-        "hover:bg-neutral-50/50 dark:hover:bg-neutral-900/50",
-        isFocused && !isDragging && "bg-neutral-50 dark:bg-neutral-900",
+        "hover:bg-zinc-50/50 dark:hover:bg-zinc-900/50",
+        isFocused && !isDragging && "bg-zinc-50 dark:bg-zinc-900",
         isDragging && "opacity-50 pointer-events-none scale-[0.98]",
         dragOver && "ring-2 ring-blue-500 dark:ring-blue-400 bg-blue-50/50 dark:bg-blue-950/30",
       )}
@@ -441,7 +441,7 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
             e.stopPropagation();
             handleToggleLock();
           }}
-          className="flex h-6 w-6 items-center justify-center rounded hover:bg-neutral-200 dark:hover:bg-neutral-700 active:scale-95 transition-all duration-150 text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
+          className="flex h-6 w-6 items-center justify-center rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 active:scale-95 transition-all duration-150 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
           title={isLocked ? "Click to unlock and edit" : "Click to lock (make read-only)"}
         >
           {isLocked ? <Edit2 className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
@@ -453,7 +453,7 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
           <button
             type="button"
             onClick={handleAddClick}
-            className="flex h-6 w-6 items-center justify-center rounded hover:bg-neutral-200 dark:hover:bg-neutral-700 active:scale-95 transition-all duration-150 text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 pointer-events-auto"
+            className="flex h-6 w-6 items-center justify-center rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 active:scale-95 transition-all duration-150 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 pointer-events-auto"
             title="Add block"
           >
             <Plus className="h-4 w-4" />
@@ -464,7 +464,7 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
           draggable
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
-          className="flex h-6 w-6 items-center justify-center rounded hover:bg-neutral-200 dark:hover:bg-neutral-700 active:scale-95 transition-all duration-150 cursor-move text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 pointer-events-auto"
+          className="flex h-6 w-6 items-center justify-center rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 active:scale-95 transition-all duration-150 cursor-move text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 pointer-events-auto"
           title="Drag to reorder"
         >
           <GripVertical className="h-4 w-4" />

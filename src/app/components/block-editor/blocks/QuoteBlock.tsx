@@ -32,7 +32,7 @@ export function QuoteBlock({
   isLocked = false,
 }: QuoteBlockProps) {
   return (
-    <div className="my-2 border-l-4 border-neutral-300 dark:border-neutral-600 pl-4 italic text-neutral-600 dark:text-neutral-400">
+    <div className="my-2 border-l-4 border-zinc-300 dark:border-zinc-600 pl-4 italic text-zinc-600 dark:text-zinc-400">
       <TipTapBlock
         block={block}
         blockType="quote"

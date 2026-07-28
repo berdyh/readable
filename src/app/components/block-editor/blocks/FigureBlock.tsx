@@ -55,15 +55,15 @@ export function FigureBlock({
   // Render placeholder if no image URL
   if (!imageUrl && !imageError) {
     return (
-      <div className="my-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-700 dark:bg-neutral-800">
-        <div className="flex items-center gap-2 text-sm text-neutral-500 dark:text-neutral-400">
+      <div className="my-4 rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-800">
+        <div className="flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400">
           <FileImage className="h-4 w-4" />
           <span>
             Figure {figureId ? `(${figureId})` : ""} {page ? `- Page ${page}` : ""}
           </span>
         </div>
         {caption && (
-          <div className="mt-2 text-sm text-neutral-700 dark:text-neutral-300">
+          <div className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">
             {caption}
           </div>
         )}
@@ -77,17 +77,17 @@ export function FigureBlock({
         className={clsx(
           "group relative my-4 rounded-lg border transition-colors",
           isLocked
-            ? "border-neutral-200 bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-800"
-            : "border-neutral-300 bg-white hover:border-neutral-400 dark:border-neutral-600 dark:bg-neutral-900 dark:hover:border-neutral-500",
+            ? "border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800"
+            : "border-zinc-300 bg-white hover:border-zinc-400 dark:border-zinc-600 dark:bg-zinc-900 dark:hover:border-zinc-500",
         )}
       >
         {/* Figure Image */}
         <div className="relative">
           {imageError ? (
-            <div className="flex min-h-[200px] items-center justify-center bg-neutral-100 dark:bg-neutral-800">
+            <div className="flex min-h-[200px] items-center justify-center bg-zinc-100 dark:bg-zinc-800">
               <div className="text-center">
-                <FileImage className="mx-auto h-12 w-12 text-neutral-400" />
-                <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">
+                <FileImage className="mx-auto h-12 w-12 text-zinc-400" />
+                <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
                   Image failed to load
                 </p>
               </div>
@@ -134,7 +134,7 @@ export function FigureBlock({
         <div className="p-4">
           {/* Figure ID and Page Link */}
           {(figureId || page !== undefined) && (
-            <div className="mb-2 flex items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400">
+            <div className="mb-2 flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
               {figureId && <span>Figure {figureId}</span>}
               {page !== undefined && (
                 <>
@@ -155,7 +155,7 @@ export function FigureBlock({
 
           {/* Caption */}
           {caption && (
-            <div className="mb-2 text-sm font-medium text-neutral-700 dark:text-neutral-300">
+            <div className="mb-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">
               {caption}
             </div>
           )}

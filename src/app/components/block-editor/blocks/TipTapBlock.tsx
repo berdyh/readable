@@ -112,7 +112,7 @@ export function TipTapBlock({
           blockType === "heading_3" && "text-xl font-semibold mt-4 mb-2",
           blockType === "paragraph" && "text-[15px] leading-relaxed",
           blockType === "code" && "font-mono text-sm",
-          blockType === "quote" && "italic text-neutral-600 dark:text-neutral-400",
+          blockType === "quote" && "italic text-zinc-600 dark:text-zinc-400",
           className,
         ),
       },

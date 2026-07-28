@@ -24,9 +24,8 @@ const PERSONALIZED_FEATURES_AUTH_MESSAGE = "Sign in to use personalized reading 
 const ReaderWorkspace = ({ paperId, pdfUrl }: ReaderWorkspaceProps) => {
   // resolvedTheme is undefined on the server but populated post-mount.
   // Tailwind `dark:` utilities (driven by next-themes' class on <html>)
-  // handle the actual theming, so we only consult resolvedTheme for the
-  // theme-switch toggle (which is only operable after mount anyway) and
-  // for the legacy isDarkMode prop on PdfPanel.
+  // handle all theming, so resolvedTheme is only read inside the toggle's
+  // click handler — which cannot run before mount — and never during render.
   const { setTheme, resolvedTheme } = useTheme();
   const [isResearchChatOpen, setIsResearchChatOpen] = useState(false);
 
@@ -84,10 +83,8 @@ const ReaderWorkspace = ({ paperId, pdfUrl }: ReaderWorkspaceProps) => {
     }
   }, [htmlError, setStatusMessage, showPersonalizedFeatureGate, summaryError]);
 
-  const isDarkMode = resolvedTheme === "dark";
-
   return (
-    <div className="flex min-h-screen flex-col font-sans bg-zinc-50 text-zinc-900 dark:bg-neutral-950 dark:text-neutral-100">
+    <div className="flex min-h-screen flex-col bg-zinc-50 font-sans text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
       <main
         className={clsx(
           // pt-20 clears the fixed account chip in the root layout, which used
@@ -151,7 +148,7 @@ const ReaderWorkspace = ({ paperId, pdfUrl }: ReaderWorkspaceProps) => {
           <button
             type="button"
             onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full border shadow-sm transition border-neutral-300 bg-white text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:bg-neutral-800"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-zinc-300 bg-white text-zinc-600 shadow-sm transition-colors duration-150 hover:bg-zinc-100 hover:text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
             title="Toggle theme"
             aria-label="Toggle theme"
           >
@@ -165,7 +162,6 @@ const ReaderWorkspace = ({ paperId, pdfUrl }: ReaderWorkspaceProps) => {
             pdfUrl={resolvedPdfUrl}
             summary={summary}
             arxivHtmlContent={arxivHtmlContent}
-            isDarkMode={isDarkMode}
             onStatus={setStatusMessage}
           />
         </div>

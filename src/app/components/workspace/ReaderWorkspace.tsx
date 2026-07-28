@@ -7,7 +7,7 @@ import { SunMedium, MoonStar } from "lucide-react";
 import { useTheme } from "next-themes";
 
 import { BlockEditor } from "../block-editor/BlockEditor";
-import PdfPanel from "./PdfPanel";
+import PdfPanel from "./pdf/PdfPanel";
 import { SkillsPanel } from "./SkillsPanel";
 import { ThreePassBar } from "./ThreePassBar";
 import { usePaperContent } from "./usePaperContent";

@@ -4,11 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import type { IHighlight } from "react-pdf-highlighter";
 import { FileText, X } from "lucide-react";
 
-import FigureCallouts, { type FigureCallout } from "../pdf/FigureCallouts";
+import FigureCallouts, { type FigureCallout } from "./FigureCallouts";
 import PdfViewerWithHighlights, {
   type PdfHighlightRegion,
   type PdfViewerHandle,
-} from "../pdf/PdfViewerWithHighlights";
+} from "./PdfViewerWithHighlights";
 import type { InlineArxivIngestResult } from "@/server/editor/types";
 import type { SummaryResult } from "@/server/summarize/types";
 

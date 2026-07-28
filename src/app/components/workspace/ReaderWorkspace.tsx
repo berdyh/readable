@@ -89,7 +89,7 @@ const ReaderWorkspace = ({ paperId, pdfUrl }: ReaderWorkspaceProps) => {
         className={clsx(
           // pt-20 clears the fixed account chip in the root layout, which used
           // to sit on top of the skills panel and the chat panel header.
-          "mx-auto flex w-full flex-1 flex-col px-5 pb-10 pt-20 transition-[max-width] duration-200",
+          "mx-auto flex w-full flex-1 flex-col px-5 pb-10 pt-20 transition-[max-width] duration-200 ease-out motion-reduce:transition-none",
           isResearchChatOpen ? "max-w-7xl" : "max-w-6xl",
         )}
       >

@@ -215,10 +215,10 @@ Readable now uses a single editor surface: `src/app/components/block-editor/`.
 - **Composable block model**: Editing is driven by typed blocks (`types.ts`) and block renderers under `block-editor/blocks/`.
 - **Locked research output**: API-generated blocks remain read-only by default and can be explicitly unlocked.
 
-The legacy `src/app/components/editor/` implementation has been removed. Migration details are captured in `docs/CLEANUP_SUMMARY.md`.
+The legacy `src/app/components/editor/` implementation has been removed. Migration details are captured in `docs/archive/CLEANUP_SUMMARY.md`.
 
 ## Next steps
 
+- Start at `docs/README.md` for the documentation index.
 - Review `docs/PRIVACY.md` for data-handling notes.
-- Check `docs/PLAN-notion-ui.md` for the implementation plan.
-- See `docs/CLEANUP_SUMMARY.md` for migration notes.
+- Historical build logs and status reports live in `docs/archive/` and are not maintained.

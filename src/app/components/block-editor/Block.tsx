@@ -471,7 +471,10 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
         </button>
       </div>
 
-      <div className="flex-1" onFocus={handleFocus}>
+      {/* min-w-0: without it a flex item's automatic minimum size is its
+          min-content width, so one long unbreakable token in a paper (inline
+          LaTeX, a URL) widens the whole page and the phone scrolls sideways. */}
+      <div className="min-w-0 flex-1" onFocus={handleFocus}>
         {renderBlock()}
       </div>
     </div>

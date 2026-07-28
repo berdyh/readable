@@ -103,7 +103,10 @@ export function TipTapBlock({
     editorProps: {
       attributes: {
         class: clsx(
-          "outline-none",
+          // Papers carry long unbreakable tokens (inline LaTeX runs, URLs,
+          // identifiers). Without this the reading column pushes the whole
+          // page wider than the viewport and the phone scrolls sideways.
+          "outline-none [overflow-wrap:anywhere]",
           blockType === "heading_1" && "text-3xl font-bold mt-6 mb-4",
           blockType === "heading_2" && "text-2xl font-bold mt-5 mb-3",
           blockType === "heading_3" && "text-xl font-semibold mt-4 mb-2",

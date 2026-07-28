@@ -21,10 +21,10 @@ This directory contains centralized configuration for timeouts and URLs.
 
 All timeouts have defaults that work for most use cases:
 
-- **LLM Providers** (60s): OpenAI, Anthropic, Gemini - LLM operations can be slow
-- **Kontext.dev** (8s): Quick persona prompt fetch
+- **LLM Providers** (60s): OpenAI, Anthropic, Gemini, OpenRouter - LLM operations can be slow
 - **Postgres** (20s): Statement timeout for relational queries
 - **Qdrant** (20s): Vector search request timeout
+- **Semantic Scholar** (10s): Citation enrichment lookups
 - **Ingestion**:
   - Fetch/PDF (20s): HTTP requests
   - OCR (90s): Slowest operation
@@ -53,14 +53,15 @@ const url = getUrl("openai", "OPENAI_API_BASE_URL"); // Checks env first
 
 ## Environment Variables
 
-These config files respect environment variable overrides:
-
-- `{SERVICE}_TIMEOUT_MS` - Override timeout for a service
-- `{SERVICE}_API_BASE_URL` or `{SERVICE}_URL` - Override URL for a service
-
-Example:
+There is no automatic `{SERVICE}_TIMEOUT_MS` lookup — `getTimeout()` and `getUrl()` take the environment
+variable name as an explicit second argument, so the override name is whatever the call site passes. Grep
+for the call site to find the real name before documenting or setting one.
 
 ```bash
-OPENAI_TIMEOUT_MS=90000  # Override default 60s
-KONTEXT_API_URL=https://custom-kontext.example.com  # Override default URL
+OPENAI_TIMEOUT_MS=90000                          # getTimeout('openai', 'OPENAI_TIMEOUT_MS')
+ARXIV_API_BASE_URL=https://mirror.example.com    # getUrl('arxiv', 'ARXIV_API_BASE_URL')
 ```
+
+Known services: `openai`, `anthropic`, `gemini`, `openrouter`, `postgres`, `qdrant`, `semanticScholar`,
+`ingest.fetch`, `ingest.pdf`, `ingest.ocr` (timeouts); `openai`, `anthropic`, `gemini`, `openrouter`,
+`arxiv`, `ar5iv`, `semanticScholar`, `runpod` (URLs).

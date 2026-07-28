@@ -133,6 +133,14 @@ OPENROUTER_X_TITLE=Readable
 2. **Models**: Edit `models.json` to change recommended models or update pricing
 3. **Overrides**: Use environment variables for runtime model selection
 
+### Adding New Prompts
+
+Edit `prompts.json` to add new prompts or modify existing ones. The structure supports:
+
+- System prompts (base + persona merging)
+- User prompt requirements
+- Configuration limits (truncation, item counts, etc.)
+
 ## Adding New Providers
 
 1. Add provider config to `models.json`

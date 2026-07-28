@@ -148,13 +148,13 @@ in `persona_concepts`.
   to `docs/` will be silently untracked. `git add -f` them or fix the ignore rule.
 - `docs/editor-architecture.md` still describes the removed `EditorWorkspace`/Tiptap-ribbon tree — treat
   its "Canonical helper locations" section as current and the component tree/state diagram as historical.
-- **Chat message types are duplicated across the client/server boundary with no compile-time link.**
-  `src/server/chat/types.ts` defines the wire types the `/api/chat/history` handlers validate and emit;
-  `src/app/components/chat/types.ts` declares its own independent copies. `ChatIntegration.tsx` only
-  `fetch`es the endpoint, so nothing forces the two to agree — a shape change on one side compiles
-  cleanly and fails at runtime. Until the client imports from `@/server/chat/types`, change both
-  together. (Type-only imports from `@/server/*` are already the established pattern elsewhere; see the
-  `qa/types` and `summarize/types` imports in the components tree.)
+- **Chat wire types are owned by the server and derived on the client.** `src/server/chat/types.ts` is
+  the canonical shape; `src/app/components/chat/model/types.ts` extends it rather than redeclaring it,
+  and closes with `Assert<IsAssignable<…>>` type-level checks for the parts extension can't express. If
+  you change a wire shape, those assertions are what tells you which client assumption broke — fix the
+  client, don't relax the assertion. Note the client's `TrustDisplayMetadata` is deliberately wider than
+  either wire trust shape (it renders `/api/qa` answers, persisted rows, and older rows); the assertions
+  pin both wire shapes to it.
 - Test env is `node`, not jsdom: component tests exercise pure helpers (`commands`, `parsers`,
   `blockInteractionUtils`), not rendering.
 - `src/app/test-block-editor/` is a dev-only scratch page that ships with the app.

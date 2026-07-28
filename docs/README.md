@@ -15,7 +15,7 @@ setup/quick-start in `README.md`.
 | [`database-structure.md`](./database-structure.md) | The Postgres schema (all eight tables), the Qdrant per-provider collection scheme, the UUID v5 strategy that links the two stores, and the hybrid RRF retriever. |
 | [`prompts-analysis.md`](./prompts-analysis.md) | Where prompts live (`src/server/llm-config/prompts.json`), the three prompt tasks, the accessor functions, and the shared truncation limits. |
 | [`PRIVACY.md`](./PRIVACY.md) | What a self-hosted deployment persists, which external services it calls, how persona data is collected, and where routing-layer credentials are written on disk. |
-| [`editor-architecture.md`](./editor-architecture.md) | How `block-editor/`, `chat/` and `workspace/` divide the reading surface: the block model, the chat module's submodule rules, the two DOM CustomEvent contracts between editor and chat, and the theming constraints. |
+| [`editor-architecture.md`](./editor-architecture.md) | How `block-editor/`, `chat/` and `workspace/` divide the reading surface: the block model, the chat module's submodule rules, the two DOM CustomEvent contracts between editor and chat, the theming constraints, and the residual risk left by the restructure. |
 
 In-tree docs that sit next to the code they describe:
 

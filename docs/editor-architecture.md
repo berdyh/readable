@@ -60,9 +60,17 @@ go?" answerable without reading the whole module:
 `sidecar/` and `inline/` are two different products, not duplication: the sidecar is a persistent,
 resizable, multi-session panel; the inline panel is an ephemeral prompt attached to one block.
 
-Chat message shapes are declared client-side in `chat/model/types.ts`, independently of the wire types
-the server validates in `src/server/chat/types.ts`. Nothing links the two at compile time — see the
-gotcha in `CLAUDE.md`. `model/types.ts` is the single place to re-point if you close that gap.
+The wire shapes are owned by the server. `chat/model/types.ts` derives its view model from
+`@/server/chat/types` (what `/api/chat/history` validates) and `@/server/qa/types` (what `/api/qa`
+returns) rather than redeclaring them, and ends with type-level assertions covering what the derivation
+cannot express — that anything the UI can render is accepted by the history endpoint, and that both wire
+trust shapes still fit `TrustDisplayMetadata`. When a wire shape changes, those assertions name the
+client assumption that broke. Fix the client; don't relax the assertion.
+
+`fromWireMessage()` is the wire→view boundary: it lifts `metadata.trust` to the top level and drops
+citations the UI cannot render. That second job exists because the two shapes genuinely disagree — a
+citation passes server validation if it carries *any* field, so a quote-only entry is valid on the wire
+but has neither a chunk id to navigate with nor a title to display.
 
 ## The editor↔chat seam
 
@@ -105,14 +113,45 @@ Palette: **zinc** for chrome and **emerald** for accent, with one radius hierarc
 containers, `rounded-md` controls, `rounded-full` pills). `neutral-*` and `blue-*` were removed from this
 tree; a new `neutral-` class is a sign of drift.
 
-## Known gaps
+## Residual risk
+
+### The authenticated surface has not been exercised end to end
+
+The restructure was verified by typecheck, lint, unit tests, code review, and live browser checks of the
+signed-out sidecar, the resizer geometry, both themes, mobile reflow, and the paper view. **Everything
+behind Clerk sign-in was not verified live:**
+
+- sending and receiving a message
+- session persistence across a reload
+- chat tab deletion and its confirmation step
+- slash-command dispatch
+- citation click → block scroll/reveal
+- insert-answer into the document
+
+Those rest on types, tests, and review alone. Given the size of the refactor, this is the main residual
+risk in the client tree, and it is exactly the surface one signed-in smoke test would cover. The
+authenticated harness already exists — see the bearer-token recipe in `README.md` and `API_TESTING.md` —
+so this is a gap in coverage, not in tooling.
+
+### Decomposition surfaces latent lint findings
+
+Two `react-hooks/set-state-in-effect` errors appeared partway through the restructure. They were **not
+introduced by it**: the rule had never fired on the 935-line component because it was too large for the
+compiler to analyze. Splitting the file made pre-existing bugs visible for the first time. They were
+fixed properly rather than suppressed.
+
+The general lesson holds for the rest of the tree: a clean lint run over a large component is weak
+evidence. Expect findings of this character whenever another oversized file is broken up, and budget for
+fixing them rather than treating them as regressions introduced by the split.
+
+## Known design gaps
+
+Reported during the design pass and deliberately deferred — each is a global decision rather than a
+local fix:
 
 - The measure in the reading column runs to ~90 characters. Tightening it needs a `max-w-[70ch]` prose
-  wrapper that figure and table blocks opt out of.
-- Controls are 32px tall (`h-8`) app-wide, below the 44px touch-target guidance. Changing it is a global
-  scale decision, not a local fix.
-- The fixed account chip in the root `layout.tsx` floats over content on every route; the reader
-  compensates with padding rather than the shell being restructured.
-- Everything behind Clerk sign-in — send/receive, session persistence, tab deletion, citation click →
-  block reveal — is covered by types, unit tests and review, but has not been exercised end-to-end in a
-  signed-in browser session since the restructure.
+  wrapper that figure and table blocks opt out of, so it cannot be a blanket change.
+- Controls are 32px tall (`h-8`) app-wide, below the 44px touch-target guidance. Changing it is a
+  whole-app scale decision.
+- The fixed account chip in the root `layout.tsx` floats over content on **every** route. The reader
+  compensates with padding; the shell itself was not restructured.

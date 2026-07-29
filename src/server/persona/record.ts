@@ -9,6 +9,7 @@
  */
 
 import { upsertInteractions, upsertPersonaConcepts } from "@/server/db";
+import { truncateSafely } from "@/server/text";
 
 export interface ConceptInput {
   concept: string;
@@ -65,7 +66,7 @@ export async function recordPersonaSignals(args: RecordPersonaSignalsArgs): Prom
       paperId: args.paperId,
       interactionType: args.interactionType,
       prompt: args.prompt,
-      response: args.response.slice(0, RESPONSE_TRUNCATE_LIMIT),
+      response: truncateSafely(args.response, RESPONSE_TRUNCATE_LIMIT),
       chunkIds,
       personaConceptIds: conceptIds,
     },

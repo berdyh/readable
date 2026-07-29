@@ -17,6 +17,7 @@ import type {
 } from "./types";
 
 import { getSystemPrompt } from "@/server/llm-config";
+import { truncateSafely, truncateWithEllipsis } from "@/server/text";
 
 const SELECTION_SUMMARY_SCHEMA: Record<string, unknown> = {
   type: "object",
@@ -79,10 +80,7 @@ interface LlmSummaryPayload {
 }
 
 function truncate(text: string, max = 420): string {
-  if (text.length <= max) {
-    return text;
-  }
-  return `${text.slice(0, max - 1)}…`;
+  return truncateWithEllipsis(text, max);
 }
 
 function buildChunkSummary(chunk: QuestionEvidenceContext["hits"][number], index: number): string {
@@ -300,7 +298,7 @@ function buildCalloutResult(
   if (!bullets.length) {
     const fallbackChunk = evidence.hits[0];
     const fallbackText =
-      fallbackChunk?.text?.slice(0, 180) ??
+      (truncateSafely(fallbackChunk?.text ?? "", 180) || undefined) ??
       evidence.selection?.text ??
       "No inline summary available.";
 

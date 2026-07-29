@@ -30,6 +30,7 @@ Read only the *interface* of these — never their internals.
 - **server.llm** via `generateJson`
 - **server.llm-config** via `getSystemPrompt`
 - **server.qa** via `loadQuestionEvidence`
+- **server.text** via `truncateWithEllipsis`
 
 ## Constraints
 

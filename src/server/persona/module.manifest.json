@@ -13,6 +13,10 @@
     {
       "module": "server.db",
       "via": "upsertPersonaConcepts"
+    },
+    {
+      "module": "server.text",
+      "via": "truncateSafely"
     }
   ],
   "constraints": ["concept recording", "interaction logging"],

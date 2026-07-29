@@ -12,6 +12,7 @@ import type {
 } from "./types";
 
 import { getSystemPrompt } from "@/server/llm-config";
+import { truncateSafely, truncateWithEllipsis } from "@/server/text";
 
 const QA_RESPONSE_SCHEMA: Record<string, unknown> = {
   type: "object",
@@ -80,7 +81,7 @@ function truncateText(text: string, maxLength = 600): string {
     return text;
   }
 
-  return `${text.slice(0, maxLength - 1)}…`;
+  return truncateWithEllipsis(text, maxLength);
 }
 
 function formatPage(page?: number): string {
@@ -163,7 +164,7 @@ function enrichCitationsWithChunkData(
       typeof chunk.pageNumber === "number" && chunk.pageNumber >= 1 ? chunk.pageNumber : undefined;
 
     // Use chunk text as quote if no quote provided
-    const quote = citation.quote || chunk.text.slice(0, 240).trim() || undefined;
+    const quote = citation.quote || truncateSafely(chunk.text, 240).trim() || undefined;
 
     enriched.push({
       chunkId: citation.chunkId,

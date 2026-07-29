@@ -10,6 +10,7 @@ import type {
 } from "./types";
 
 import { getSystemPrompt, getPaperSummaryRequirements, getPromptLimits } from "@/server/llm-config";
+import { truncateWithEllipsis } from "@/server/text";
 
 const PROMPT_LIMITS = getPromptLimits();
 const PROMPT_SECTION_LIMIT = PROMPT_LIMITS.section;
@@ -143,7 +144,7 @@ function truncateText(text: string, maxLength = PROMPT_LIMITS.text_truncate): st
     return text;
   }
 
-  return `${text.slice(0, maxLength - 1)}…`;
+  return truncateWithEllipsis(text, maxLength);
 }
 
 function formatPageSpan(span: PageSpan | undefined): string {

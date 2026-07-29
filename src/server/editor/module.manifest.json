@@ -32,6 +32,10 @@
     {
       "module": "server.llm-config",
       "via": "getSystemPrompt"
+    },
+    {
+      "module": "server.text",
+      "via": "truncateWithEllipsis"
     }
   ],
   "constraints": ["selection-scoped retrieval", "inline arXiv ingest"],

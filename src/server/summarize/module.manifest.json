@@ -29,6 +29,10 @@
     {
       "module": "server.llm-config",
       "via": "getSystemPrompt"
+    },
+    {
+      "module": "server.text",
+      "via": "truncateWithEllipsis"
     }
   ],
   "constraints": ["context assembly", "structured summary output"],

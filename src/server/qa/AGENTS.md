@@ -31,6 +31,7 @@ Read only the *interface* of these — never their internals.
 - **server.llm-config** via `getSystemPrompt`
 - **server.persona** via `recordPersonaSignals`
 - **server.search** via `hybridPaperChunkSearch`
+- **server.text** via `truncateWithEllipsis`
 
 ## Constraints
 

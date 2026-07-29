@@ -26,6 +26,7 @@ Read only the *interface* of these — never their internals.
 - **server.llm** via `generateJson`
 - **server.llm-config** via `getSystemPrompt`
 - **server.persona** via `recordPersonaSignals`
+- **server.text** via `truncateWithEllipsis`
 
 ## Constraints
 

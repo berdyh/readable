@@ -24,6 +24,7 @@ Anything not listed here is internal to this module:
 Read only the *interface* of these — never their internals.
 
 - **server.db** via `upsertPersonaConcepts`
+- **server.text** via `truncateSafely`
 
 ## Constraints
 

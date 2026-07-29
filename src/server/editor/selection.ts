@@ -366,10 +366,14 @@ function buildCalloutResult(
   };
 }
 
+// NOTE: this used to accept `options: { userId?: string }`, which it never read.
+// The route authenticates and passed a real userId in, so selection summaries
+// looked like they fed the persona graph the way qa and summarize do — they
+// never have. The dead parameter is removed rather than left to imply otherwise;
+// wiring up persona recording here is tracked in docs/open-issues.md.
 export async function summarizeSelection(
   paperId: string,
   selectionInput: QuestionSelection,
-  options: { userId?: string } = {},
 ): Promise<SelectionSummaryResult> {
   const selection = parseQuestionSelection(selectionInput);
   if (!selection?.text) {

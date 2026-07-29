@@ -65,7 +65,7 @@ export function ChatComposer({
           <button
             type="button"
             onClick={onInsertAnswer}
-            className="inline-flex h-8 items-center gap-2 rounded-md border border-zinc-300 px-3 text-xs font-medium text-zinc-700 transition-colors duration-150 hover:border-emerald-400 hover:bg-emerald-50 hover:text-zinc-950 dark:border-zinc-700 dark:text-zinc-200 dark:hover:border-emerald-600 dark:hover:bg-emerald-950/30 dark:hover:text-zinc-50"
+            className="touch-target relative inline-flex h-8 items-center gap-2 rounded-md border border-zinc-300 px-3 text-xs font-medium text-zinc-700 transition-colors duration-150 hover:border-emerald-400 hover:bg-emerald-50 hover:text-zinc-950 dark:border-zinc-700 dark:text-zinc-200 dark:hover:border-emerald-600 dark:hover:bg-emerald-950/30 dark:hover:text-zinc-50"
           >
             <Upload className="h-3.5 w-3.5" aria-hidden="true" />
             Insert answer into paper

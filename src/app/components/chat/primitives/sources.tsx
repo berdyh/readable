@@ -72,7 +72,7 @@ export function SourcesTrigger({ onClick, count }: { onClick: () => void; count:
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex min-h-8 items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-zinc-500 transition-colors duration-150 hover:bg-zinc-100 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+      className="touch-target relative inline-flex min-h-8 items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-zinc-500 transition-colors duration-150 hover:bg-zinc-100 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
     >
       <ChevronDown className="h-3 w-3" />
       Show {count} {count === 1 ? "source" : "sources"}

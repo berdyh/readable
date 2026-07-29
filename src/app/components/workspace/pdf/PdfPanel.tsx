@@ -63,7 +63,7 @@ const WorkspaceModal = ({ title, open, onClose, children }: WorkspaceModalProps)
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-zinc-300 text-zinc-500 transition-colors duration-150 hover:border-zinc-400 hover:text-zinc-800 dark:border-zinc-700 dark:text-zinc-400 dark:hover:border-zinc-600 dark:hover:text-zinc-100"
+            className="touch-target relative inline-flex h-8 w-8 items-center justify-center rounded-full border border-zinc-300 text-zinc-500 transition-colors duration-150 hover:border-zinc-400 hover:text-zinc-800 dark:border-zinc-700 dark:text-zinc-400 dark:hover:border-zinc-600 dark:hover:text-zinc-100"
             aria-label="Close"
           >
             <X className="h-4 w-4" aria-hidden="true" />

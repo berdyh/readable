@@ -1,7 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ChatCitation, WireChatMessage } from "./types";
-import { fromWireMessage, toSource, toPersistedMessage } from "./types";
+import {
+  _resetDroppedCitationWarningForTests,
+  fromWireMessage,
+  toSource,
+  toPersistedMessage,
+} from "./types";
 
 const wireTrust = {
   status: "sourced" as const,
@@ -143,5 +148,57 @@ describe("toPersistedMessage", () => {
     });
 
     expect(persisted.metadata).toBeUndefined();
+  });
+});
+
+describe("dropped citation reporting", () => {
+  beforeEach(() => {
+    _resetDroppedCitationWarningForTests();
+  });
+
+  it("warns when a citation has neither a chunk id nor a title or url", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    fromWireMessage({
+      id: "m1",
+      role: "assistant",
+      content: "answer",
+      citations: [{ quote: "a bare quote with no anchor" }],
+    } as Parameters<typeof fromWireMessage>[0]);
+
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn.mock.calls[0][0]).toContain("Dropped 1 of 1 citation(s)");
+    warn.mockRestore();
+  });
+
+  it("warns only once per session, however many messages drop citations", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const message = {
+      id: "m1",
+      role: "assistant",
+      content: "answer",
+      citations: [{ quote: "bare" }],
+    } as Parameters<typeof fromWireMessage>[0];
+
+    fromWireMessage(message);
+    fromWireMessage(message);
+    fromWireMessage(message);
+
+    expect(warn).toHaveBeenCalledOnce();
+    warn.mockRestore();
+  });
+
+  it("stays quiet when every citation is renderable", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    fromWireMessage({
+      id: "m1",
+      role: "assistant",
+      content: "answer",
+      citations: [{ chunkId: "c1", page: 2, quote: "anchored" }],
+    } as Parameters<typeof fromWireMessage>[0]);
+
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
 });

@@ -145,11 +145,44 @@ export function fromWireMessage(message: WireChatMessage): ChatMessage {
   const { citations, ...rest } = message;
   const renderable = citations?.map(toSource).filter((source): source is Source => Boolean(source));
 
+  // Dropping unrenderable citations is correct — it prevents a blank source row.
+  // But it is silent, so a server change that started emitting quote-only
+  // citations in volume would look like "answers stopped having sources" with
+  // nothing pointing here. Count what was discarded so the cause is visible.
+  const dropped = (citations?.length ?? 0) - (renderable?.length ?? 0);
+  if (dropped > 0) {
+    reportDroppedCitations(dropped, citations?.length ?? 0);
+  }
+
   return {
     ...rest,
     citations: renderable?.length ? renderable : undefined,
     trust: message.metadata?.trust,
   };
+}
+
+/**
+ * Warns once per session rather than once per message: a paper whose answers all
+ * carry quote-only citations would otherwise flood the console and train the
+ * reader to ignore it.
+ *
+ * Deliberately console-only and count-only — no citation text, ids, or user
+ * content leave the client, so this stays safe to keep on in production.
+ */
+let droppedCitationWarningIssued = false;
+
+function reportDroppedCitations(dropped: number, total: number): void {
+  if (droppedCitationWarningIssued) return;
+  droppedCitationWarningIssued = true;
+  console.warn(
+    `[chat] Dropped ${dropped} of ${total} citation(s) with neither a chunk id nor a title/url; ` +
+      `they cannot be rendered as a source row. Further occurrences this session are not logged.`,
+  );
+}
+
+/** Test seam — the warning latch is module state and would leak between cases. */
+export function _resetDroppedCitationWarningForTests(): void {
+  droppedCitationWarningIssued = false;
 }
 
 /** Mirror `trust` down into `metadata` so the persisted row round-trips. */

@@ -7,6 +7,8 @@ import {
   BLOCK_NAVIGATE_EVENT,
   emitBlockNavigateResult,
   type BlockNavigateDetail,
+  type BlockNavigateFailureReason,
+  type BlockNavigateStatus,
 } from "./navigation";
 import type { Block } from "./types";
 
@@ -71,11 +73,26 @@ export function useBlockNavigation(blocks: Block[], paperId: string) {
         return;
       }
 
-      emitBlockNavigateResult({
+      const result = {
         requestId: detail.requestId,
-        status: revealed ? "success" : "unavailable",
-        reason: revealed ? undefined : target ? "element-not-found" : "target-not-found",
-      });
+        status: (revealed ? "success" : "unavailable") as BlockNavigateStatus,
+        reason: revealed
+          ? undefined
+          : ((target ? "element-not-found" : "target-not-found") as BlockNavigateFailureReason),
+      };
+
+      // Deferred, and that is load-bearing. emitBlockNavigate() dispatches
+      // synchronously and only then returns the requestId, so the caller cannot
+      // subscribe until after this handler has run:
+      //
+      //   const requestId = emitBlockNavigate(...);   // we reply during this call
+      //   onBlockNavigateResult(requestId, ...);      // too late if we replied inline
+      //
+      // Replying inline meant every caller missed every result. sources.tsx
+      // then hit its timeout and flipped a successfully revealed citation to
+      // "unavailable" — the trust-first UI reporting failure on success.
+      // A microtask lands after the caller's synchronous subscribe.
+      queueMicrotask(() => emitBlockNavigateResult(result));
     };
 
     window.addEventListener(BLOCK_NAVIGATE_EVENT, handler);

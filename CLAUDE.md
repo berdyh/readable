@@ -155,8 +155,10 @@ in `persona_concepts`.
   client, don't relax the assertion. Note the client's `TrustDisplayMetadata` is deliberately wider than
   either wire trust shape (it renders `/api/qa` answers, persisted rows, and older rows); the assertions
   pin both wire shapes to it.
-- Test env is `node`, not jsdom: component tests exercise pure helpers (`commands`, `parsers`,
-  `blockInteractionUtils`), not rendering.
+- **Two vitest projects, split by extension** (`vitest.workspace.ts`): `.test.ts` runs in `node`,
+  `.test.tsx` runs in `jsdom` with Testing Library. Put a test in `.test.ts` unless it needs to
+  render — the node project is much faster and covers everything that is pure logic. The globs
+  cannot overlap, so a file never runs twice or lands in the wrong environment.
 - Every module carries a `module.manifest.json`, a hand-written `module.narrative.md`, and a
   generated `AGENTS.md`. Edit the first two; `pnpm modules:generate` renders the third, and
   `pnpm verify` fails if it is stale. Module boundaries are enforced by `no-restricted-imports`

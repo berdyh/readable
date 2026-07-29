@@ -12,3 +12,6 @@ graphify-out
 # would then fail against whatever Prettier rewrote.
 AGENTS.md
 **/AGENTS.md
+
+# Written by pnpm. Formatting it would fight the package manager on every install.
+pnpm-lock.yaml

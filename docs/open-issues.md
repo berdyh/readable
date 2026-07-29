@@ -56,42 +56,51 @@ was already holding port 3000.
 
 ## Structural
 
-### The React Compiler is silently blind inside large components
+### Oversized files — a readability job, not a correctness one
 
-The 2026-07-28 note guessed at this. It is now measured. The same textbook violation —
-`useEffect(() => { setState(true); }, [])` — was injected into two components:
+The 2026-07-28 note assumed a clean lint run over a large component was weak evidence
+because "the file was too large for the compiler to analyze". That was half right: the
+compiler really was silently skipping `Block.tsx`, but **file size was not the cause and
+splitting would not have fixed it**.
 
-| File                            | Lines | `react-hooks/set-state-in-effect` |
-| ------------------------------- | ----- | --------------------------------- |
-| `chat/sidecar/ChatAuthGate.tsx` | 58    | **fires**                         |
-| `block-editor/Block.tsx`        | 486   | **silent**                        |
+The cause was one line — `await import("./apiHandlers")` inside a `useCallback`. A dynamic
+import makes the React Compiler bail out on the whole component, so none of the 17
+`react-hooks` rules ran on it. Measured by injecting the same violation
+(`useEffect(() => { setState(true); }, [])`) into several files:
 
-All 17 `react-hooks` rules are configured and `set-state-in-effect` is at error level. The
-compiler bails out on the larger file and reports nothing — `react-hooks/unsupported-syntax`
-does not fire either, so the bailout leaves no trace at all.
+| Case                                                            | `set-state-in-effect` |
+| --------------------------------------------------------------- | --------------------- |
+| 7-line component                                                | fires                 |
+| 7-line component + `await import()` in a callback               | **silent**            |
+| 7-line component + `createRange`/`getSelection` DOM work        | fires                 |
+| `Block.tsx` at 486 lines                                        | **silent**            |
+| `Block.tsx` at 419 lines (drag extracted, import still dynamic) | **silent**            |
+| `Block.tsx` with the import hoisted                             | fires                 |
+| `PdfViewerWithHighlights.tsx`, 451 lines, no dynamic import     | fires                 |
 
-**A clean lint run over any of these files is worthless.** That is the real reason to split
-them, and it is a much stronger reason than tidiness:
+The import is now static and `Block.tsx` reports clean — which finally means something. It
+was the only `await import()` in application code, so no other component was ever affected,
+and the large files below are all being analysed (or are server code the React rules never
+applied to in the first place).
 
-| Lines | File                                                           | React rules apply?               |
-| ----- | -------------------------------------------------------------- | -------------------------------- |
-| 744   | `src/server/llm/providers/local-coding-agent.ts`               | no                               |
-| 735   | `src/server/db/papers.ts`                                      | no                               |
-| 699   | `src/server/ingest/pipeline.ts`                                | no                               |
-| 688   | `src/server/summarize/index.ts`                                | no                               |
-| 486   | `src/app/components/block-editor/Block.tsx`                    | **yes — confirmed blind**        |
-| 470   | `src/app/components/block-editor/parsers.ts`                   | no                               |
-| 451   | `src/app/components/workspace/pdf/PdfViewerWithHighlights.tsx` | **yes — untested, likely blind** |
-| 442   | `src/server/editor/selection.ts`                               | no                               |
+**So this is now purely a readability item, with no correctness argument behind it:**
 
-Start with the two `.tsx` files: those are where splitting buys correctness rather than
-readability. Re-run the probe after each split to confirm the rule has started firing, and
-budget for fixing whatever it then reports. The four server files are a readability job and
-can wait — no compiler analysis is being lost there.
+| Lines | File                                                           |
+| ----- | -------------------------------------------------------------- |
+| 744   | `src/server/llm/providers/local-coding-agent.ts`               |
+| 735   | `src/server/db/papers.ts`                                      |
+| 699   | `src/server/ingest/pipeline.ts`                                |
+| 688   | `src/server/summarize/index.ts`                                |
+| 470   | `src/app/components/block-editor/parsers.ts`                   |
+| 451   | `src/app/components/workspace/pdf/PdfViewerWithHighlights.tsx` |
+| 442   | `src/server/editor/selection.ts`                               |
 
-A cheaper partial win worth trying first: find out whether the compiler's bailout can be
-made to report itself. A visible bailout turns "we don't know" into "we know this file is
-unchecked", which is most of the value with none of the refactor.
+Worth doing eventually; not worth prioritising over anything that changes behaviour.
+
+The lasting lesson is the general one: **a dynamic import inside a component silently
+disables every react-hooks rule for that component.** If one is ever reintroduced, the file
+stops being checked and nothing says so. Probing with a deliberate violation is the only
+way to tell — consider it whenever a component's lint looks suspiciously clean.
 
 ## Smaller follow-ups
 
@@ -116,6 +125,4 @@ invented from the code. This is owned by the user.
 ## Sequenced plan
 
 1. Get a Clerk session JWT and run the signed-in smoke pass.
-2. Split `Block.tsx` and `PdfViewerWithHighlights.tsx`, re-probing after each, and fix what
-   the compiler then reports.
-3. Write the product-vision docs, and work from them.
+2. Write the product-vision docs, and work from them.

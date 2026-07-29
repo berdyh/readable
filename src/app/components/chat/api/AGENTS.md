@@ -18,6 +18,7 @@ Anything not listed here is internal to this module:
 - `createChatSession`
 - `deleteChatSession`
 - `fetchChatHistory`
+- `fetchLocalAgents`
 - `saveChatMessage`
 
 ## Uses
@@ -30,7 +31,7 @@ Read only the *interface* of these — never their internals.
 
 Work outside these has left this module. Stop and ask rather than widening the boundary.
 
-- fetch to /api/chat/* and /api/qa
+- fetch to /api/chat/*, /api/qa and /api/llm/local-agents
 
 ## Checks
 

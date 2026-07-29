@@ -17,6 +17,7 @@ Anything not listed here is internal to this module:
 - `useChatSessions`
 - `useChatPanelWidth`
 - `useEditorIntentPrompt`
+- `useLocalAgents`
 - `useSlashCommandMenu`
 
 ## Uses

@@ -80,6 +80,8 @@ export async function askQuestion(params: {
   paperId: string;
   question: string;
   selection?: QuestionSelection;
+  /** Pins the answer to one local CLI agent when the picker is in use. */
+  localAgent?: string;
   fallbackError?: string;
 }): Promise<ChatAnswerResponse> {
   const response = await fetch("/api/qa", {
@@ -89,6 +91,7 @@ export async function askQuestion(params: {
       paperId: params.paperId,
       question: params.question,
       selection: params.selection,
+      localAgent: params.localAgent,
     }),
   });
 

@@ -90,13 +90,34 @@ LLM_LOCAL_AGENT_ENV_ALLOWLIST=
 Safe built-in invocations:
 
 - `claude-code`: `claude --print --output-format text --no-session-persistence --permission-mode default --disable-slash-commands --tools ""`
-- `codex-cli`: `codex exec --skip-git-repo-check --sandbox read-only --ask-for-approval never --cd <tempdir> --ephemeral --output-last-message <tempfile> -`
+- `codex-cli`: `codex exec --skip-git-repo-check --sandbox read-only --cd <tempdir> --ephemeral --color never --output-last-message <tempfile> -`
 
-The default fallback order is Codex CLI only. `claude-code` can be listed explicitly with `LLM_LOCAL_AGENTS=claude-code,codex-cli`.
+Note the absence of `--ask-for-approval never`: `codex exec` rejects it (exit 2, `unexpected argument`) and non-interactive exec already reports `approval: never`.
+
+The default fallback order is Codex CLI then Claude Code; both are first-class. `LLM_LOCAL_AGENTS` overrides the order.
 
 Override command paths with `LLM_AGENT_<AGENT>_COMMAND`, for example `LLM_AGENT_CODEX_COMMAND=/path/to/codex`. Override argv with `LLM_AGENT_<AGENT>_ARGS_JSON`; entries may contain `{prompt}`, `{cwd}`, and `{output}`, where `{cwd}` is the isolated temp directory for that invocation. Antigravity requires an argv override for headless use.
 
-Child processes always get throwaway `HOME`, `TMPDIR`, `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, and `XDG_DATA_HOME` paths. Extra non-secret process env can be forwarded with `LLM_LOCAL_AGENT_ENV_ALLOWLIST`, but HOME/config keys are not accepted through that allowlist. For Codex auth without exposing the user's normal home/config tree, set `LLM_AGENT_CODEX_AUTH_FILE=/absolute/path/to/auth.json` or `CODEX_AUTH_FILE`.
+Child processes always get throwaway `HOME`, `TMPDIR`, `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, and `XDG_DATA_HOME` paths. Extra non-secret process env can be forwarded with `LLM_LOCAL_AGENT_ENV_ALLOWLIST`, but HOME/config keys are not accepted through that allowlist.
+
+### Credentials
+
+Redirecting `HOME` also hides the agent's own subscription credential, so each invocation **stages** the one file its CLI needs into the throwaway temp dir (mode `0600`, deleted with the dir):
+
+| Agent         | Source (override with `LLM_AGENT_<AGENT>_AUTH_FILE`)                          | Staged as                       | Pointed at by       |
+| ------------- | ----------------------------------------------------------------------------- | ------------------------------- | ------------------- |
+| `codex-cli`   | `$CODEX_HOME/auth.json`, default `~/.codex/auth.json`                         | verbatim copy                   | `CODEX_HOME`        |
+| `claude-code` | `$CLAUDE_CONFIG_DIR/.credentials.json`, default `~/.claude/.credentials.json` | only the `claudeAiOauth` object | `CLAUDE_CONFIG_DIR` |
+
+Claude Code's credentials file also holds `mcpOAuth` tokens for every MCP server you have authorised; those are deliberately left behind rather than copied into a headless agent.
+
+There is **no** `CODEX_AUTH_FILE` environment variable in Codex CLI — `codex exec --help` states auth comes from `CODEX_HOME`. An earlier version of this provider exported one, which is why `LLM_PROVIDER=coding-agent` could not authenticate. `OPENAI_API_KEY` does not authenticate the Codex CLI either.
+
+Known trade-off: the staged copy is discarded after the call, so a token the agent refreshes mid-request is not written back. The next request re-stages the original and refreshes again. Re-run `codex login` / `claude login` if the stored token goes stale.
+
+### Availability
+
+`describeLocalCodingAgents()` reports per agent whether it is **installed** (binary resolved) and **authenticated** (credential file parses), reusing `routing/cli-detect.ts`'s parsers. `GET /api/llm/local-agents` exposes it to the chat window's agent picker, and returns `{ enabled: false, agents: [] }` where no CLI can run. Checking up front matters because Codex has no pre-flight auth check: with no credential it starts a session and only fails after a full websocket retry ladder.
 
 Tool-capable built-in invocations such as `gemini --prompt` and `opencode run` are skipped by default. To use them for local-only experiments, either provide safe custom argv with `LLM_AGENT_<AGENT>_ARGS_JSON` or set `LLM_AGENT_<AGENT>_ALLOW_UNSAFE=1` / `LLM_LOCAL_AGENT_ALLOW_UNSAFE=1`.
 

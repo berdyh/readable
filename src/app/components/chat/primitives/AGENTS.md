@@ -16,6 +16,7 @@ Anything not listed here is internal to this module:
 
 - `AnswerCard`
 - `Conversation`
+- `LocalAgentPicker`
 - `Message`
 - `PromptInputTextarea`
 - `Source`

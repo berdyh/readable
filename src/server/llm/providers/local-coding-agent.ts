@@ -1,15 +1,23 @@
 import { spawn } from "node:child_process";
 import { accessSync, constants, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
 import type { LlmConfig, LlmProvider, LlmProviderInterface, LlmRequest } from "../types";
 import {
+  classifyMessage,
   FailoverError,
+  hasPermanentAuthHint,
+  getInstallHint,
+  readClaudeCliCredentials,
+  readCodexCliCredentials,
+  resolveClaudeCredentialsPath,
+  resolveCodexAuthFilePath,
   runWithModelFallback,
   type AuthProfile,
   type AuthProfileStore,
+  type FailoverReason,
   type ModelRef,
 } from "../routing";
 
@@ -33,12 +41,26 @@ interface InvocationSpec {
   args: string[];
   cwd: string;
   agent: CodingAgentId;
+  env: NodeJS.ProcessEnv;
   stdin?: string;
   outputFile?: string;
   cleanupDir?: string;
 }
 
-const DEFAULT_AGENT_ORDER: CodingAgentId[] = ["codex-cli"];
+/**
+ * Codex and Claude Code are both first-class. Order is preference, not
+ * exclusivity — a missing or signed-out agent is skipped by
+ * `listAvailableLocalCodingAgents` before it ever costs a spawn.
+ */
+const DEFAULT_AGENT_ORDER: CodingAgentId[] = ["codex-cli", "claude-code"];
+
+const AGENT_DISPLAY_NAMES: Record<CodingAgentId, string> = {
+  "claude-code": "Claude Code",
+  "codex-cli": "Codex",
+  "gemini-cli": "Gemini CLI",
+  antigravity: "Antigravity",
+  opencode: "opencode",
+};
 const SAFE_BUILT_IN_AGENTS = new Set<CodingAgentId>(["codex-cli", "claude-code"]);
 const UNSAFE_AGENT_OPT_IN_FLAG = "LLM_LOCAL_AGENT_ALLOW_UNSAFE";
 const CUSTOM_INVOCATION_ONLY_AGENTS = new Set<CodingAgentId>(["antigravity"]);
@@ -237,6 +259,114 @@ export function listAvailableLocalCodingAgents(
   return available;
 }
 
+/**
+ * Env markers set by the serverless platforms this app can be deployed to.
+ * Spawning a CLI there is not "unconfigured", it is impossible — there is no
+ * persistent filesystem to install one on and no `~/.codex` to authenticate
+ * from.
+ */
+const SERVERLESS_ENV_MARKERS = [
+  "VERCEL",
+  "NETLIFY",
+  "AWS_LAMBDA_FUNCTION_NAME",
+  "AWS_EXECUTION_ENV",
+  "K_SERVICE",
+  "FUNCTIONS_WORKER_RUNTIME",
+];
+
+/**
+ * Can this process spawn local CLI agents at all?
+ *
+ * Deliberately a denylist rather than an allowlist of "is this localhost":
+ * a self-hosted container is a perfectly good place to run Codex, and
+ * `describeLocalCodingAgents` will honestly report "not installed" there if it
+ * is not. Only the platforms where the answer is structurally no are excluded.
+ */
+export function isLocalAgentRuntime(): boolean {
+  return !SERVERLESS_ENV_MARKERS.some((marker) => Boolean(process.env[marker]?.trim()));
+}
+
+/** Why an agent cannot be selected. `null` means it can. */
+export type LocalAgentUnavailableReason = "not_installed" | "not_authenticated" | "not_enabled";
+
+export interface LocalCodingAgentStatus {
+  agent: CodingAgentId;
+  displayName: string;
+  /** The binary resolved on PATH, in the npx cache, or via LLM_AGENT_*_COMMAND. */
+  installed: boolean;
+  /** A usable credential file exists for it. */
+  authenticated: boolean;
+  /** The model this agent would run with, or "default" to let the CLI decide. */
+  model: string;
+  unavailableReason: LocalAgentUnavailableReason | null;
+  /** One-line remedy, when there is one. */
+  hint?: string;
+}
+
+/**
+ * Has this agent got a credential we can stage?
+ *
+ * Reuses `cli-detect`'s parsers rather than re-implementing the auth-file
+ * formats — they already know that Codex keeps tokens under `tokens.access_token`
+ * and Claude Code under `claudeAiOauth.accessToken`, and they mtime-cache the
+ * reads so calling this per request is cheap.
+ */
+async function isAgentAuthenticated(agent: CodingAgentId): Promise<boolean> {
+  const explicit = getAgentEnvValue(agent, "AUTH_FILE");
+  switch (agent) {
+    case "codex-cli":
+      return (await readCodexCliCredentials(explicit).catch(() => null)) !== null;
+    case "claude-code":
+      return (await readClaudeCliCredentials(explicit).catch(() => null)) !== null;
+    default:
+      // Opt-in agents manage their own credentials; we cannot verify them, so
+      // we do not claim they are broken either.
+      return true;
+  }
+}
+
+/**
+ * Per-agent installed/authenticated report for the chat window's picker.
+ *
+ * Deliberately reports *every* agent in the configured order, including the
+ * unusable ones — the UI needs the negative cases to grey them out with a
+ * reason. Vibe Kanban computes the same information and then drops it on the
+ * floor (its `checkAgentAvailability` endpoint has no caller and its pickers
+ * list every agent as selectable); the whole point of returning it here is
+ * that the picker consumes it.
+ */
+export async function describeLocalCodingAgents(
+  agentOrder = getConfiguredAgentOrder(),
+): Promise<LocalCodingAgentStatus[]> {
+  return Promise.all(
+    agentOrder.map(async (agent): Promise<LocalCodingAgentStatus> => {
+      const displayName = AGENT_DISPLAY_NAMES[agent];
+      const model = getAgentModelName(agent);
+      const enabled = canUseLocalAgent(agent);
+      const installed = enabled && resolveAgentCommand(agent) !== undefined;
+      const authenticated = installed && (await isAgentAuthenticated(agent));
+
+      const unavailableReason: LocalAgentUnavailableReason | null = !enabled
+        ? "not_enabled"
+        : !installed
+          ? "not_installed"
+          : !authenticated
+            ? "not_authenticated"
+            : null;
+
+      return {
+        agent,
+        displayName,
+        installed,
+        authenticated,
+        model,
+        unavailableReason,
+        hint: unavailableReason ? getInstallHint(agent) : undefined,
+      };
+    }),
+  );
+}
+
 function buildAgentStore(agentOrder = getConfiguredAgentOrder()): AuthProfileStore {
   const profiles: AuthProfile[] = [];
   const order: AuthProfileStore["order"] = {};
@@ -316,7 +446,7 @@ function copyAllowedEnv(env: NodeJS.ProcessEnv, keys: string[], protectSandboxKe
   }
 }
 
-function buildLocalAgentEnv(agent: CodingAgentId, tempDir: string): NodeJS.ProcessEnv {
+function buildLocalAgentEnv(tempDir: string): NodeJS.ProcessEnv {
   const homeDir = path.join(tempDir, "home");
   const env: NodeJS.ProcessEnv = {
     NODE_ENV: process.env.NODE_ENV ?? "production",
@@ -330,19 +460,135 @@ function buildLocalAgentEnv(agent: CodingAgentId, tempDir: string): NodeJS.Proce
 
   copyAllowedEnv(env, DEFAULT_AGENT_ENV_ALLOWLIST, false);
   copyAllowedEnv(env, splitEnvAllowlist(process.env.LLM_LOCAL_AGENT_ENV_ALLOWLIST), true);
-  copyExplicitAgentAuthEnv(agent, env);
 
   return env;
 }
 
-function copyExplicitAgentAuthEnv(agent: CodingAgentId, env: NodeJS.ProcessEnv): void {
-  if (agent !== "codex-cli") {
-    return;
-  }
+// ---------------------------------------------------------------------------
+// Credential staging
+// ---------------------------------------------------------------------------
 
-  const authFile = getAgentEnvValue(agent, "AUTH_FILE") ?? process.env.CODEX_AUTH_FILE?.trim();
-  if (authFile) {
-    env.CODEX_AUTH_FILE = authFile;
+/**
+ * The sandbox redirects `HOME` so the agent cannot read the developer's dot
+ * files, and strips the app's own environment so it cannot read `DATABASE_URL`
+ * or any `*_API_KEY`. Both of those are still true. What it *also* did — and
+ * what made `LLM_PROVIDER=coding-agent` fail every call — was cut the agent
+ * off from its own subscription credential, which lives under the real `HOME`.
+ *
+ * The fix is not to un-isolate `HOME`. It is to copy the one file the agent
+ * needs into the throwaway sandbox and point the agent's own config-dir env
+ * var at the copy. The staged file is `0600`, lives inside the per-invocation
+ * temp dir, and is deleted with it in `invokeLocalAgent`'s `finally`.
+ *
+ * The alternative — exporting `CODEX_HOME=$HOME/.codex` — also works (proved
+ * it), but hands the agent the developer's entire Codex home: `config.toml`,
+ * MCP server definitions, session transcripts, skills and plugins. Staging a
+ * lone `auth.json` gives it strictly less.
+ *
+ * Known trade-off: the staged copy is write-through-to-nowhere. If the agent
+ * refreshes its OAuth token mid-call it writes the new one into the temp dir,
+ * which we then delete, so the refresh is discarded and the next invocation
+ * starts from the same on-disk token. That is correct but wasteful — a
+ * long-expired access token means one refresh round-trip per request — and it
+ * would become a real problem if the upstream ever rotated refresh tokens on
+ * use. Re-running `codex login` / `claude login` repairs it either way.
+ */
+interface StagedCredentials {
+  env: Record<string, string>;
+  staged: boolean;
+}
+
+const NO_CREDENTIALS: StagedCredentials = { env: {}, staged: false };
+
+function resolveAgentAuthFile(agent: CodingAgentId): string | undefined {
+  const explicit = getAgentEnvValue(agent, "AUTH_FILE");
+  if (explicit) return explicit;
+
+  switch (agent) {
+    case "codex-cli":
+      return resolveCodexAuthFilePath();
+    case "claude-code":
+      return resolveClaudeCredentialsPath();
+    default:
+      return undefined;
+  }
+}
+
+async function readJsonFile(filePath: string): Promise<Record<string, unknown> | null> {
+  try {
+    const raw = await readFile(filePath, "utf8");
+    const parsed = JSON.parse(raw) as unknown;
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function writePrivateFile(filePath: string, contents: string): Promise<void> {
+  await mkdir(path.dirname(filePath), { recursive: true, mode: 0o700 });
+  await writeFile(filePath, contents, { encoding: "utf8", mode: 0o600 });
+}
+
+/**
+ * Codex reads `$CODEX_HOME/auth.json` and nothing else — there is no
+ * `CODEX_AUTH_FILE`, which is why the old hook of that name was inert.
+ * Everything in `auth.json` (`auth_mode`, `tokens`, `last_refresh`) is the
+ * credential itself, so it is copied verbatim; the rest of `~/.codex` is not.
+ *
+ * Two Codex behaviours this has to respect: `CODEX_HOME` pointing at a
+ * directory that does not exist is a hard error rather than an implicit
+ * mkdir, so the file is written (creating the dir) before the var is set; and
+ * `OPENAI_API_KEY` does *not* authenticate the CLI, so there is no env-var
+ * shortcut that would let us skip staging a file.
+ */
+async function stageCodexCredentials(tempDir: string): Promise<StagedCredentials> {
+  const source = resolveAgentAuthFile("codex-cli");
+  if (!source) return NO_CREDENTIALS;
+  const raw = await readFile(source, "utf8").catch(() => undefined);
+  if (!raw) return NO_CREDENTIALS;
+
+  const codexHome = path.join(tempDir, "codex-home");
+  await writePrivateFile(path.join(codexHome, "auth.json"), raw);
+  return { env: { CODEX_HOME: codexHome }, staged: true };
+}
+
+/**
+ * Claude Code reads `$CLAUDE_CONFIG_DIR/.credentials.json`.
+ *
+ * That file is *not* only Claude's own credential: alongside `claudeAiOauth`
+ * it holds `mcpOAuth` access tokens for every MCP server the developer has
+ * authorised (Vercel, GitLab, Neon, …). Copying it wholesale would hand a
+ * headless agent a pile of unrelated third-party bearer tokens, so only the
+ * `claudeAiOauth` object is carried across.
+ */
+async function stageClaudeCredentials(tempDir: string): Promise<StagedCredentials> {
+  const source = resolveAgentAuthFile("claude-code");
+  if (!source) return NO_CREDENTIALS;
+  const parsed = await readJsonFile(source);
+  const oauth = parsed?.claudeAiOauth;
+  if (!oauth || typeof oauth !== "object") return NO_CREDENTIALS;
+
+  const configDir = path.join(tempDir, "claude-home");
+  await writePrivateFile(
+    path.join(configDir, ".credentials.json"),
+    JSON.stringify({ claudeAiOauth: oauth }),
+  );
+  return { env: { CLAUDE_CONFIG_DIR: configDir }, staged: true };
+}
+
+async function stageAgentCredentials(
+  agent: CodingAgentId,
+  tempDir: string,
+): Promise<StagedCredentials> {
+  switch (agent) {
+    case "codex-cli":
+      return stageCodexCredentials(tempDir);
+    case "claude-code":
+      return stageClaudeCredentials(tempDir);
+    default:
+      // Agents behind the unsafe opt-in bring their own credentials via
+      // LLM_LOCAL_AGENT_ENV_ALLOWLIST; we do not guess at their file layout.
+      return NO_CREDENTIALS;
   }
 }
 
@@ -353,6 +599,11 @@ function getAgentModelName(agent: CodingAgentId): string {
 function buildModelRef(agent: CodingAgentId): ModelRef {
   const model = getAgentModelName(agent);
   return `${agent}/${model}` as ModelRef;
+}
+
+function buildClaudeModelArgs(agent: CodingAgentId): string[] {
+  const model = getAgentModelName(agent);
+  return model === "default" ? [] : ["--model", model];
 }
 
 function buildCodexConfigArgs(agent: CodingAgentId): string[] {
@@ -444,6 +695,13 @@ async function buildInvocation(
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "readable-agent-"));
   await prepareInvocationDirs(tempDir);
   const outputFile = path.join(tempDir, "response.txt");
+
+  // Staged credentials are applied last so they win over
+  // LLM_LOCAL_AGENT_ENV_ALLOWLIST, which is forbidden from setting the
+  // sandbox keys directly.
+  const credentials = await stageAgentCredentials(agent, tempDir);
+  const env = { ...buildLocalAgentEnv(tempDir), ...credentials.env };
+
   const overrideArgs = parseArgsJson(agent, prompt, tempDir, outputFile);
   if (overrideArgs) {
     return {
@@ -451,6 +709,7 @@ async function buildInvocation(
       args: overrideArgs,
       cwd: tempDir,
       agent,
+      env,
       stdin: prompt,
       outputFile,
       cleanupDir: tempDir,
@@ -469,11 +728,16 @@ async function buildInvocation(
           "--permission-mode",
           "default",
           "--disable-slash-commands",
+          ...buildClaudeModelArgs(agent),
+          // `--tools` is variadic, so the empty string that means "no tools"
+          // must stay last — anything appended after it would be swallowed as
+          // another tool name.
           "--tools",
           "",
         ],
         cwd: tempDir,
         agent,
+        env,
         stdin: prompt,
         cleanupDir: tempDir,
       };
@@ -486,8 +750,10 @@ async function buildInvocation(
           "--skip-git-repo-check",
           "--sandbox",
           "read-only",
-          "--ask-for-approval",
-          "never",
+          // No `--ask-for-approval`: `codex exec` has not accepted it since
+          // the flag moved to the interactive command, and passing it aborts
+          // with exit 2 before the model is ever contacted. Non-interactive
+          // exec already reports `approval: never`.
           "--cd",
           tempDir,
           "--ephemeral",
@@ -499,6 +765,7 @@ async function buildInvocation(
         ],
         cwd: tempDir,
         agent,
+        env,
         stdin: prompt,
         outputFile,
         cleanupDir: tempDir,
@@ -509,6 +776,7 @@ async function buildInvocation(
         args: ["--prompt", prompt],
         cwd: tempDir,
         agent,
+        env,
         outputFile,
         cleanupDir: tempDir,
       };
@@ -518,6 +786,7 @@ async function buildInvocation(
         args: ["run", "--no-summary", prompt],
         cwd: tempDir,
         agent,
+        env,
         outputFile,
         cleanupDir: tempDir,
       };
@@ -528,11 +797,89 @@ async function buildInvocation(
   }
 }
 
+/** How much of the agent's stderr to keep for the error message. */
+const STDERR_TAIL_LIMIT = 2_000;
+
+/**
+ * A local agent invocation that did not produce output.
+ *
+ * The old code threw a bare `Error` whose message was
+ * `Local coding agent exited with status N. <stderr>`. The status and the
+ * stderr were both in there, but as prose — by the time the failover loop had
+ * classified it and `FallbackSummaryError` had summarised it, all that survived
+ * was `codex-cli/gpt-5.5 (unknown)`. Keeping the pieces as fields means the
+ * reason is derived from the stderr rather than guessed from a sentence, and
+ * the caller can still print the tail.
+ */
+export class LocalAgentInvocationError extends Error {
+  readonly agent: CodingAgentId;
+  readonly command: string;
+  readonly exitCode: number | null;
+  readonly signal: NodeJS.Signals | null;
+  readonly stderrTail: string;
+  readonly spawnCode?: string;
+  readonly timedOut: boolean;
+
+  constructor(init: {
+    agent: CodingAgentId;
+    command: string;
+    exitCode?: number | null;
+    signal?: NodeJS.Signals | null;
+    stderrTail?: string;
+    spawnCode?: string;
+    timedOut?: boolean;
+    summary: string;
+  }) {
+    const detail = init.stderrTail?.trim();
+    super(detail ? `${init.summary} ${detail}` : init.summary);
+    this.name = "LocalAgentInvocationError";
+    this.agent = init.agent;
+    this.command = init.command;
+    this.exitCode = init.exitCode ?? null;
+    this.signal = init.signal ?? null;
+    this.stderrTail = detail ?? "";
+    this.spawnCode = init.spawnCode;
+    this.timedOut = init.timedOut ?? false;
+  }
+}
+
+function tail(text: string, limit = STDERR_TAIL_LIMIT): string {
+  const trimmed = text.trim();
+  return trimmed.length > limit ? `…${trimmed.slice(-limit)}` : trimmed;
+}
+
+/**
+ * Turn a failed invocation into a routing reason.
+ *
+ * Auth is checked before anything else because a signed-out CLI is chatty:
+ * Codex prints five `Reconnecting…` lines around its 401, and the generic
+ * classifier would match `try again` (→ overloaded) before it ever reached the
+ * auth hints. Getting this wrong is what kept the ladder retrying a credential
+ * that was never going to work.
+ */
+export function classifyLocalAgentFailure(error: LocalAgentInvocationError): FailoverReason {
+  if (error.spawnCode === "ENOENT" || error.spawnCode === "EACCES") {
+    return "not_installed";
+  }
+  if (error.timedOut) {
+    return "timeout";
+  }
+
+  const haystack = error.stderrTail;
+  if (hasPermanentAuthHint(haystack)) {
+    return "auth_permanent";
+  }
+  // Everything else — including "a rejected flag means *our* argv is stale",
+  // which classifies as `format` and fails the ladder fast rather than
+  // spending every remaining agent on it.
+  return classifyMessage(haystack) ?? "unknown";
+}
+
 function runProcess(spec: InvocationSpec, timeoutMs: number): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(spec.command, spec.args, {
       cwd: spec.cwd,
-      env: buildLocalAgentEnv(spec.agent, spec.cwd),
+      env: spec.env,
       stdio: ["pipe", "pipe", "pipe"],
     });
 
@@ -563,19 +910,44 @@ function runProcess(spec: InvocationSpec, timeoutMs: number): Promise<string> {
     });
     child.on("error", (error) => {
       clearTimers();
-      reject(error);
+      reject(
+        new LocalAgentInvocationError({
+          agent: spec.agent,
+          command: spec.command,
+          spawnCode: (error as NodeJS.ErrnoException).code,
+          stderrTail: error.message,
+          summary: `${spec.agent} could not be started (${spec.command}).`,
+        }),
+      );
     });
-    child.on("close", (code) => {
+    child.on("close", (code, signal) => {
       clearTimers();
       if (didTimeout) {
-        reject(new Error(`Local coding agent timed out after ${timeoutMs}ms.`));
+        reject(
+          new LocalAgentInvocationError({
+            agent: spec.agent,
+            command: spec.command,
+            exitCode: code,
+            signal,
+            stderrTail: tail(stderr),
+            timedOut: true,
+            summary: `${spec.agent} timed out after ${timeoutMs}ms.`,
+          }),
+        );
         return;
       }
       if (code !== 0) {
         reject(
-          new Error(
-            `Local coding agent exited with status ${code}. ${stderr.trim() || stdout.trim()}`,
-          ),
+          new LocalAgentInvocationError({
+            agent: spec.agent,
+            command: spec.command,
+            exitCode: code,
+            signal,
+            // Some CLIs put the useful line on stdout; fall back to it so the
+            // reason is never derived from an empty string.
+            stderrTail: tail(stderr) || tail(stdout),
+            summary: `${spec.agent} exited with status ${code ?? "unknown"}.`,
+          }),
         );
         return;
       }
@@ -673,12 +1045,15 @@ async function runLocalAgentWithFallback(
   request: LlmRequest,
   mode: AgentMode,
   taskName?: string,
+  pinnedAgent?: CodingAgentId,
 ): Promise<string> {
-  const agentOrder = getConfiguredAgentOrder();
+  const agentOrder = pinnedAgent ? [pinnedAgent] : getConfiguredAgentOrder();
   const store = buildAgentStore(agentOrder);
   if (store.profiles.length === 0) {
     throw new Error(
-      "No safe local coding agents are available. Install/login to Codex CLI or Claude Code, configure LLM_AGENT_*_COMMAND, or opt into tool-capable agents with LLM_LOCAL_AGENT_ALLOW_UNSAFE=1/custom LLM_AGENT_*_ARGS_JSON for local development only.",
+      pinnedAgent
+        ? `${AGENT_DISPLAY_NAMES[pinnedAgent]} is not available locally. ${getInstallHint(pinnedAgent) ?? ""}`.trim()
+        : "No safe local coding agents are available. Install/login to Codex CLI or Claude Code, configure LLM_AGENT_*_COMMAND, or opt into tool-capable agents with LLM_LOCAL_AGENT_ALLOW_UNSAFE=1/custom LLM_AGENT_*_ARGS_JSON for local development only.",
     );
   }
 
@@ -695,7 +1070,24 @@ async function runLocalAgentWithFallback(
     persistUsageWrites: false,
     run: async (ctx) => {
       const agent = ctx.provider as CodingAgentId;
-      const output = await invokeLocalAgent(agent, ctx.profile.secret, prompt);
+      let output: string;
+      try {
+        output = await invokeLocalAgent(agent, ctx.profile.secret, prompt);
+      } catch (error) {
+        if (error instanceof LocalAgentInvocationError) {
+          // Re-throw as a FailoverError so the loop gets a real reason and the
+          // message keeps the exit code + stderr tail all the way out to
+          // FallbackSummaryError.
+          throw new FailoverError(error.message, {
+            reason: classifyLocalAgentFailure(error),
+            provider: ctx.provider,
+            model: ctx.model,
+            cause: error,
+          });
+        }
+        throw error;
+      }
+
       if (!output.trim()) {
         throw new FailoverError("Local coding agent returned an empty response.", {
           reason: "empty_response",
@@ -725,17 +1117,31 @@ async function runLocalAgentWithFallback(
 
 export class LocalCodingAgentProvider implements LlmProviderInterface {
   private readonly taskType?: string;
+  /**
+   * Set when the caller picked a specific agent (the chat window's picker).
+   * Pinning replaces the configured order rather than reordering it: the user
+   * asked for Claude Code, so silently answering with Codex would be worse
+   * than failing.
+   */
+  private readonly pinnedAgent?: CodingAgentId;
 
-  constructor(_config?: LlmConfig, taskType?: string) {
+  constructor(config?: LlmConfig, taskType?: string) {
     this.taskType = taskType;
+    this.pinnedAgent =
+      typeof config?.localAgent === "string" ? normalizeAgentId(config.localAgent) : undefined;
   }
 
   async generateJson(request: LlmRequest, options?: { taskName?: string }): Promise<string> {
-    return runLocalAgentWithFallback(request, "json", options?.taskName ?? this.taskType);
+    return runLocalAgentWithFallback(
+      request,
+      "json",
+      options?.taskName ?? this.taskType,
+      this.pinnedAgent,
+    );
   }
 
   async generateText(request: LlmRequest): Promise<string> {
-    return runLocalAgentWithFallback(request, "text", this.taskType);
+    return runLocalAgentWithFallback(request, "text", this.taskType, this.pinnedAgent);
   }
 
   getProviderName(): LlmProvider {

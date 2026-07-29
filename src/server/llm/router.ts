@@ -44,6 +44,19 @@ export function getDefaultProvider(): LlmProvider {
 }
 
 /**
+ * Is the local coding-agent path the one actually serving requests?
+ *
+ * `LLM_PROVIDER` is the whole answer: `parseAllowedProviders()` filters to
+ * `HTTP_ROUTING_PROVIDERS`, so `coding-agent` can never enter the failover
+ * ladder as a fallback, and `shouldUseFallbackRouting` short-circuits when it
+ * is primary. Callers use this to decide whether local-agent UI is worth
+ * showing at all.
+ */
+export function isLocalCodingAgentActive(): boolean {
+  return getDefaultProvider() === "coding-agent";
+}
+
+/**
  * Create an LLM provider instance based on configuration
  */
 export function createLlmProvider(config?: LlmConfig, taskType?: string): LlmProviderInterface {
@@ -347,6 +360,12 @@ export async function generateJson(
     taskName?: string;
     temperature?: number;
     config?: LlmConfig;
+    /**
+     * Pins `coding-agent` requests to one local CLI. Folded into the provider
+     * config rather than passed alongside it, so it travels the same path as
+     * every other provider-specific setting.
+     */
+    localAgent?: string;
   },
 ): Promise<string> {
   const finalRequest = {
@@ -364,6 +383,7 @@ export async function generateJson(
     const config: LlmConfig = {
       provider: primaryProvider,
       ...options?.config,
+      ...(options?.localAgent ? { localAgent: options.localAgent } : {}),
     };
     const llm = createLlmProvider(config, options?.taskName);
     return llm.generateJson(finalRequest, { taskName: options?.taskName });
@@ -372,7 +392,9 @@ export async function generateJson(
   return routeRequest((llm) => llm.generateJson(finalRequest, { taskName: options?.taskName }), {
     primaryProvider,
     taskType: options?.taskName,
-    baseConfig: options?.config,
+    baseConfig: options?.localAgent
+      ? { ...options.config, provider: primaryProvider, localAgent: options.localAgent }
+      : options?.config,
   });
 }
 
@@ -389,6 +411,8 @@ export async function generateText(
     provider?: LlmProvider;
     taskName?: string;
     config?: LlmConfig;
+    /** Pins `coding-agent` requests to one local CLI. See `generateJson`. */
+    localAgent?: string;
   },
 ): Promise<string> {
   const primaryProvider = options?.provider ?? getDefaultProvider();
@@ -398,6 +422,7 @@ export async function generateText(
     const config: LlmConfig = {
       provider: primaryProvider,
       ...options?.config,
+      ...(options?.localAgent ? { localAgent: options.localAgent } : {}),
     };
     const llm = createLlmProvider(config, options?.taskName);
     return llm.generateText(request);
@@ -406,6 +431,8 @@ export async function generateText(
   return routeRequest((llm) => llm.generateText(request), {
     primaryProvider,
     taskType: options?.taskName,
-    baseConfig: options?.config,
+    baseConfig: options?.localAgent
+      ? { ...options.config, provider: primaryProvider, localAgent: options.localAgent }
+      : options?.config,
   });
 }

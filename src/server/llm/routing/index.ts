@@ -32,6 +32,7 @@ export {
   classifyFailoverSignal,
   classifyHttpStatus,
   classifyMessage,
+  hasPermanentAuthHint,
   shouldAdvanceFallback,
   shouldAllowCooldownProbeForReason,
 } from "./failover-classifier";
@@ -70,6 +71,8 @@ export {
   readGeminiCliCredentials,
   readGoogleAdcCredentials,
   resetCliCredentialCache,
+  resolveClaudeCredentialsPath,
+  resolveCodexAuthFilePath,
   type CliCredential,
   type DetectedCliCredentials,
 } from "./cli-detect";

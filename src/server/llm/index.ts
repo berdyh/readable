@@ -32,7 +32,13 @@ export type {
   LlmConfig,
 } from "./types";
 
-export { createLlmProvider, getDefaultProvider, generateJson, generateText } from "./router";
+export {
+  createLlmProvider,
+  getDefaultProvider,
+  generateJson,
+  generateText,
+  isLocalCodingAgentActive,
+} from "./router";
 
 export { OpenAiProvider } from "./providers/openai";
 export { AnthropicProvider } from "./providers/anthropic";
@@ -40,6 +46,10 @@ export { GeminiProvider } from "./providers/gemini";
 export { OpenRouterProvider } from "./providers/openrouter";
 export {
   LocalCodingAgentProvider,
+  describeLocalCodingAgents,
+  isLocalAgentRuntime,
   listAvailableLocalCodingAgents,
   type CodingAgentId,
+  type LocalAgentUnavailableReason,
+  type LocalCodingAgentStatus,
 } from "./providers/local-coding-agent";

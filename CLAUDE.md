@@ -63,7 +63,12 @@ Two cooperating halves, documented in `src/server/llm/README.md`:
 
 - `providers/` — one class per upstream API (openai, anthropic, gemini, openrouter) plus
   `local-coding-agent.ts`, which shells out to a local CLI (Codex, Claude Code) in an isolated temp
-  `HOME`/`TMPDIR` with app secrets stripped from the environment.
+  `HOME`/`TMPDIR` with app secrets stripped from the environment. Because that also hides each
+  agent's own credential, the invocation stages just that file into the sandbox (`CODEX_HOME` for
+  Codex; `CLAUDE_CONFIG_DIR` holding only `claudeAiOauth` for Claude Code). There is no
+  `CODEX_AUTH_FILE` env var in Codex itself — auth comes from `CODEX_HOME`.
+  `GET /api/llm/local-agents` reports installed/authenticated per agent and drives the chat
+  sidecar's agent picker; it is local-only and returns `enabled: false` when deployed.
 - `routing/` — OpenClaw-pattern failover: env-key discovery (`READABLE_LIVE_*_KEY` → `*_API_KEYS` →
   `*_API_KEY` → `*_API_KEY_*`), CLI auth-file detection, per-profile cooldown ladder, and a
   `failover-classifier` that decides advance-vs-fail-fast (`auth_permanent` and `format` fail fast).

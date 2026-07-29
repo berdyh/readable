@@ -4,13 +4,20 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { LocalCodingAgentProvider } from "./local-coding-agent";
+import {
+  classifyLocalAgentFailure,
+  describeLocalCodingAgents,
+  LocalAgentInvocationError,
+  LocalCodingAgentProvider,
+} from "./local-coding-agent";
+import { resetCliCredentialCache } from "../routing";
 
 const ENV_KEYS = [
   "LLM_LOCAL_AGENTS",
   "LLM_AGENT_CLAUDE_CODE_COMMAND",
   "LLM_AGENT_CODEX_COMMAND",
   "LLM_AGENT_CODEX_AUTH_FILE",
+  "LLM_AGENT_CLAUDE_CODE_AUTH_FILE",
   "LLM_AGENT_GEMINI_COMMAND",
   "LLM_AGENT_GEMINI_ALLOW_UNSAFE",
   "LLM_AGENT_GEMINI_ARGS_JSON",
@@ -73,6 +80,9 @@ describe("LocalCodingAgentProvider", () => {
     original = snapshotEnv();
     tempDir = await mkdtemp(path.join(os.tmpdir(), "readable-agent-test-"));
     process.env.LLM_LOCAL_AGENT_TIMEOUT_MS = "5000";
+    // cli-detect caches auth-file reads by (path, mtime); temp files written
+    // milliseconds apart would otherwise be served from a previous test's read.
+    resetCliCredentialCache();
   });
 
   afterEach(async () => {
@@ -266,7 +276,33 @@ printf '%s' "$*"
 
     expect(output).toMatch(/^exec --model gpt-5\.5/);
     expect(output).toContain('--config model_reasoning_effort="xhigh"');
-    expect(output).toContain("--ask-for-approval never");
+  });
+
+  it("does not pass --ask-for-approval, which codex exec rejects with exit 2", async () => {
+    // Regression guard for the bug that made LLM_PROVIDER=coding-agent fail
+    // every call. `codex exec` has not accepted this flag since it moved to
+    // the interactive command; passing it aborts before the model is reached,
+    // and the failure surfaced only as "All providers exhausted (unknown)".
+    const codexAgent = await makeAgentScript(
+      tempDir,
+      "codex.sh",
+      `
+cat >/dev/null
+printf '%s' "$*"
+`,
+    );
+    process.env.LLM_LOCAL_AGENTS = "codex-cli";
+    process.env.LLM_AGENT_CODEX_COMMAND = codexAgent;
+
+    const provider = new LocalCodingAgentProvider({ provider: "coding-agent" });
+    const output = await provider.generateText({
+      systemPrompt: "Be concise.",
+      userPrompt: "Use Codex.",
+    });
+
+    expect(output).not.toContain("--ask-for-approval");
+    expect(output).toContain("--sandbox read-only");
+    expect(output).toContain("--ephemeral");
   });
 
   it("runs agents with throwaway HOME/XDG dirs and does not expose app secrets by default", async () => {
@@ -287,12 +323,12 @@ printf 'cwd=%s\\nhome=%s\\nxdg=%s\\ndb=%s\\nopenrouter=%s\\nallowed=%s\\ncodexAu
     process.env.OPENROUTER_API_KEY = "sk-or-secret";
     const realHome = path.join(tempDir, "real-home");
     const realConfig = path.join(tempDir, "real-config");
-    const codexAuthFile = path.join(tempDir, "codex-auth.json");
     process.env.HOME = realHome;
     process.env.XDG_CONFIG_HOME = realConfig;
-    process.env.LLM_AGENT_CODEX_AUTH_FILE = codexAuthFile;
-    process.env.CODEX_AUTH_FILE = path.join(tempDir, "ambient-codex-auth.json");
-    process.env.CODEX_HOME = path.join(tempDir, "codex-home");
+    // No credential on disk, so nothing is staged and CODEX_HOME stays unset —
+    // the allowlist must not be able to smuggle the real one back in.
+    process.env.LLM_AGENT_CODEX_AUTH_FILE = path.join(tempDir, "missing-auth.json");
+    process.env.CODEX_HOME = path.join(tempDir, "real-codex-home");
 
     const provider = new LocalCodingAgentProvider({ provider: "coding-agent" });
 
@@ -308,12 +344,213 @@ printf 'cwd=%s\\nhome=%s\\nxdg=%s\\ndb=%s\\nopenrouter=%s\\nallowed=%s\\ncodexAu
     expect(output).not.toContain(realConfig);
     expect(output).toContain("home=");
     expect(output).toContain("xdg=");
-    expect(output).toContain("codexAuth=");
-    expect(output).toContain(codexAuthFile);
-    expect(output).not.toContain("ambient-codex-auth");
+    // `CODEX_AUTH_FILE` is not a real Codex env var — it must never be set.
+    expect(output).toContain("codexAuth=missing");
     expect(output).toContain("codexHome=missing");
+    expect(output).not.toContain("real-codex-home");
     expect(output).toContain("db=missing");
     expect(output).toContain("openrouter=missing");
     expect(output).toContain("allowed=visible");
+  });
+
+  it("stages the Codex credential into a private CODEX_HOME inside the sandbox", async () => {
+    // The root cause of the original failure: Codex reads $CODEX_HOME/auth.json
+    // and nothing else, so redirecting HOME without redirecting CODEX_HOME left
+    // it unauthenticated (real symptom: HTTP 401 on wss://api.openai.com).
+    const agent = await makeAgentScript(
+      tempDir,
+      "codex.sh",
+      `
+cat >/dev/null
+printf 'codexHome=%s\\nauth=%s' "\${CODEX_HOME:-missing}" "$(cat "\${CODEX_HOME:-/nonexistent}/auth.json" 2>/dev/null || echo missing)"
+`,
+    );
+    const authFile = path.join(tempDir, "codex-auth.json");
+    await writeFile(authFile, JSON.stringify({ tokens: { access_token: "codex-token" } }), "utf8");
+
+    process.env.LLM_LOCAL_AGENTS = "codex-cli";
+    process.env.LLM_AGENT_CODEX_COMMAND = agent;
+    process.env.LLM_AGENT_CODEX_AUTH_FILE = authFile;
+
+    const provider = new LocalCodingAgentProvider({ provider: "coding-agent" });
+    const output = await provider.generateText({
+      systemPrompt: "Be concise.",
+      userPrompt: "Check credentials.",
+    });
+
+    expect(output).toContain("codex-token");
+    // The staged copy lives in the throwaway invocation dir, not the real one.
+    expect(output).toMatch(/codexHome=.*readable-agent-.*codex-home/);
+    expect(output).not.toContain(authFile);
+  });
+
+  it("stages only claudeAiOauth, leaving third-party MCP tokens behind", async () => {
+    // ~/.claude/.credentials.json also holds `mcpOAuth` bearer tokens for every
+    // MCP server the developer has authorised. Handing those to a headless
+    // agent would be a real credential leak, so only Claude's own OAuth block
+    // crosses into the sandbox.
+    const agent = await makeAgentScript(
+      tempDir,
+      "claude.sh",
+      `
+cat >/dev/null
+printf 'creds=%s' "$(cat "\${CLAUDE_CONFIG_DIR:-/nonexistent}/.credentials.json" 2>/dev/null || echo missing)"
+`,
+    );
+    const credsFile = path.join(tempDir, "claude-credentials.json");
+    await writeFile(
+      credsFile,
+      JSON.stringify({
+        claudeAiOauth: { accessToken: "claude-token", subscriptionType: "max" },
+        mcpOAuth: { "plugin:vercel": { accessToken: "third-party-secret" } },
+      }),
+      "utf8",
+    );
+
+    process.env.LLM_LOCAL_AGENTS = "claude-code";
+    process.env.LLM_AGENT_CLAUDE_CODE_COMMAND = agent;
+    process.env.LLM_AGENT_CLAUDE_CODE_AUTH_FILE = credsFile;
+
+    const provider = new LocalCodingAgentProvider({ provider: "coding-agent" });
+    const output = await provider.generateText({
+      systemPrompt: "Be concise.",
+      userPrompt: "Check credentials.",
+    });
+
+    expect(output).toContain("claude-token");
+    expect(output).toContain("max");
+    expect(output).not.toContain("third-party-secret");
+    expect(output).not.toContain("mcpOAuth");
+  });
+
+  it("reports a signed-out agent as auth_permanent instead of unknown", async () => {
+    const agent = await makeAgentScript(
+      tempDir,
+      "claude.sh",
+      `
+cat >/dev/null
+printf 'Not logged in · Please run /login' >&2
+exit 1
+`,
+    );
+    process.env.LLM_LOCAL_AGENTS = "claude-code";
+    process.env.LLM_AGENT_CLAUDE_CODE_COMMAND = agent;
+
+    const provider = new LocalCodingAgentProvider({ provider: "coding-agent" });
+
+    // The stderr tail and the exit code both have to survive to the caller —
+    // an opaque failure here is what let the broken invocation go unnoticed.
+    await expect(
+      provider.generateText({ systemPrompt: "Be concise.", userPrompt: "Ask." }),
+    ).rejects.toThrow(/exited with status 1[\s\S]*Not logged in/);
+  });
+
+  it("classifies a missing binary rather than retrying it forever", () => {
+    expect(
+      classifyLocalAgentFailure(
+        new LocalAgentInvocationError({
+          agent: "codex-cli",
+          command: "/nope/codex",
+          spawnCode: "ENOENT",
+          summary: "codex-cli could not be started.",
+        }),
+      ),
+    ).toBe("not_installed");
+  });
+
+  it("classifies a rejected CLI flag as format so the ladder fails fast", () => {
+    expect(
+      classifyLocalAgentFailure(
+        new LocalAgentInvocationError({
+          agent: "codex-cli",
+          command: "/usr/bin/codex",
+          exitCode: 2,
+          stderrTail: "error: unexpected argument '--ask-for-approval' found",
+          summary: "codex-cli exited with status 2.",
+        }),
+      ),
+    ).toBe("format");
+  });
+
+  it("prefers the auth signal over Codex's chatty reconnect noise", () => {
+    // Codex prints five "Reconnecting…" lines around its 401. The generic
+    // classifier would match "try again" (→ overloaded) first, which is how a
+    // dead credential kept looking like a transient blip.
+    expect(
+      classifyLocalAgentFailure(
+        new LocalAgentInvocationError({
+          agent: "codex-cli",
+          command: "/usr/bin/codex",
+          exitCode: 1,
+          stderrTail: [
+            "ERROR: Reconnecting... 2/5",
+            "failed to connect to websocket: HTTP error: 401 Unauthorized",
+            "ERROR: try again later",
+          ].join("\n"),
+          summary: "codex-cli exited with status 1.",
+        }),
+      ),
+    ).toBe("auth_permanent");
+  });
+});
+
+describe("describeLocalCodingAgents", () => {
+  let original: Record<string, string | undefined>;
+  let tempDir: string;
+
+  beforeEach(async () => {
+    original = snapshotEnv();
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "readable-agent-status-"));
+    resetCliCredentialCache();
+  });
+
+  afterEach(async () => {
+    restoreEnv(original);
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it("separates 'not installed' from 'not signed in'", async () => {
+    const codexBinary = await makeAgentScript(tempDir, "codex.sh", "exit 0");
+    const authFile = path.join(tempDir, "codex-auth.json");
+    await writeFile(authFile, JSON.stringify({ tokens: { access_token: "t" } }), "utf8");
+
+    process.env.LLM_LOCAL_AGENTS = "codex-cli,claude-code";
+    process.env.LLM_AGENT_CODEX_COMMAND = codexBinary;
+    process.env.LLM_AGENT_CODEX_AUTH_FILE = authFile;
+    // Claude's binary is absent entirely.
+    process.env.LLM_AGENT_CLAUDE_CODE_COMMAND = path.join(tempDir, "absent-claude");
+
+    const statuses = await describeLocalCodingAgents();
+    const codex = statuses.find((entry) => entry.agent === "codex-cli");
+    const claude = statuses.find((entry) => entry.agent === "claude-code");
+
+    expect(codex).toMatchObject({
+      displayName: "Codex",
+      installed: true,
+      authenticated: true,
+      unavailableReason: null,
+    });
+    expect(claude).toMatchObject({
+      displayName: "Claude Code",
+      installed: false,
+      authenticated: false,
+      unavailableReason: "not_installed",
+    });
+    expect(claude?.hint).toContain("claude login");
+  });
+
+  it("marks an installed-but-signed-out agent as not_authenticated", async () => {
+    const codexBinary = await makeAgentScript(tempDir, "codex.sh", "exit 0");
+    process.env.LLM_LOCAL_AGENTS = "codex-cli";
+    process.env.LLM_AGENT_CODEX_COMMAND = codexBinary;
+    process.env.LLM_AGENT_CODEX_AUTH_FILE = path.join(tempDir, "no-such-auth.json");
+
+    const [codex] = await describeLocalCodingAgents();
+
+    expect(codex).toMatchObject({
+      installed: true,
+      authenticated: false,
+      unavailableReason: "not_authenticated",
+    });
   });
 });

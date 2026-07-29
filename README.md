@@ -156,7 +156,9 @@ For local development, `LLM_PROVIDER=coding-agent` routes app LLM calls through 
 LLM_LOCAL_AGENTS=codex-cli
 ```
 
-Readable tries available safe agents left to right and falls back on failed, timed-out, or empty responses. The default fallback order is Codex CLI only; `claude-code` is available when explicitly listed. Each local agent runs from an isolated temp directory with throwaway `HOME`, `TMPDIR`, and `XDG_*` directories; app secrets such as database URLs, Clerk keys, and embedding API keys are not forwarded. Add extra non-secret variables with `LLM_LOCAL_AGENT_ENV_ALLOWLIST` only when a specific CLI needs them; HOME/config keys are not accepted through that allowlist. For Codex auth without exposing your normal home/config tree, set `LLM_AGENT_CODEX_AUTH_FILE=/absolute/path/to/auth.json` or `CODEX_AUTH_FILE`.
+Readable tries available safe agents left to right and falls back on failed, timed-out, or empty responses. Codex CLI and Claude Code are both first-class; the default order is `codex-cli,claude-code`. Each local agent runs from an isolated temp directory with throwaway `HOME`, `TMPDIR`, and `XDG_*` directories; app secrets such as database URLs, Clerk keys, and embedding API keys are not forwarded. Add extra non-secret variables with `LLM_LOCAL_AGENT_ENV_ALLOWLIST` only when a specific CLI needs them; HOME/config keys are not accepted through that allowlist.
+
+Because `HOME` is redirected, each agent's own credential is copied into that temp directory (`~/.codex/auth.json` for Codex; only the `claudeAiOauth` block of `~/.claude/.credentials.json` for Claude Code) and deleted with it. Override the source path with `LLM_AGENT_CODEX_AUTH_FILE` / `LLM_AGENT_CLAUDE_CODE_AUTH_FILE`. When this mode is active the chat sidecar shows an agent picker, greying out any agent that is not installed or not signed in.
 
 Tool-capable built-in invocations such as `gemini --prompt` and `opencode run` are skipped by default. To use them for local-only experiments, either provide safe custom argv with `LLM_AGENT_<AGENT>_ARGS_JSON` or set `LLM_AGENT_<AGENT>_ALLOW_UNSAFE=1` / `LLM_LOCAL_AGENT_ALLOW_UNSAFE=1`.
 

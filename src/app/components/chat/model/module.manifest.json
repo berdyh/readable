@@ -7,7 +7,16 @@
   "owns": ["src/app/components/chat/model"],
   "interface": {
     "entrypoint": "types.ts",
-    "exports": ["ChatMessage", "ChatTab", "fromWireMessage"]
+    "exports": [
+      "ChatMessage",
+      "ChatTab",
+      "fromWireMessage",
+      "LocalAgentStatus",
+      "describeAgentUnavailability",
+      "isAgentSelectable",
+      "pickDefaultAgent",
+      "shouldShowAgentPicker"
+    ]
   },
   "uses": [
     {
@@ -17,6 +26,10 @@
     {
       "module": "server.qa",
       "via": "@/server/qa/types"
+    },
+    {
+      "module": "server.llm",
+      "via": "@/server/llm/types"
     }
   ],
   "constraints": ["data shapes", "string and number rules"],

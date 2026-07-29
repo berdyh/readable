@@ -21,12 +21,18 @@ Anything not listed here is internal to this module:
 - `ChatMessage`
 - `ChatTab`
 - `fromWireMessage`
+- `LocalAgentStatus`
+- `describeAgentUnavailability`
+- `isAgentSelectable`
+- `pickDefaultAgent`
+- `shouldShowAgentPicker`
 
 ## Uses
 
 Read only the *interface* of these — never their internals.
 
 - **server.chat** via `@/server/chat/types`
+- **server.llm** via `@/server/llm/types`
 - **server.qa** via `@/server/qa/types`
 
 ## Constraints

@@ -9,7 +9,9 @@ import type { Block } from "../../block-editor/types";
 
 import { useChatPanelWidth } from "../hooks/useChatPanelWidth";
 import { useChatSessions } from "../hooks/useChatSessions";
+import { useLocalAgents } from "../hooks/useLocalAgents";
 import { createLocalId } from "../model/types";
+import { LocalAgentPicker } from "../primitives/local-agent-picker";
 import { ChatAuthGate } from "./ChatAuthGate";
 import { ChatComposer } from "./ChatComposer";
 import { ChatPanelHeader } from "./ChatPanelHeader";
@@ -41,12 +43,18 @@ export function ChatSidePanel({
   const [input, setInput] = useState("");
   const { mounted, width, isResizing, onResizePointerDown, onResizeKeyDown } = useChatPanelWidth();
 
+  // Probe only once the panel is actually open — the answer is about the
+  // server's machine, not the paper, and asking on every mount would spawn a
+  // PATH scan behind a panel nobody looked at.
+  const localAgents = useLocalAgents(mounted && isOpen);
+
   const chat = useChatSessions({
     paperId,
     isOpen,
     enabled: mounted,
     selection,
     onSelectionClear,
+    localAgent: localAgents.selectedAgentId,
   });
 
   const submit = useCallback(
@@ -119,6 +127,15 @@ export function ChatSidePanel({
             onNewChat={handleNewChat}
             onClose={() => onToggle(false)}
           />
+
+          {localAgents.isVisible ? (
+            <LocalAgentPicker
+              agents={localAgents.agents}
+              selectedAgentId={localAgents.selectedAgentId}
+              onSelect={localAgents.selectAgent}
+              disabled={chat.isSubmitting}
+            />
+          ) : null}
 
           {chat.isLoadingHistory ? (
             <div className="flex flex-1 items-center justify-center gap-2 text-sm text-zinc-500 dark:text-zinc-400">

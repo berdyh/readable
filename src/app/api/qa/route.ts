@@ -10,10 +10,18 @@ import {
   requireAuthenticatedUserId,
 } from "@/server/auth";
 
+/**
+ * Local CLI agents the chat picker may pin a question to. Allowlisted rather
+ * than passed through, because the value ends up selecting a binary to spawn —
+ * an unvalidated string here would be the wrong kind of flexible.
+ */
+const LOCAL_AGENT_IDS = new Set(["claude-code", "codex-cli"]);
+
 interface QaRequestPayload {
   paperId: string;
   question: string;
   selection?: QuestionSelection;
+  localAgent?: string;
 }
 
 function parseRequestPayload(data: unknown): QaRequestPayload {
@@ -41,6 +49,11 @@ function parseRequestPayload(data: unknown): QaRequestPayload {
   const selection = parseQuestionSelection(payload.selection);
   if (selection) {
     result.selection = selection;
+  }
+
+  const localAgent = payload.localAgent;
+  if (typeof localAgent === "string" && LOCAL_AGENT_IDS.has(localAgent)) {
+    result.localAgent = localAgent;
   }
 
   return result;
@@ -134,6 +147,7 @@ export async function POST(request: NextRequest) {
     const result = await answerPaperQuestion(payload.paperId, payload.question, {
       userId,
       selection: payload.selection,
+      localAgent: payload.localAgent,
     });
     emitQaTrustCounter(result);
 

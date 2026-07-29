@@ -12,10 +12,11 @@
       "createChatSession",
       "deleteChatSession",
       "fetchChatHistory",
+      "fetchLocalAgents",
       "saveChatMessage"
     ]
   },
-  "constraints": ["fetch to /api/chat/* and /api/qa"],
+  "constraints": ["fetch to /api/chat/*, /api/qa and /api/llm/local-agents"],
   "checks": ["pnpm vitest run src/app/components/chat"],
   "uses": [
     {

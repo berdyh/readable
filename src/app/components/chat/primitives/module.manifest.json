@@ -7,7 +7,14 @@
   "owns": ["src/app/components/chat/primitives"],
   "interface": {
     "entrypoint": "(imported by ../sidecar and ../inline)",
-    "exports": ["AnswerCard", "Conversation", "Message", "PromptInputTextarea", "Source"]
+    "exports": [
+      "AnswerCard",
+      "Conversation",
+      "LocalAgentPicker",
+      "Message",
+      "PromptInputTextarea",
+      "Source"
+    ]
   },
   "constraints": ["props to markup"],
   "checks": ["pnpm vitest run src/app/components/chat"]

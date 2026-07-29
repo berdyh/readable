@@ -96,9 +96,22 @@ interface CodexAuthFile {
   };
 }
 
-export async function readCodexCliCredentials(): Promise<CliCredential | null> {
+/**
+ * Where Codex CLI keeps its OAuth tokens.
+ *
+ * `CODEX_HOME` is the *only* env hook Codex honours for this — verified
+ * against `codex exec --help`, whose `--ignore-user-config` entry reads
+ * "auth still uses `CODEX_HOME`". There is no `CODEX_AUTH_FILE`; anything
+ * that sets one is talking to itself.
+ */
+export function resolveCodexAuthFilePath(): string {
   const codexHome = process.env.CODEX_HOME?.trim() || path.join(homedir(), ".codex");
-  const filePath = path.join(codexHome, "auth.json");
+  return path.join(codexHome, "auth.json");
+}
+
+export async function readCodexCliCredentials(
+  filePath: string = resolveCodexAuthFilePath(),
+): Promise<CliCredential | null> {
   return readWithCache<CliCredential>(filePath, async () => {
     const data = await readJson<CodexAuthFile>(filePath);
     const access = data?.tokens?.access_token;
@@ -138,8 +151,18 @@ interface ClaudeAuthFile {
   };
 }
 
-export async function readClaudeCliCredentials(): Promise<CliCredential | null> {
-  const filePath = path.join(homedir(), ".claude", ".credentials.json");
+/**
+ * Where Claude Code keeps its OAuth tokens. `CLAUDE_CONFIG_DIR` relocates
+ * the whole config directory, credentials included.
+ */
+export function resolveClaudeCredentialsPath(): string {
+  const configDir = process.env.CLAUDE_CONFIG_DIR?.trim() || path.join(homedir(), ".claude");
+  return path.join(configDir, ".credentials.json");
+}
+
+export async function readClaudeCliCredentials(
+  filePath: string = resolveClaudeCredentialsPath(),
+): Promise<CliCredential | null> {
   return readWithCache<CliCredential>(filePath, async () => {
     const data = await readJson<ClaudeAuthFile>(filePath);
     const access = data?.claudeAiOauth?.accessToken;
@@ -262,9 +285,13 @@ export function getInstallHint(provider: RoutingProviderId): string | undefined 
     case "coding-agent":
       return "Install/login to a local CLI, e.g. `npm i -g @openai/codex` then `codex login`; set LLM_LOCAL_AGENTS=codex-cli.";
     case "anthropic":
+    case "claude-code":
       return "Install Claude Code: `npm i -g @anthropic-ai/claude-code` then run `claude login`.";
     case "openai-codex":
+    case "codex-cli":
       return "Install Codex CLI: `npm i -g @openai/codex` then run `codex login`.";
+    case "gemini-cli":
+      return "Install Gemini CLI: see https://github.com/google-gemini/gemini-cli — then run `gemini auth login`.";
     case "gemini":
       return "Install Gemini CLI: see https://github.com/google-gemini/gemini-cli — then run `gemini auth login`.";
     case "google-vertex":

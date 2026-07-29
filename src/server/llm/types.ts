@@ -39,5 +39,10 @@ export interface LlmConfig {
   baseUrl?: string;
   model?: string;
   timeoutMs?: number;
+  /**
+   * Pins `coding-agent` requests to one local CLI (`claude-code`, `codex-cli`).
+   * Ignored by every hosted provider. Set from the chat window's agent picker.
+   */
+  localAgent?: string;
   [key: string]: unknown; // Allow provider-specific config
 }

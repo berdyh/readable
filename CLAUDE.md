@@ -157,4 +157,7 @@ in `persona_concepts`.
   pin both wire shapes to it.
 - Test env is `node`, not jsdom: component tests exercise pure helpers (`commands`, `parsers`,
   `blockInteractionUtils`), not rendering.
-- `src/app/test-block-editor/` is a dev-only scratch page that ships with the app.
+- Every module carries a `module.manifest.json`, a hand-written `module.narrative.md`, and a
+  generated `AGENTS.md`. Edit the first two; `pnpm modules:generate` renders the third, and
+  `pnpm verify` fails if it is stale. Module boundaries are enforced by `no-restricted-imports`
+  zones in `eslint.config.mjs` — import from a module's index, not its internals.

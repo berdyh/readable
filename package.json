@@ -88,6 +88,10 @@
     ],
     "*.{css,md,mdx,json,yml,yaml}": [
       "prettier --write"
+    ],
+    "**/module.{manifest.json,narrative.md}": [
+      null,
+      null
     ]
   },
   "simple-git-hooks": {

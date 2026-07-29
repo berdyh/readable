@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "id": "server.db",
+  "parent": "server",
+  "path": "src/server/db",
+  "goal": "Persists application records in Postgres.",
+  "owns": [
+    "src/server/db"
+  ],
+  "interface": {
+    "entrypoint": "index.ts",
+    "exports": [
+      "withPgClient",
+      "ensureSchema",
+      "replacePaperIngestData",
+      "upsertPaper",
+      "searchPaperChunksByText",
+      "createChatSession",
+      "ChatSessionOwnershipError"
+    ]
+  },
+  "constraints": [
+    "DDL",
+    "queries",
+    "transactions"
+  ],
+  "checks": [
+    "pnpm vitest run src/server/db"
+  ]
+}

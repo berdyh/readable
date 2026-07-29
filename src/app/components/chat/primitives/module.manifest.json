@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "web.chat.primitives",
+  "parent": "web.chat",
+  "path": "src/app/components/chat/primitives",
+  "goal": "Renders chat markup from props.",
+  "owns": [
+    "src/app/components/chat/primitives"
+  ],
+  "interface": {
+    "entrypoint": "(imported by ../sidecar and ../inline)",
+    "exports": [
+      "AnswerCard",
+      "Conversation",
+      "Message",
+      "PromptInputTextarea",
+      "Source"
+    ]
+  },
+  "constraints": [
+    "props to markup"
+  ],
+  "checks": [
+    "pnpm vitest run src/app/components/chat"
+  ]
+}

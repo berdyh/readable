@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "id": "server.llm",
+  "parent": "server",
+  "path": "src/server/llm",
+  "goal": "Answers a prompt using whichever model provider is currently reachable.",
+  "owns": [
+    "src/server/llm"
+  ],
+  "interface": {
+    "entrypoint": "index.ts",
+    "exports": [
+      "generateJson",
+      "generateText",
+      "createLlmProvider",
+      "LlmProviderInterface"
+    ]
+  },
+  "uses": [
+    {
+      "module": "server.llm-config",
+      "via": "getModel"
+    }
+  ],
+  "constraints": [
+    "provider selection",
+    "failover",
+    "request shaping"
+  ],
+  "checks": [
+    "pnpm vitest run src/server/llm"
+  ]
+}

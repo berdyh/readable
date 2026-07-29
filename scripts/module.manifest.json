@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "id": "scripts",
+  "path": "scripts",
+  "goal": "Runs one-off operational tasks against the live services.",
+  "owns": [
+    "scripts"
+  ],
+  "interface": {
+    "entrypoint": "(invoked via package.json scripts)",
+    "exports": []
+  },
+  "uses": [
+    {
+      "module": "server.db",
+      "via": "ensureSchema"
+    },
+    {
+      "module": "server.vector",
+      "via": "pingQdrant"
+    },
+    {
+      "module": "server.llm.routing",
+      "via": "buildAuthProfileStore"
+    },
+    {
+      "module": "server.llm",
+      "via": "listAvailableLocalCodingAgents"
+    }
+  ],
+  "constraints": [
+    "operational scripts",
+    "no app imports of this directory"
+  ],
+  "checks": [
+    "pnpm typecheck"
+  ]
+}

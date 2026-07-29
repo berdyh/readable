@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "id": "server.search",
+  "parent": "server",
+  "path": "src/server/search",
+  "goal": "Fuses vector and full-text hits into one ranked chunk list.",
+  "owns": [
+    "src/server/search"
+  ],
+  "interface": {
+    "entrypoint": "index.ts",
+    "exports": [
+      "hybridPaperChunkSearch",
+      "HybridPaperChunkHit",
+      "HybridRetrievalDiagnostics"
+    ]
+  },
+  "uses": [
+    {
+      "module": "server.db",
+      "via": "searchPaperChunksByText"
+    },
+    {
+      "module": "server.vector",
+      "via": "searchPaperChunkVectors"
+    }
+  ],
+  "constraints": [
+    "retrieval",
+    "rank fusion",
+    "page-window expansion"
+  ],
+  "checks": [
+    "pnpm vitest run src/server"
+  ]
+}

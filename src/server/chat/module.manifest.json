@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "id": "server.chat",
+  "parent": "server",
+  "path": "src/server/chat",
+  "goal": "Shapes persisted chat rows into the wire messages the client renders.",
+  "owns": [
+    "src/server/chat"
+  ],
+  "interface": {
+    "entrypoint": "index.ts",
+    "exports": [
+      "parseChatMessage",
+      "toApiMessage",
+      "InvalidChatPayloadError",
+      "ChatMessage",
+      "ChatCitation",
+      "ChatTrustMetadata"
+    ]
+  },
+  "uses": [
+    {
+      "module": "server.db",
+      "via": "ChatMessageRow"
+    }
+  ],
+  "constraints": [
+    "wire shapes",
+    "payload validation",
+    "metadata parsing"
+  ],
+  "checks": [
+    "pnpm vitest run src/server/chat src/app/components/chat"
+  ]
+}

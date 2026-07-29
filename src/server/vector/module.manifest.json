@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "id": "server.vector",
+  "parent": "server",
+  "path": "src/server/vector",
+  "goal": "Maintains the per-model Qdrant collection that backs vector search.",
+  "owns": [
+    "src/server/vector"
+  ],
+  "interface": {
+    "entrypoint": "index.ts",
+    "exports": [
+      "embedTexts",
+      "embedQuery",
+      "getEmbeddingEnvironment",
+      "ensureQdrantCollection",
+      "upsertPaperChunkVectors",
+      "searchPaperChunkVectors",
+      "pingQdrant"
+    ]
+  },
+  "constraints": [
+    "embedding provider selection",
+    "collection lifecycle",
+    "vector upsert and search"
+  ],
+  "checks": [
+    "pnpm vitest run src/server/vector"
+  ]
+}

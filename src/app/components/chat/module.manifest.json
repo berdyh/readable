@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "id": "web.chat",
+  "parent": "web",
+  "path": "src/app/components/chat",
+  "goal": "Answers questions about the open paper beside it.",
+  "owns": [
+    "src/app/components/chat"
+  ],
+  "interface": {
+    "entrypoint": "index.ts",
+    "exports": [
+      "ChatButton",
+      "ChatSidePanel",
+      "InlineChatPanel",
+      "TrustDisplayMetadata",
+      "Source",
+      "ChatMessage",
+      "ChatTab"
+    ]
+  },
+  "constraints": [
+    "chat UI",
+    "chat state",
+    "chat network calls"
+  ],
+  "checks": [
+    "pnpm vitest run src/app/components/chat"
+  ]
+}

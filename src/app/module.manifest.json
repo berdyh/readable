@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "web",
+  "path": "src/app",
+  "goal": "Serves the browser-facing routes and UI.",
+  "owns": [
+    "src/app"
+  ],
+  "interface": {
+    "entrypoint": "page.tsx",
+    "exports": []
+  },
+  "constraints": [
+    "routing",
+    "layout",
+    "theming"
+  ],
+  "checks": [
+    "pnpm vitest run src/app"
+  ]
+}

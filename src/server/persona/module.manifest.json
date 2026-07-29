@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "server.persona",
+  "parent": "server",
+  "path": "src/server/persona",
+  "goal": "Records which concepts a user has been exposed to.",
+  "owns": [
+    "src/server/persona"
+  ],
+  "interface": {
+    "entrypoint": "index.ts",
+    "exports": [
+      "recordPersonaSignals",
+      "ConceptInput",
+      "PersonaInteractionType"
+    ]
+  },
+  "uses": [
+    {
+      "module": "server.db",
+      "via": "upsertPersonaConcepts"
+    }
+  ],
+  "constraints": [
+    "concept recording",
+    "interaction logging"
+  ],
+  "checks": [
+    "pnpm vitest run src/server/e2e"
+  ]
+}

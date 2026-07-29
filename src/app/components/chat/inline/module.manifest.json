@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "web.chat.inline",
+  "parent": "web.chat",
+  "path": "src/app/components/chat/inline",
+  "goal": "Composes the in-document chat popover.",
+  "owns": [
+    "src/app/components/chat/inline"
+  ],
+  "interface": {
+    "entrypoint": "InlineChatPanel.tsx",
+    "exports": [
+      "InlineChatPanel"
+    ]
+  },
+  "constraints": [
+    "composition of model, api, hooks, and primitives"
+  ],
+  "checks": [
+    "pnpm vitest run src/app/components/chat"
+  ],
+  "uses": [
+    {
+      "module": "server.qa",
+      "via": "@/server/qa/types"
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "id": "web.block-editor",
+  "parent": "web",
+  "path": "src/app/components/block-editor",
+  "goal": "Edits a paper as a flat array of typed blocks.",
+  "owns": [
+    "src/app/components/block-editor"
+  ],
+  "interface": {
+    "entrypoint": "BlockEditor.tsx",
+    "exports": [
+      "BlockEditor",
+      "Block",
+      "emitEditorIntent",
+      "emitBlockNavigate",
+      "onBlockNavigateResult"
+    ]
+  },
+  "uses": [
+    {
+      "module": "server.qa",
+      "via": "@/server/qa/types"
+    },
+    {
+      "module": "server.summarize",
+      "via": "@/server/summarize/types"
+    },
+    {
+      "module": "server.editor",
+      "via": "@/server/editor/types"
+    }
+  ],
+  "constraints": [
+    "block model",
+    "slash commands",
+    "markdown round-tripping"
+  ],
+  "checks": [
+    "pnpm vitest run src/app/components/block-editor"
+  ]
+}

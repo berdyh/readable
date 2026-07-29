@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "server.config",
+  "parent": "server",
+  "path": "src/server/config",
+  "goal": "Serves timeouts and base URLs, checking env overrides first.",
+  "owns": [
+    "src/server/config"
+  ],
+  "interface": {
+    "entrypoint": "defaults.ts",
+    "exports": [
+      "getTimeout",
+      "getUrl",
+      "DEFAULT_TIMEOUTS",
+      "DEFAULT_URLS"
+    ]
+  },
+  "constraints": [
+    "timeouts",
+    "base URLs"
+  ],
+  "checks": [
+    "pnpm typecheck"
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "web.block-editor.blocks",
+  "parent": "web.block-editor",
+  "path": "src/app/components/block-editor/blocks",
+  "goal": "Renders one block of each type.",
+  "owns": [
+    "src/app/components/block-editor/blocks"
+  ],
+  "interface": {
+    "entrypoint": "(imported by ../Block.tsx)",
+    "exports": [
+      "TipTapBlock",
+      "HeadingBlock",
+      "ListBlock",
+      "CalloutBlock",
+      "FigureBlock",
+      "TodoBlock",
+      "ChatMessageBlock"
+    ]
+  },
+  "constraints": [
+    "presentation of a single block"
+  ],
+  "checks": [
+    "pnpm vitest run src/app/components/block-editor"
+  ]
+}

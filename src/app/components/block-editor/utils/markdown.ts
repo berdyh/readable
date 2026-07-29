@@ -30,10 +30,7 @@ turndownService.addRule("strikethrough", {
 // Preserve checkbox syntax for todo lists
 turndownService.addRule("checkbox", {
   filter: (node) => {
-    return (
-      node.nodeName === "INPUT" &&
-      (node as HTMLInputElement).type === "checkbox"
-    );
+    return node.nodeName === "INPUT" && (node as HTMLInputElement).type === "checkbox";
   },
   replacement: (_content, node) => {
     const input = node as HTMLInputElement;
@@ -156,9 +153,7 @@ export function htmlToMarkdown(html: string, blockType?: string): string {
       const checked = checkedMatch[1] === "true";
       const contentMarkdown = contentMatch
         ? turndownService.turndown(contentMatch[1]).trim()
-        : turndownService
-            .turndown(html.replace(/<label>[\s\S]*?<\/label>/i, ""))
-            .trim();
+        : turndownService.turndown(html.replace(/<label>[\s\S]*?<\/label>/i, "")).trim();
       return `[${checked ? "x" : " "}] ${contentMarkdown}`.trim();
     }
 
@@ -170,8 +165,7 @@ export function htmlToMarkdown(html: string, blockType?: string): string {
 
   // Handle headings
   if (blockType?.startsWith("heading_")) {
-    const level =
-      blockType === "heading_1" ? 1 : blockType === "heading_2" ? 2 : 3;
+    const level = blockType === "heading_1" ? 1 : blockType === "heading_2" ? 2 : 3;
     const headingMatch = html.match(/<h\d[^>]*>([\s\S]*?)<\/h\d>/);
     if (headingMatch) {
       const content = turndownService.turndown(headingMatch[1]).trim();

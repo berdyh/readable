@@ -3,11 +3,7 @@
 import { useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 
-import {
-  PASS_DESCRIPTORS,
-  THREE_PASS_ORDER,
-  type ThreePass,
-} from "./usePassState";
+import { PASS_DESCRIPTORS, THREE_PASS_ORDER, type ThreePass } from "./usePassState";
 
 export interface ThreePassBarProps {
   pass: ThreePass;
@@ -78,9 +74,7 @@ export function ThreePassBar({ pass, onPassChange }: ThreePassBarProps) {
               >
                 <span
                   className={`mr-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold ${
-                    active
-                      ? numberBubbleActive
-                      : "border border-current"
+                    active ? numberBubbleActive : "border border-current"
                   }`}
                 >
                   {idx + 1}
@@ -98,11 +92,7 @@ export function ThreePassBar({ pass, onPassChange }: ThreePassBarProps) {
           className={`inline-flex h-8 w-8 items-center justify-center rounded-full transition-colors duration-150 ${toggleBase}`}
           title={expanded ? "Hide guidance" : "Show guidance"}
         >
-          {expanded ? (
-            <ChevronUp className="h-4 w-4" />
-          ) : (
-            <ChevronDown className="h-4 w-4" />
-          )}
+          {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </button>
       </header>
 

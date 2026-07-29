@@ -13,9 +13,9 @@
  * keychain-backed bits removed (Linux-server target).
  */
 
-import { promises as fs } from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
+import { promises as fs } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 import type {
   AuthProfile,
@@ -24,9 +24,9 @@ import type {
   ProfileUsageStats,
   RoutingProviderId,
   UsageStats,
-} from './types';
+} from "./types";
 
-const DEFAULT_AGENT_ID = 'default';
+const DEFAULT_AGENT_ID = "default";
 
 /** Cooldown ladder for non-billing transient reasons (in ms). */
 const TRANSIENT_BACKOFF_LADDER_MS = [
@@ -51,7 +51,7 @@ function getStateRoot(): string {
   if (home) {
     return home;
   }
-  return path.join(os.homedir(), '.readable');
+  return path.join(os.homedir(), ".readable");
 }
 
 export interface StorePathSet {
@@ -61,21 +61,21 @@ export interface StorePathSet {
 }
 
 export function getStorePaths(agentId: string = DEFAULT_AGENT_ID): StorePathSet {
-  const agentDir = path.join(getStateRoot(), 'agents', agentId);
+  const agentDir = path.join(getStateRoot(), "agents", agentId);
   return {
     agentDir,
-    profilesPath: path.join(agentDir, 'auth-profiles.json'),
-    usagePath: path.join(agentDir, 'auth-state.json'),
+    profilesPath: path.join(agentDir, "auth-profiles.json"),
+    usagePath: path.join(agentDir, "auth-state.json"),
   };
 }
 
 async function readJsonSafe<T>(filePath: string): Promise<T | undefined> {
   try {
-    const raw = await fs.readFile(filePath, 'utf-8');
+    const raw = await fs.readFile(filePath, "utf-8");
     return JSON.parse(raw) as T;
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
-    if (code === 'ENOENT') {
+    if (code === "ENOENT") {
       return undefined;
     }
     throw error;
@@ -87,7 +87,7 @@ async function writeJsonAtomic(filePath: string, data: unknown): Promise<void> {
   await fs.mkdir(dir, { recursive: true, mode: 0o700 });
   const tempPath = `${filePath}.${process.pid}.tmp`;
   const payload = JSON.stringify(data, null, 2);
-  await fs.writeFile(tempPath, payload, { encoding: 'utf-8', mode: 0o600 });
+  await fs.writeFile(tempPath, payload, { encoding: "utf-8", mode: 0o600 });
   await fs.rename(tempPath, filePath);
   // Best-effort: tighten dir permissions even if it already existed.
   try {
@@ -100,7 +100,7 @@ async function writeJsonAtomic(filePath: string, data: unknown): Promise<void> {
 
 interface PersistedProfilesShape {
   profiles?: AuthProfile[];
-  order?: AuthProfileStore['order'];
+  order?: AuthProfileStore["order"];
 }
 
 interface PersistedUsageShape {
@@ -128,7 +128,7 @@ export async function loadAuthProfileStore(
 }
 
 export async function saveAuthProfilesOnly(
-  store: Pick<AuthProfileStore, 'profiles' | 'order'>,
+  store: Pick<AuthProfileStore, "profiles" | "order">,
   agentId: string = DEFAULT_AGENT_ID,
 ): Promise<void> {
   const paths = getStorePaths(agentId);
@@ -190,7 +190,7 @@ export function removeAuthProfileFromStore(
 }
 
 function pickBackoffLadder(reason: FailoverReason): number[] {
-  if (reason === 'billing') {
+  if (reason === "billing") {
     return BILLING_BACKOFF_LADDER_MS;
   }
   return TRANSIENT_BACKOFF_LADDER_MS;
@@ -218,7 +218,7 @@ export function applyCooldown(
   const ladderMs = ladder[nextLevel];
 
   let cooldownMs = ladderMs;
-  if (typeof retryAfterMs === 'number' && Number.isFinite(retryAfterMs)) {
+  if (typeof retryAfterMs === "number" && Number.isFinite(retryAfterMs)) {
     // Honor Retry-After but never less than the ladder step.
     cooldownMs = Math.max(retryAfterMs, ladderMs);
   }
@@ -238,7 +238,7 @@ export function applyCooldown(
     errorCount: (current.errorCount ?? 0) + 1,
   };
 
-  if (reason === 'auth_permanent') {
+  if (reason === "auth_permanent") {
     // Treat as hard-disabled until manually cleared. Pick "disabled = far
     // future" rather than removing the profile so the user can see why.
     next.disabledUntil = now + 365 * 24 * 60 * 60_000; // 1y sentinel
@@ -269,10 +269,7 @@ export function recordProfileSuccess(
 }
 
 /** Manually clear a cooldown without touching lastUsed. */
-export function clearProfileCooldown(
-  usage: UsageStats,
-  profileId: string,
-): UsageStats {
+export function clearProfileCooldown(usage: UsageStats, profileId: string): UsageStats {
   const current = usage[profileId];
   if (!current) return usage;
   return {

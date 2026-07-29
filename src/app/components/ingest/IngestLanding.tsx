@@ -41,9 +41,7 @@ const normalizeArxivId = (input: string): string | null => {
     return urlMatch[1];
   }
 
-  const idMatch = trimmed.match(
-    /^((?:\d{4}\.\d{4,5})|(?:[a-z\-]+\/\d{7}))(?:v\d+)?$/i,
-  );
+  const idMatch = trimmed.match(/^((?:\d{4}\.\d{4,5})|(?:[a-z\-]+\/\d{7}))(?:v\d+)?$/i);
   if (idMatch?.[1]) {
     return idMatch[1];
   }
@@ -61,10 +59,7 @@ const IngestLanding = () => {
     state: "idle",
   });
 
-  const normalizedId = useMemo(
-    () => normalizeArxivId(arxivInput),
-    [arxivInput],
-  );
+  const normalizedId = useMemo(() => normalizeArxivId(arxivInput), [arxivInput]);
 
   const ingestDisabled =
     !normalizedId || status.state === "submitting" || uploadStatus.state === "uploading";
@@ -96,12 +91,8 @@ const IngestLanding = () => {
         });
 
         if (!response.ok) {
-          const payload = (await response.json().catch(() => null)) as
-            | { error?: string }
-            | null;
-          const errorMessage =
-            payload?.error ??
-            `Ingestion failed with status ${response.status}.`;
+          const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+          const errorMessage = payload?.error ?? `Ingestion failed with status ${response.status}.`;
           throw new Error(errorMessage);
         }
 
@@ -113,67 +104,55 @@ const IngestLanding = () => {
         }, 900);
       } catch (error) {
         const message =
-          error instanceof Error
-            ? error.message
-            : "Unexpected ingestion error occurred.";
+          error instanceof Error ? error.message : "Unexpected ingestion error occurred.";
         setStatus({ state: "error", message });
       }
     },
     [contactEmail, forceOcr, normalizedId, router],
   );
 
-  const handlePdfUpload = useCallback(
-    async (event: React.ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0];
-      if (!file) {
-        return;
+  const handlePdfUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    setUploadStatus({ state: "uploading" });
+
+    const formData = new FormData();
+    formData.append("pdf", file, file.name);
+
+    try {
+      const response = await fetch("/api/extract-research-paper", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+        const errorMessage = payload?.error ?? `Extraction failed with status ${response.status}.`;
+        throw new Error(errorMessage);
       }
 
-      setUploadStatus({ state: "uploading" });
+      const result = (await response.json()) as {
+        method: string;
+        stats: { pages: number; combinedTextLength: number };
+      };
 
-      const formData = new FormData();
-      formData.append("pdf", file, file.name);
-
-      try {
-        const response = await fetch("/api/extract-research-paper", {
-          method: "POST",
-          body: formData,
-        });
-
-        if (!response.ok) {
-          const payload = (await response.json().catch(() => null)) as
-            | { error?: string }
-            | null;
-          const errorMessage =
-            payload?.error ??
-            `Extraction failed with status ${response.status}.`;
-          throw new Error(errorMessage);
-        }
-
-        const result = (await response.json()) as {
-          method: string;
-          stats: { pages: number; combinedTextLength: number };
-        };
-
-        setUploadStatus({
-          state: "success",
-          preview: {
-            fileName: file.name,
-            method: result.method,
-            pageCount: result.stats.pages,
-            textLength: result.stats.combinedTextLength,
-          },
-        });
-      } catch (error) {
-        const message =
-          error instanceof Error
-            ? error.message
-            : "Failed to analyse PDF.";
-        setUploadStatus({ state: "error", message });
-      }
-    },
-    [],
-  );
+      setUploadStatus({
+        state: "success",
+        preview: {
+          fileName: file.name,
+          method: result.method,
+          pageCount: result.stats.pages,
+          textLength: result.stats.combinedTextLength,
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to analyse PDF.";
+      setUploadStatus({ state: "error", message });
+    }
+  }, []);
 
   return (
     <div className="flex min-h-screen flex-col bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950 text-white">
@@ -185,9 +164,8 @@ const IngestLanding = () => {
           Upload a paper to start your personalized summary
         </h1>
         <p className="mx-auto mt-4 max-w-2xl text-base text-zinc-300 sm:text-lg">
-          Drop a PDF or paste an arXiv link. We’ll ingest the document, extract
-          figures, and stream you into the workspace with summaries, Q&amp;A,
-          and persona-aware prompts.
+          Drop a PDF or paste an arXiv link. We’ll ingest the document, extract figures, and stream
+          you into the workspace with summaries, Q&amp;A, and persona-aware prompts.
         </p>
       </header>
 
@@ -197,9 +175,7 @@ const IngestLanding = () => {
             onSubmit={handleIngest}
             className="flex flex-col gap-4 rounded-3xl border border-white/10 bg-white/5 p-6 shadow-xl backdrop-blur"
           >
-            <h2 className="text-lg font-semibold text-white">
-              Paste arXiv ID or URL
-            </h2>
+            <h2 className="text-lg font-semibold text-white">Paste arXiv ID or URL</h2>
             <p className="text-sm text-zinc-300">
               We’ll fetch metadata, sections, and figures. Processing takes ~20–40s.
             </p>
@@ -215,9 +191,7 @@ const IngestLanding = () => {
             </label>
 
             <label className="flex flex-col gap-2 text-sm">
-              <span className="font-medium text-zinc-200">
-                Contact email (optional)
-              </span>
+              <span className="font-medium text-zinc-200">Contact email (optional)</span>
               <input
                 type="email"
                 placeholder="You’ll receive ingest notices here"
@@ -242,9 +216,7 @@ const IngestLanding = () => {
               disabled={ingestDisabled}
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-medium text-zinc-900 transition hover:bg-zinc-100 disabled:pointer-events-none disabled:opacity-40"
             >
-              {status.state === "submitting"
-                ? "Ingesting…"
-                : "Ingest arXiv paper"}
+              {status.state === "submitting" ? "Ingesting…" : "Ingest arXiv paper"}
             </button>
 
             {status.state === "error" && (
@@ -261,12 +233,10 @@ const IngestLanding = () => {
           </form>
 
           <div className="flex flex-col gap-4 rounded-3xl border border-white/10 bg-zinc-950/40 p-6 shadow-xl backdrop-blur">
-            <h2 className="text-lg font-semibold text-white">
-              Or upload a local PDF
-            </h2>
+            <h2 className="text-lg font-semibold text-white">Or upload a local PDF</h2>
             <p className="text-sm text-zinc-300">
-              We’ll auto-detect whether OCR is required and show a quick preview.
-              Full ingest support for arbitrary PDFs is coming soon.
+              We’ll auto-detect whether OCR is required and show a quick preview. Full ingest
+              support for arbitrary PDFs is coming soon.
             </p>
 
             <label className="relative flex flex-1 cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-white/20 bg-white/5 px-6 py-12 text-center text-sm text-zinc-300 transition hover:border-white/40 hover:bg-white/10">
@@ -276,9 +246,7 @@ const IngestLanding = () => {
                 className="sr-only"
                 onChange={handlePdfUpload}
               />
-              <span className="text-base font-semibold text-white">
-                Drag & drop PDF
-              </span>
+              <span className="text-base font-semibold text-white">Drag & drop PDF</span>
               <span>…or click to browse files</span>
             </label>
 
@@ -300,13 +268,11 @@ const IngestLanding = () => {
                   {uploadStatus.preview.fileName}
                 </div>
                 <div className="text-xs uppercase tracking-wide text-zinc-400">
-                  {uploadStatus.preview.pageCount} pages · method{" "}
-                  {uploadStatus.preview.method}
+                  {uploadStatus.preview.pageCount} pages · method {uploadStatus.preview.method}
                 </div>
                 <p className="text-xs text-zinc-400">
-                  Extracted {uploadStatus.preview.textLength.toLocaleString()}{" "}
-                  characters. PDF uploads will soon route into the full workspace
-                  pipeline.
+                  Extracted {uploadStatus.preview.textLength.toLocaleString()} characters. PDF
+                  uploads will soon route into the full workspace pipeline.
                 </p>
                 <button
                   type="button"
@@ -321,21 +287,20 @@ const IngestLanding = () => {
         </section>
 
         <section className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur">
-          <h2 className="text-base font-semibold text-white">
-            What happens next?
-          </h2>
+          <h2 className="text-base font-semibold text-white">What happens next?</h2>
           <ul className="mt-4 space-y-3 text-sm text-zinc-300">
             <li>
-              <span className="font-medium text-white">1.</span> Fetch metadata,
-              HTML, PDF, and TEI artefacts for section-aware parsing.
+              <span className="font-medium text-white">1.</span> Fetch metadata, HTML, PDF, and TEI
+              artefacts for section-aware parsing.
             </li>
             <li>
-              <span className="font-medium text-white">2.</span> Chunk the paper,
-              capture figures/citations, persist to Postgres, and index embeddings in Qdrant for hybrid retrieval.
+              <span className="font-medium text-white">2.</span> Chunk the paper, capture
+              figures/citations, persist to Postgres, and index embeddings in Qdrant for hybrid
+              retrieval.
             </li>
             <li>
-              <span className="font-medium text-white">3.</span> Redirect you to
-              the reader workspace where summaries, figures, and chat await.
+              <span className="font-medium text-white">3.</span> Redirect you to the reader
+              workspace where summaries, figures, and chat await.
             </li>
           </ul>
         </section>

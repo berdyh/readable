@@ -4,14 +4,10 @@
   "parent": "web",
   "path": "src/app/components/workspace",
   "goal": "Composes the paper reading surface.",
-  "owns": [
-    "src/app/components/workspace"
-  ],
+  "owns": ["src/app/components/workspace"],
   "interface": {
     "entrypoint": "ReaderWorkspace.tsx",
-    "exports": [
-      "ReaderWorkspace"
-    ]
+    "exports": ["ReaderWorkspace"]
   },
   "uses": [
     {
@@ -23,12 +19,6 @@
       "via": "@/server/editor/types"
     }
   ],
-  "constraints": [
-    "reading layout",
-    "pass state",
-    "paper status"
-  ],
-  "checks": [
-    "pnpm vitest run src/app/components/workspace"
-  ]
+  "constraints": ["reading layout", "pass state", "paper status"],
+  "checks": ["pnpm vitest run src/app/components/workspace"]
 }

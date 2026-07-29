@@ -1,9 +1,6 @@
 "use client";
 
-export type EditorIntentAction =
-  | "summarize-selection"
-  | "go-deeper"
-  | "condense";
+export type EditorIntentAction = "summarize-selection" | "go-deeper" | "condense";
 
 export interface EditorIntentDetail {
   action: EditorIntentAction;

@@ -53,18 +53,16 @@
       <p>
         Running notes for implementing the approved
         <code>chat-bot-update-notes.html</code> /autoplan on branch
-        <code>feat/chat-panel-resizer</code>. This file tracks interpretation,
-        deviations, tradeoffs, and open questions separately from the historical
-        review artifact.
+        <code>feat/chat-panel-resizer</code>. This file tracks interpretation, deviations,
+        tradeoffs, and open questions separately from the historical review artifact.
       </p>
 
       <section>
         <h2>Current Status</h2>
         <p>
-          Implementation completed after the 2026-06-16 approval gate. The
-          worktree already contained broad prior changes, so this pass treated
-          current source files as authoritative and avoided reverting
-          pre-existing edits.
+          Implementation completed after the 2026-06-16 approval gate. The worktree already
+          contained broad prior changes, so this pass treated current source files as authoritative
+          and avoided reverting pre-existing edits.
         </p>
       </section>
 
@@ -83,7 +81,9 @@
             <tr>
               <td>Lovelace</td>
               <td>UI source visibility, answer card states, source-click proof feedback</td>
-              <td><code>superpowers:test-driven-development</code>, gstack design/devex review context</td>
+              <td>
+                <code>superpowers:test-driven-development</code>, gstack design/devex review context
+              </td>
               <td>Done; integrated with shared answer card</td>
             </tr>
             <tr>
@@ -112,25 +112,25 @@
         <h2>Design Decisions</h2>
         <ul>
           <li>
-            The controller owns the core QA/search response contract locally,
-            because UI and persistence tasks depend on that server shape.
+            The controller owns the core QA/search response contract locally, because UI and
+            persistence tasks depend on that server shape.
           </li>
           <li>
             Answer trust states are intentionally small for this pass:
-            <code>sourced</code>, <code>uncited</code>, and <code>refused</code>.
-            Retrieval degradation is represented as metadata on the result
-            rather than as a separate answer enum.
+            <code>sourced</code>, <code>uncited</code>, and <code>refused</code>. Retrieval
+            degradation is represented as metadata on the result rather than as a separate answer
+            enum.
           </li>
           <li>
-            A citation is considered valid only when its chunk ID resolves to
-            the current evidence loaded for the question. Unknown model-supplied
-            chunk IDs are dropped and counted in trust metadata.
+            A citation is considered valid only when its chunk ID resolves to the current evidence
+            loaded for the question. Unknown model-supplied chunk IDs are dropped and counted in
+            trust metadata.
           </li>
           <li>
             <code>AnswerCard</code> was extracted into
             <code>src/app/components/ai-chatbot/answer-card.tsx</code> so
-            <code>ChatIntegration</code> and the older embedded
-            <code>ChatPanel</code> render the same trust/provenance/source UI.
+            <code>ChatIntegration</code> and the older embedded <code>ChatPanel</code> render the
+            same trust/provenance/source UI.
           </li>
           <li>
             Chat-side UI state keeps the ergonomic <code>message.trust</code>
@@ -144,22 +144,19 @@
         <h2>Deviations</h2>
         <ul>
           <li>
-            The approved plan listed duplicate task IDs across phases. This
-            implementation groups them by subsystem instead of following task IDs
-            literally.
+            The approved plan listed duplicate task IDs across phases. This implementation groups
+            them by subsystem instead of following task IDs literally.
           </li>
           <li>
-            The QA contract does not fabricate a replacement source for uncited
-            answers. It returns an empty <code>cites</code> array with
-            <code>trust.status = "uncited"</code> when evidence exists but the
-            model did not provide a valid citation.
+            The QA contract does not fabricate a replacement source for uncited answers. It returns
+            an empty <code>cites</code> array with <code>trust.status = "uncited"</code> when
+            evidence exists but the model did not provide a valid citation.
           </li>
           <li>
             The approved plan named a broader answer union including
-            <code>degraded_text_only</code>, <code>source_unavailable</code>,
-            and <code>error</code>. This implementation keeps the backend answer
-            enum smaller and represents degradation/source availability as
-            metadata and row-level UI state.
+            <code>degraded_text_only</code>, <code>source_unavailable</code>, and
+            <code>error</code>. This implementation keeps the backend answer enum smaller and
+            represents degradation/source availability as metadata and row-level UI state.
           </li>
         </ul>
       </section>
@@ -168,23 +165,22 @@
         <h2>Tradeoffs</h2>
         <ul>
           <li>
-            Subagents are running with disjoint write scopes. This gives parallel
-            progress but means the controller will do final integration and
-            cross-file type cleanup.
+            Subagents are running with disjoint write scopes. This gives parallel progress but means
+            the controller will do final integration and cross-file type cleanup.
           </li>
           <li>
-            Provider errors from <code>/api/qa</code> are mapped to stable safe
-            codes and messages. Raw provider error text stays in server logs only.
+            Provider errors from <code>/api/qa</code> are mapped to stable safe codes and messages.
+            Raw provider error text stays in server logs only.
           </li>
           <li>
-            <code>pnpm verify</code> intentionally excludes live store, embedding,
-            Clerk, arXiv, and LLM checks. Those remain explicit commands so a
-            clean contributor proof is deterministic.
+            <code>pnpm verify</code> intentionally excludes live store, embedding, Clerk, arXiv, and
+            LLM checks. Those remain explicit commands so a clean contributor proof is
+            deterministic.
           </li>
           <li>
             Legacy assistant messages without metadata are marked
-            <code>trust.status = "unavailable"</code> at the API edge instead of
-            backfilling inferred trust.
+            <code>trust.status = "unavailable"</code> at the API edge instead of backfilling
+            inferred trust.
           </li>
         </ul>
       </section>
@@ -193,33 +189,30 @@
         <h2>Metrics And Kill Criteria</h2>
         <ul>
           <li>
-            <code>/api/qa</code> emits a privacy-safe
-            <code>[qa] trust_counter</code> log with trust status, citation
-            counts, retrieval status, and hit counts only. It intentionally
-            excludes paper IDs, user IDs, questions, answers, quotes, selected
-            text, and source text.
+            <code>/api/qa</code> emits a privacy-safe <code>[qa] trust_counter</code> log with trust
+            status, citation counts, retrieval status, and hit counts only. It intentionally
+            excludes paper IDs, user IDs, questions, answers, quotes, selected text, and source
+            text.
           </li>
           <li>
             Source navigation emits a browser-only
-            <code>readable-source-proof-counter</code> event with action,
-            status, source type, page presence, and source count only.
+            <code>readable-source-proof-counter</code> event with action, status, source type, page
+            presence, and source count only.
           </li>
           <li>
-            Day-1 sidecar review should track trust-state mix,
-            uncited/refused rate, retrieval degradation rate, source-click
-            success/unavailable rate, and repeat use after saved-history reloads.
+            Day-1 sidecar review should track trust-state mix, uncited/refused rate, retrieval
+            degradation rate, source-click success/unavailable rate, and repeat use after
+            saved-history reloads.
           </li>
           <li>
-            Sidecar direction remains viable if sourced answers dominate
-            answered QA sessions, source-click unavailable states stay rare, and
-            the documented local proof loop stays under 10 minutes. If uncited or
-            unavailable states are common, revisit the evidence-dossier direction
-            before expanding the chat surface.
+            Sidecar direction remains viable if sourced answers dominate answered QA sessions,
+            source-click unavailable states stay rare, and the documented local proof loop stays
+            under 10 minutes. If uncited or unavailable states are common, revisit the
+            evidence-dossier direction before expanding the chat surface.
           </li>
           <li>
-            Owner: branch implementer until handoff. Review date:
-            2026-07-16 or after the first 20 authenticated QA sessions,
-            whichever comes first.
+            Owner: branch implementer until handoff. Review date: 2026-07-16 or after the first 20
+            authenticated QA sessions, whichever comes first.
           </li>
         </ul>
       </section>
@@ -228,8 +221,8 @@
         <h2>Open Questions</h2>
         <ul>
           <li>
-            Browser source-click QA is documented and the UI path is implemented,
-            but this pass has not yet run a real browser session with Clerk auth.
+            Browser source-click QA is documented and the UI path is implemented, but this pass has
+            not yet run a real browser session with Clerk auth.
           </li>
         </ul>
       </section>
@@ -240,21 +233,19 @@
           <li><code>pnpm typecheck</code> passed after metadata integration.</li>
           <li><code>pnpm test</code> passed: 25 files, 172 tests.</li>
           <li>
-            <code>pnpm verify</code> passed after extracting the shared answer
-            card: lint, typecheck, and tests. Lint still reports existing
-            warnings, but no errors.
+            <code>pnpm verify</code> passed after extracting the shared answer card: lint,
+            typecheck, and tests. Lint still reports existing warnings, but no errors.
           </li>
           <li>
-            <code>pnpm verify</code> passed again after adding privacy-safe QA
-            trust counters and kill-criteria notes.
+            <code>pnpm verify</code> passed again after adding privacy-safe QA trust counters and
+            kill-criteria notes.
           </li>
           <li>
-            <code>pnpm test:api</code> passed against local
-            <code>next dev</code>: 12 offline route/auth/validation checks.
+            <code>pnpm test:api</code> passed against local <code>next dev</code>: 12 offline
+            route/auth/validation checks.
           </li>
           <li>
-            <code>pnpm build</code> passed again with Next.js 16.0.10 after the
-            observability patch.
+            <code>pnpm build</code> passed again with Next.js 16.0.10 after the observability patch.
           </li>
           <li><code>git diff --check</code> passed after final edits.</li>
         </ul>

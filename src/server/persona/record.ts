@@ -8,18 +8,14 @@
  * on it.
  */
 
-import { upsertInteractions, upsertPersonaConcepts } from '@/server/db';
+import { upsertInteractions, upsertPersonaConcepts } from "@/server/db";
 
 export interface ConceptInput {
   concept: string;
   description?: string;
 }
 
-export type PersonaInteractionType =
-  | 'qa'
-  | 'summarize'
-  | 'selection_summary'
-  | 'compare';
+export type PersonaInteractionType = "qa" | "summarize" | "selection_summary" | "compare";
 
 export interface RecordPersonaSignalsArgs {
   userId?: string;
@@ -33,9 +29,7 @@ export interface RecordPersonaSignalsArgs {
 
 const RESPONSE_TRUNCATE_LIMIT = 4000;
 
-export async function recordPersonaSignals(
-  args: RecordPersonaSignalsArgs,
-): Promise<void> {
+export async function recordPersonaSignals(args: RecordPersonaSignalsArgs): Promise<void> {
   const userId = args.userId?.trim();
   if (!userId) {
     return; // anonymous interaction — nothing to attribute.
@@ -43,8 +37,8 @@ export async function recordPersonaSignals(
 
   const sanitized = args.concepts
     .map((entry) => ({
-      concept: (entry?.concept ?? '').trim(),
-      description: (entry?.description ?? '').trim() || undefined,
+      concept: (entry?.concept ?? "").trim(),
+      description: (entry?.description ?? "").trim() || undefined,
     }))
     .filter((entry) => entry.concept.length > 0)
     .slice(0, 6);
@@ -63,9 +57,7 @@ export async function recordPersonaSignals(
     );
   }
 
-  const chunkIds = Array.from(
-    new Set(args.chunkIds.filter((id) => id.length > 0)),
-  );
+  const chunkIds = Array.from(new Set(args.chunkIds.filter((id) => id.length > 0)));
 
   await upsertInteractions([
     {

@@ -1,10 +1,7 @@
-import {
-  buildInteractionUuid,
-  buildPersonaConceptUuid,
-} from './ids';
-import { ensureSchema } from './migrate';
-import { withPgClient } from './postgres';
-import type { Interaction, PersonaConcept } from './types';
+import { buildInteractionUuid, buildPersonaConceptUuid } from "./ids";
+import { ensureSchema } from "./migrate";
+import { withPgClient } from "./postgres";
+import type { Interaction, PersonaConcept } from "./types";
 
 export async function listPersonaConceptsForUser(
   userId: string,
@@ -40,15 +37,12 @@ export async function listPersonaConceptsForUser(
       description: row.description ?? undefined,
       firstSeenPaperId: row.first_seen_paper_id ?? undefined,
       learnedAt: row.learned_at?.toISOString(),
-      confidence:
-        typeof row.confidence === 'number' ? row.confidence : undefined,
+      confidence: typeof row.confidence === "number" ? row.confidence : undefined,
     }));
   });
 }
 
-export async function upsertPersonaConcepts(
-  concepts: PersonaConcept[],
-): Promise<string[]> {
+export async function upsertPersonaConcepts(concepts: PersonaConcept[]): Promise<string[]> {
   if (concepts.length === 0) {
     return [];
   }
@@ -58,8 +52,7 @@ export async function upsertPersonaConcepts(
   return withPgClient(async (client) => {
     const ids: string[] = [];
     for (const concept of concepts) {
-      const id =
-        concept.id ?? buildPersonaConceptUuid(concept.userId, concept.concept);
+      const id = concept.id ?? buildPersonaConceptUuid(concept.userId, concept.concept);
       await client.query(
         `
         INSERT INTO persona_concepts (
@@ -84,7 +77,7 @@ export async function upsertPersonaConcepts(
           concept.description ?? null,
           concept.firstSeenPaperId ?? null,
           concept.learnedAt ?? null,
-          typeof concept.confidence === 'number' ? concept.confidence : null,
+          typeof concept.confidence === "number" ? concept.confidence : null,
         ],
       );
       ids.push(id);
@@ -93,9 +86,7 @@ export async function upsertPersonaConcepts(
   });
 }
 
-export async function upsertInteractions(
-  interactions: Interaction[],
-): Promise<string[]> {
+export async function upsertInteractions(interactions: Interaction[]): Promise<string[]> {
   if (interactions.length === 0) {
     return [];
   }
@@ -149,4 +140,3 @@ export async function upsertInteractions(
     return ids;
   });
 }
-

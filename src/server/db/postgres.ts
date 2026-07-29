@@ -1,4 +1,4 @@
-import { Pool, type PoolClient, type PoolConfig } from 'pg';
+import { Pool, type PoolClient, type PoolConfig } from "pg";
 
 export interface PostgresEnvironmentConfig {
   connectionString?: string;
@@ -22,25 +22,22 @@ function parseBoolean(value: string | undefined): boolean | undefined {
     return undefined;
   }
   const lower = value.trim().toLowerCase();
-  if (lower === 'true' || lower === '1' || lower === 'yes') {
+  if (lower === "true" || lower === "1" || lower === "yes") {
     return true;
   }
-  if (lower === 'false' || lower === '0' || lower === 'no') {
+  if (lower === "false" || lower === "0" || lower === "no") {
     return false;
   }
   return undefined;
 }
 
 export function getPostgresEnvironment(): PostgresEnvironmentConfig {
-  const connectionString =
-    process.env.DATABASE_URL ?? process.env.POSTGRES_URL ?? undefined;
+  const connectionString = process.env.DATABASE_URL ?? process.env.POSTGRES_URL ?? undefined;
 
   const config: PostgresEnvironmentConfig = {
     connectionString,
     host: process.env.POSTGRES_HOST,
-    port: process.env.POSTGRES_PORT
-      ? Number(process.env.POSTGRES_PORT)
-      : undefined,
+    port: process.env.POSTGRES_PORT ? Number(process.env.POSTGRES_PORT) : undefined,
     database: process.env.POSTGRES_DB,
     user: process.env.POSTGRES_USER,
     password: process.env.POSTGRES_PASSWORD,
@@ -49,17 +46,12 @@ export function getPostgresEnvironment(): PostgresEnvironmentConfig {
     statementTimeoutMs: Number(
       process.env.POSTGRES_STATEMENT_TIMEOUT_MS ?? DEFAULT_STATEMENT_TIMEOUT_MS,
     ),
-    idleTimeoutMs: Number(
-      process.env.POSTGRES_IDLE_TIMEOUT_MS ?? DEFAULT_IDLE_TIMEOUT_MS,
-    ),
+    idleTimeoutMs: Number(process.env.POSTGRES_IDLE_TIMEOUT_MS ?? DEFAULT_IDLE_TIMEOUT_MS),
   };
 
-  if (
-    !config.connectionString &&
-    !(config.host && config.database && config.user)
-  ) {
+  if (!config.connectionString && !(config.host && config.database && config.user)) {
     throw new Error(
-      'Postgres configuration is missing. Set DATABASE_URL or POSTGRES_HOST/POSTGRES_DB/POSTGRES_USER (and POSTGRES_PASSWORD).',
+      "Postgres configuration is missing. Set DATABASE_URL or POSTGRES_HOST/POSTGRES_DB/POSTGRES_USER (and POSTGRES_PASSWORD).",
     );
   }
 
@@ -93,7 +85,6 @@ function buildPoolConfig(env: PostgresEnvironmentConfig): PoolConfig {
 }
 
 declare global {
-
   var __readablePgPool: Pool | undefined;
 }
 
@@ -104,7 +95,7 @@ export function getPgPool(): Pool {
     return poolSingleton;
   }
 
-  if (typeof globalThis !== 'undefined' && globalThis.__readablePgPool) {
+  if (typeof globalThis !== "undefined" && globalThis.__readablePgPool) {
     poolSingleton = globalThis.__readablePgPool;
     return poolSingleton;
   }
@@ -112,11 +103,11 @@ export function getPgPool(): Pool {
   const env = getPostgresEnvironment();
   const pool = new Pool(buildPoolConfig(env));
 
-  pool.on('error', (error) => {
-    console.error('[postgres] Idle client error', error);
+  pool.on("error", (error) => {
+    console.error("[postgres] Idle client error", error);
   });
 
-  if (typeof globalThis !== 'undefined') {
+  if (typeof globalThis !== "undefined") {
     globalThis.__readablePgPool = pool;
   }
 
@@ -124,9 +115,7 @@ export function getPgPool(): Pool {
   return pool;
 }
 
-export async function withPgClient<T>(
-  fn: (client: PoolClient) => Promise<T>,
-): Promise<T> {
+export async function withPgClient<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
   const pool = getPgPool();
   const client = await pool.connect();
   try {
@@ -138,14 +127,14 @@ export async function withPgClient<T>(
 
 export async function pingPostgres(): Promise<void> {
   const pool = getPgPool();
-  await pool.query('SELECT 1');
+  await pool.query("SELECT 1");
 }
 
 export async function closePgPool(): Promise<void> {
   if (poolSingleton) {
     const pool = poolSingleton;
     poolSingleton = undefined;
-    if (typeof globalThis !== 'undefined') {
+    if (typeof globalThis !== "undefined") {
       globalThis.__readablePgPool = undefined;
     }
     await pool.end();

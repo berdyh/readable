@@ -4,16 +4,10 @@
   "parent": "server",
   "path": "src/server/persona",
   "goal": "Records which concepts a user has been exposed to.",
-  "owns": [
-    "src/server/persona"
-  ],
+  "owns": ["src/server/persona"],
   "interface": {
     "entrypoint": "index.ts",
-    "exports": [
-      "recordPersonaSignals",
-      "ConceptInput",
-      "PersonaInteractionType"
-    ]
+    "exports": ["recordPersonaSignals", "ConceptInput", "PersonaInteractionType"]
   },
   "uses": [
     {
@@ -21,11 +15,6 @@
       "via": "upsertPersonaConcepts"
     }
   ],
-  "constraints": [
-    "concept recording",
-    "interaction logging"
-  ],
-  "checks": [
-    "pnpm vitest run src/server/e2e"
-  ]
+  "constraints": ["concept recording", "interaction logging"],
+  "checks": ["pnpm vitest run src/server/e2e"]
 }

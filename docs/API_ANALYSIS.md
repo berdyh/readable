@@ -21,21 +21,21 @@ generates a summary, touches chat, or reads the user's persona is gated.
 
 ## Routes
 
-| Route | Methods | Auth | Purpose |
-| --- | --- | --- | --- |
-| `/api/health` | `GET` | public | Liveness probe. Returns `{ status, timestamp }`. No dependencies. |
-| `/api/ingest` | `POST` | **required** | Ingest an arXiv paper into Postgres + Qdrant. |
-| `/api/extract-research-paper` | `POST` | **required** | Extract text/figures/tables from an uploaded PDF (`multipart/form-data`). |
-| `/api/summarize` | `POST` | **required** | Structured paper summary; upserts extracted `concepts` into `persona_concepts`. |
-| `/api/qa` | `POST` | **required** | Grounded Q&A with citations. Also emits a `[qa] trust_counter` log line per call. |
-| `/api/editor/selection/summary` | `POST` | **required** | Summarize a text selection into a callout with citations. |
-| `/api/editor/selection/figures` | `POST` | public | Figures related to a text selection. |
-| `/api/editor/selection/citations` | `POST` | public | Citations related to a text selection. |
-| `/api/editor/ingest/arxiv` | `POST` | public | Inline arXiv ingestion from the editor. |
-| `/api/chat/session` | `POST` | **required** | Create a per-paper chat session. |
-| `/api/chat/history` | `GET`, `POST`, `DELETE` | **required** | Read / append / delete persisted chat messages. Ownership enforced via `ChatSessionOwnershipError` → `403`. |
-| `/api/skills` | `GET` | **required** | The authenticated user's `persona_concepts` (max 200). |
-| `/api/skills/[userId]` | `GET` | n/a | **Retired.** Always returns `410 Gone` pointing at `/api/skills`. Kept so old clients get a clear signal rather than a 404. |
+| Route                             | Methods                 | Auth         | Purpose                                                                                                                     |
+| --------------------------------- | ----------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| `/api/health`                     | `GET`                   | public       | Liveness probe. Returns `{ status, timestamp }`. No dependencies.                                                           |
+| `/api/ingest`                     | `POST`                  | **required** | Ingest an arXiv paper into Postgres + Qdrant.                                                                               |
+| `/api/extract-research-paper`     | `POST`                  | **required** | Extract text/figures/tables from an uploaded PDF (`multipart/form-data`).                                                   |
+| `/api/summarize`                  | `POST`                  | **required** | Structured paper summary; upserts extracted `concepts` into `persona_concepts`.                                             |
+| `/api/qa`                         | `POST`                  | **required** | Grounded Q&A with citations. Also emits a `[qa] trust_counter` log line per call.                                           |
+| `/api/editor/selection/summary`   | `POST`                  | **required** | Summarize a text selection into a callout with citations.                                                                   |
+| `/api/editor/selection/figures`   | `POST`                  | public       | Figures related to a text selection.                                                                                        |
+| `/api/editor/selection/citations` | `POST`                  | public       | Citations related to a text selection.                                                                                      |
+| `/api/editor/ingest/arxiv`        | `POST`                  | public       | Inline arXiv ingestion from the editor.                                                                                     |
+| `/api/chat/session`               | `POST`                  | **required** | Create a per-paper chat session.                                                                                            |
+| `/api/chat/history`               | `GET`, `POST`, `DELETE` | **required** | Read / append / delete persisted chat messages. Ownership enforced via `ChatSessionOwnershipError` → `403`.                 |
+| `/api/skills`                     | `GET`                   | **required** | The authenticated user's `persona_concepts` (max 200).                                                                      |
+| `/api/skills/[userId]`            | `GET`                   | n/a          | **Retired.** Always returns `410 Gone` pointing at `/api/skills`. Kept so old clients get a clear signal rather than a 404. |
 
 Client consumers are deliberately not listed here: the component tree under
 `src/app/components/` is refactored often and any such list goes stale within a

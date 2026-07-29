@@ -176,7 +176,9 @@ type IsAssignable<A, B> = [A] extends [B] ? true : false;
 export type SourceFitsWire = Assert<IsAssignable<Source, ChatCitation>>;
 /** Anything the history endpoint returns, the trust strip can render. */
 export type WireTrustRenders = Assert<IsAssignable<ChatTrustMetadata, TrustDisplayMetadata>>;
-export type WireMetadataRenders = Assert<IsAssignable<WireChatMessageMetadata, ChatMessageMetadata>>;
+export type WireMetadataRenders = Assert<
+  IsAssignable<WireChatMessageMetadata, ChatMessageMetadata>
+>;
 /** So can a fresh answer straight from `/api/qa`. */
 export type QaTrustRenders = Assert<IsAssignable<QaTrustMetadata, TrustDisplayMetadata>>;
 export type QaCitationRenders = Assert<IsAssignable<AnswerCitation, Source>>;

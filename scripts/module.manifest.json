@@ -3,9 +3,7 @@
   "id": "scripts",
   "path": "scripts",
   "goal": "Runs one-off operational tasks against the live services.",
-  "owns": [
-    "scripts"
-  ],
+  "owns": ["scripts"],
   "interface": {
     "entrypoint": "(invoked via package.json scripts)",
     "exports": []
@@ -28,11 +26,6 @@
       "via": "listAvailableLocalCodingAgents"
     }
   ],
-  "constraints": [
-    "operational scripts",
-    "no app imports of this directory"
-  ],
-  "checks": [
-    "pnpm typecheck"
-  ]
+  "constraints": ["operational scripts", "no app imports of this directory"],
+  "checks": ["pnpm typecheck"]
 }

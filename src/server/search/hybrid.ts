@@ -4,12 +4,9 @@ import {
   searchPaperChunksByText,
   type PaperChunk,
   type PaperChunkTextSearchHit,
-} from '@/server/db';
-import { embedQuery } from '@/server/vector';
-import {
-  searchPaperChunkVectors,
-  type QdrantSearchHit,
-} from '@/server/vector';
+} from "@/server/db";
+import { embedQuery } from "@/server/vector";
+import { searchPaperChunkVectors, type QdrantSearchHit } from "@/server/vector";
 
 export interface HybridPaperChunkQueryOptions {
   paperId: string;
@@ -40,13 +37,9 @@ export interface HybridPaperChunkQueryResult {
   retrieval: HybridRetrievalDiagnostics;
 }
 
-export type HybridVectorRetrievalStatus =
-  | 'ok'
-  | 'skipped'
-  | 'embedding_failed'
-  | 'search_failed';
+export type HybridVectorRetrievalStatus = "ok" | "skipped" | "embedding_failed" | "search_failed";
 
-export type HybridTextRetrievalStatus = 'ok' | 'empty';
+export type HybridTextRetrievalStatus = "ok" | "empty";
 
 export interface HybridRetrievalDiagnostics {
   vector: {
@@ -101,12 +94,9 @@ function combineRanks(
   return Array.from(scores.values()).sort((a, b) => b.score - a.score);
 }
 
-function buildHitFromChunk(
-  chunk: PaperChunk,
-  scored: ScoredItem | undefined,
-): HybridPaperChunkHit {
+function buildHitFromChunk(chunk: PaperChunk, scored: ScoredItem | undefined): HybridPaperChunkHit {
   return {
-    id: chunk.id ?? '',
+    id: chunk.id ?? "",
     paperId: chunk.paperId,
     chunkId: chunk.chunkId,
     text: chunk.text,
@@ -135,7 +125,7 @@ async function runVectorSearch(
   limit: number,
 ): Promise<{
   hits: QdrantSearchHit[];
-  diagnostics: HybridRetrievalDiagnostics['vector'];
+  diagnostics: HybridRetrievalDiagnostics["vector"];
 }> {
   let queryVector = vector;
 
@@ -143,13 +133,16 @@ async function runVectorSearch(
     try {
       queryVector = await embedQuery(query);
     } catch (error) {
-      console.warn('[hybrid] Embedding generation failed; falling back to text-only search.', error);
+      console.warn(
+        "[hybrid] Embedding generation failed; falling back to text-only search.",
+        error,
+      );
       return {
         hits: [],
         diagnostics: {
-          status: 'embedding_failed',
+          status: "embedding_failed",
           hitCount: 0,
-          reason: 'embedding_generation_failed',
+          reason: "embedding_generation_failed",
         },
       };
     }
@@ -159,9 +152,9 @@ async function runVectorSearch(
     return {
       hits: [],
       diagnostics: {
-        status: 'skipped',
+        status: "skipped",
         hitCount: 0,
-        reason: 'missing_query_vector',
+        reason: "missing_query_vector",
       },
     };
   }
@@ -175,18 +168,18 @@ async function runVectorSearch(
     return {
       hits,
       diagnostics: {
-        status: 'ok',
+        status: "ok",
         hitCount: hits.length,
       },
     };
   } catch (error) {
-    console.warn('[hybrid] Qdrant search failed; falling back to text-only.', error);
+    console.warn("[hybrid] Qdrant search failed; falling back to text-only.", error);
     return {
       hits: [],
       diagnostics: {
-        status: 'search_failed',
+        status: "search_failed",
         hitCount: 0,
-        reason: 'vector_search_failed',
+        reason: "vector_search_failed",
       },
     };
   }
@@ -207,7 +200,7 @@ export async function hybridPaperChunkSearch(
   const retrieval: HybridRetrievalDiagnostics = {
     vector: vectorResult.diagnostics,
     text: {
-      status: textHits.length > 0 ? 'ok' : 'empty',
+      status: textHits.length > 0 ? "ok" : "empty",
       hitCount: textHits.length,
     },
   };
@@ -219,7 +212,7 @@ export async function hybridPaperChunkSearch(
   }
 
   const chunkRecords = await fetchChunksByIds(ranked.map((entry) => entry.id));
-  const chunkMap = new Map(chunkRecords.map((chunk) => [chunk.id ?? '', chunk]));
+  const chunkMap = new Map(chunkRecords.map((chunk) => [chunk.id ?? "", chunk]));
 
   const hits: HybridPaperChunkHit[] = [];
   for (const entry of ranked) {
@@ -235,7 +228,7 @@ export async function hybridPaperChunkSearch(
 
   const targetPages = new Set<number>();
   for (const hit of hits) {
-    if (typeof hit.pageNumber !== 'number') {
+    if (typeof hit.pageNumber !== "number") {
       continue;
     }
     for (
@@ -253,15 +246,12 @@ export async function hybridPaperChunkSearch(
     return { hits, expandedWindow: [], retrieval };
   }
 
-  const windowChunks = await fetchChunksByPageWindow(
-    options.paperId,
-    Array.from(targetPages),
-  );
+  const windowChunks = await fetchChunksByPageWindow(options.paperId, Array.from(targetPages));
 
   const seen = new Set(hits.map((hit) => hit.id));
   const expandedWindow: HybridPaperChunkHit[] = [];
   for (const chunk of windowChunks) {
-    const id = chunk.id ?? '';
+    const id = chunk.id ?? "";
     if (!id || seen.has(id)) {
       continue;
     }

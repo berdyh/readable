@@ -17,8 +17,20 @@ import { join, relative } from "node:path";
 import { loadModules, ownerOf, REPO_ROOT } from "./modules.mjs";
 
 const SKIP_DIRS = new Set([
-  "node_modules", ".git", ".next", ".bare", "out", "build", "coverage",
-  "graphify-out", ".vercel", ".clerk", ".gstack", ".codex", ".vscode", "tmp",
+  "node_modules",
+  ".git",
+  ".next",
+  ".bare",
+  "out",
+  "build",
+  "coverage",
+  "graphify-out",
+  ".vercel",
+  ".clerk",
+  ".gstack",
+  ".codex",
+  ".vscode",
+  "tmp",
 ]);
 const SOURCE_RE = /\.(ts|tsx|mjs)$/;
 
@@ -27,7 +39,11 @@ function sourceFiles(dir, hits = []) {
     if (SKIP_DIRS.has(name)) continue;
     const full = join(dir, name);
     let st;
-    try { st = statSync(full); } catch { continue; }
+    try {
+      st = statSync(full);
+    } catch {
+      continue;
+    }
     if (st.isDirectory()) sourceFiles(full, hits);
     else if (SOURCE_RE.test(name)) hits.push(relative(REPO_ROOT, full));
   }
@@ -39,10 +55,7 @@ const problems = [];
 const notes = [];
 
 // ── Q1 coverage ────────────────────────────────────────────────────────────
-const files = [
-  ...sourceFiles(join(REPO_ROOT, "src")),
-  ...sourceFiles(join(REPO_ROOT, "scripts")),
-];
+const files = [...sourceFiles(join(REPO_ROOT, "src")), ...sourceFiles(join(REPO_ROOT, "scripts"))];
 const unowned = files.filter((f) => !ownerOf(f, modules));
 if (unowned.length) {
   problems.push(
@@ -81,7 +94,10 @@ function moduleForSpecifier(spec) {
   for (const m of modules) {
     for (const owned of m.owns ?? []) {
       if (asPath === owned || asPath.startsWith(owned + "/")) {
-        if (owned.length > bestLen) { bestLen = owned.length; best = m; }
+        if (owned.length > bestLen) {
+          bestLen = owned.length;
+          best = m;
+        }
       }
     }
   }
@@ -94,7 +110,11 @@ for (const f of files) {
   const owner = ownerOf(f, modules);
   if (!owner) continue;
   let text;
-  try { text = readFileSync(join(REPO_ROOT, f), "utf8"); } catch { continue; }
+  try {
+    text = readFileSync(join(REPO_ROOT, f), "utf8");
+  } catch {
+    continue;
+  }
   for (const m of text.matchAll(IMPORT_RE)) {
     const target = moduleForSpecifier(m[1]);
     if (!target || target.id === owner.id) continue;
@@ -138,13 +158,17 @@ for (const [id, targets] of [...actual].sort()) {
 for (const m of modules) {
   for (const u of m.uses ?? []) {
     if (u.kind && u.kind !== "import") {
-      notes.push(`  declared-only (${u.kind}, not statically verified): ${m.id} -> ${u.module} via ${u.via}`);
+      notes.push(
+        `  declared-only (${u.kind}, not statically verified): ${m.id} -> ${u.module} via ${u.via}`,
+      );
     }
     if (!byId.has(u.module)) {
       problems.push(`Q3 connections: ${m.id} declares unknown module "${u.module}"`);
     }
     if (!u.via) {
-      problems.push(`Q3 connections: ${m.id} -> ${u.module} has no "via" — an arrow with no named interface tells an agent a dependency exists but not what to read`);
+      problems.push(
+        `Q3 connections: ${m.id} -> ${u.module} has no "via" — an arrow with no named interface tells an agent a dependency exists but not what to read`,
+      );
     }
   }
 }

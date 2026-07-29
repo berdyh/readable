@@ -284,7 +284,10 @@ export function InlineChatPanel({
             )}
           </div>
 
-          <SelectionCallout selection={selection} onClear={selection ? onSelectionClear : undefined} />
+          <SelectionCallout
+            selection={selection}
+            onClear={selection ? onSelectionClear : undefined}
+          />
 
           {error && (
             <p
@@ -334,7 +337,9 @@ export function InlineChatPanel({
                 disabled={isSubmitting || !draft.trim()}
                 className="inline-flex h-9 items-center gap-2 rounded-md bg-zinc-900 px-4 text-sm font-medium text-white transition-colors duration-150 hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
               >
-                {isSubmitting && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
+                {isSubmitting && (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                )}
                 {isSubmitting ? "Sending…" : "Send"}
               </button>
             </div>

@@ -4,9 +4,7 @@
   "parent": "server",
   "path": "src/server/db",
   "goal": "Persists application records in Postgres.",
-  "owns": [
-    "src/server/db"
-  ],
+  "owns": ["src/server/db"],
   "interface": {
     "entrypoint": "index.ts",
     "exports": [
@@ -19,12 +17,6 @@
       "ChatSessionOwnershipError"
     ]
   },
-  "constraints": [
-    "DDL",
-    "queries",
-    "transactions"
-  ],
-  "checks": [
-    "pnpm vitest run src/server/db"
-  ]
+  "constraints": ["DDL", "queries", "transactions"],
+  "checks": ["pnpm vitest run src/server/db"]
 }

@@ -98,9 +98,7 @@ export interface UsePassStateResult {
   isLast: boolean;
 }
 
-export function usePassState(
-  options: UsePassStateOptions = {},
-): UsePassStateResult {
+export function usePassState(options: UsePassStateOptions = {}): UsePassStateResult {
   const { paperId } = options;
   // SSR-safe default. Hydration from localStorage happens in a
   // post-mount effect so the initial server + client render match.

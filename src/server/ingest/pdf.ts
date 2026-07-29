@@ -1,9 +1,6 @@
-import '@ungap/with-resolvers';
+import "@ungap/with-resolvers";
 
-import type {
-  PDFDocumentProxy,
-  TextItem,
-} from 'pdfjs-dist/types/src/display/api';
+import type { PDFDocumentProxy, TextItem } from "pdfjs-dist/types/src/display/api";
 
 import type {
   PdfCaptionMatch,
@@ -12,42 +9,42 @@ import type {
   PdfPageText,
   PdfAnalysis,
   PdfVisualKind,
-} from './types';
+} from "./types";
 
-type PdfJsModule = typeof import('pdfjs-dist/legacy/build/pdf.mjs');
+type PdfJsModule = typeof import("pdfjs-dist/legacy/build/pdf.mjs");
 
 let pdfjsModulePromise: Promise<PdfJsModule> | undefined;
 
 function isTextItem(item: unknown): item is TextItem {
   return (
     !!item &&
-    typeof item === 'object' &&
-    'str' in item &&
-    typeof (item as { str?: unknown }).str === 'string'
+    typeof item === "object" &&
+    "str" in item &&
+    typeof (item as { str?: unknown }).str === "string"
   );
 }
 
 function normalizePageText(text: string): string {
   return text
-    .replace(/\r\n/g, '\n')
-    .replace(/\t+/g, ' ')
-    .replace(/[ ]{2,}/g, ' ')
-    .replace(/\n[ ]+/g, '\n')
-    .replace(/[ ]+\n/g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
+    .replace(/\r\n/g, "\n")
+    .replace(/\t+/g, " ")
+    .replace(/[ ]{2,}/g, " ")
+    .replace(/\n[ ]+/g, "\n")
+    .replace(/[ ]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 
 function normalizeCaption(text: string): string {
-  return text.replace(/\s+/g, ' ').trim();
+  return text.replace(/\s+/g, " ").trim();
 }
 
 function normalizeReference(kind: PdfVisualKind, raw: string): string {
-  return `${kind}:${raw.toLowerCase().replace(/[^a-z0-9]+/g, '')}`;
+  return `${kind}:${raw.toLowerCase().replace(/[^a-z0-9]+/g, "")}`;
 }
 
 function createCaptionRegex(kind: PdfVisualKind): RegExp {
-  if (kind === 'figure') {
+  if (kind === "figure") {
     return /(?:Figure|Fig\.?)\s+(\d+(?:[A-Za-z\-]*)?)[\s:.\-]*([\s\S]+?)(?=\n{2,}|(?:Figure|Fig\.?)\s+\d+|Table\s+\d+|$)/gi;
   }
 
@@ -60,7 +57,7 @@ function generateCaptionId(
   normalizedLabel: string,
   index: number,
 ): string {
-  const slug = normalizedLabel.split(':')[1];
+  const slug = normalizedLabel.split(":")[1];
   if (slug) {
     return `${kind}-${slug}`;
   }
@@ -74,13 +71,13 @@ function buildCaptionMatches(
   pageNumber: number,
 ): PdfCaptionMatch[] {
   const regex = createCaptionRegex(kind);
-  const labelPrefix = kind === 'figure' ? 'Figure' : 'Table';
+  const labelPrefix = kind === "figure" ? "Figure" : "Table";
   const matches: PdfCaptionMatch[] = [];
 
   let execResult: RegExpExecArray | null;
   while ((execResult = regex.exec(text)) !== null) {
     const number = execResult[1]?.trim();
-    const caption = normalizeCaption(execResult[2] ?? '');
+    const caption = normalizeCaption(execResult[2] ?? "");
 
     if (!caption) {
       continue;
@@ -122,17 +119,17 @@ function buildPageText(items: unknown[]): string {
 
     parts.push(value);
     if (item.hasEOL) {
-      parts.push('\n');
+      parts.push("\n");
     } else {
-      parts.push(' ');
+      parts.push(" ");
     }
   }
 
-  return normalizePageText(parts.join(''));
+  return normalizePageText(parts.join(""));
 }
 
 async function extractImageMetadata(
-  page: Awaited<ReturnType<PDFDocumentProxy['getPage']>>,
+  page: Awaited<ReturnType<PDFDocumentProxy["getPage"]>>,
   pdfjs: PdfJsModule,
   pageNumber: number,
 ): Promise<PdfImageMetadata[]> {
@@ -149,11 +146,7 @@ async function extractImageMetadata(
       let height: number | undefined;
 
       try {
-        if (
-          imageName &&
-          typeof page.objs?.has === 'function' &&
-          page.objs.has(imageName)
-        ) {
+        if (imageName && typeof page.objs?.has === "function" && page.objs.has(imageName)) {
           const imageData = page.objs.get(imageName) as
             | { width?: number; height?: number }
             | undefined;
@@ -166,17 +159,17 @@ async function extractImageMetadata(
 
       images.push({
         pageNumber,
-        name: typeof imageName === 'string' ? imageName : undefined,
+        name: typeof imageName === "string" ? imageName : undefined,
         width,
         height,
-        type: 'xObject',
+        type: "xObject",
       });
     } else if (fn === pdfjs.OPS.paintInlineImageXObject) {
       const args = operatorList.argsArray[index];
       const inlineImage = args?.[0] as { width?: number; height?: number } | undefined;
       images.push({
         pageNumber,
-        type: 'inline',
+        type: "inline",
         width: inlineImage?.width,
         height: inlineImage?.height,
       });
@@ -199,8 +192,8 @@ async function readPageData(
     return undefined;
   }
 
-  const figures = buildCaptionMatches(text, 'figure', pageNumber);
-  const tables = buildCaptionMatches(text, 'table', pageNumber);
+  const figures = buildCaptionMatches(text, "figure", pageNumber);
+  const tables = buildCaptionMatches(text, "table", pageNumber);
   const images = await extractImageMetadata(page, pdfjs, pageNumber);
 
   return {
@@ -214,10 +207,9 @@ async function readPageData(
 
 async function loadPdfJs(): Promise<PdfJsModule> {
   if (!pdfjsModulePromise) {
-    pdfjsModulePromise = import('pdfjs-dist/legacy/build/pdf.mjs')
+    pdfjsModulePromise = import("pdfjs-dist/legacy/build/pdf.mjs")
       .then((module) => {
-        module.GlobalWorkerOptions.workerSrc =
-          'pdfjs-dist/legacy/build/pdf.worker.mjs';
+        module.GlobalWorkerOptions.workerSrc = "pdfjs-dist/legacy/build/pdf.worker.mjs";
         return module;
       })
       .catch((error) => {
@@ -229,9 +221,7 @@ async function loadPdfJs(): Promise<PdfJsModule> {
   return pdfjsModulePromise;
 }
 
-export async function extractPdfText(
-  payload: ArrayBuffer,
-): Promise<PdfExtractionResult> {
+export async function extractPdfText(payload: ArrayBuffer): Promise<PdfExtractionResult> {
   const pdfjs = await loadPdfJs();
   const loadingTask = pdfjs.getDocument({ data: new Uint8Array(payload) });
   const document = await loadingTask.promise;
@@ -258,25 +248,23 @@ export async function extractPdfText(
       tables.push(...pageData.tables);
       images.push(...pageData.images);
 
-       if (pageNumber <= sampleLimit) {
-         sampledTextLength += pageData.text.length;
-         sampledImageCount += pageData.images.length;
-       }
+      if (pageNumber <= sampleLimit) {
+        sampledTextLength += pageData.text.length;
+        sampledImageCount += pageData.images.length;
+      }
     }
   } finally {
     await document.destroy();
   }
 
-  const avgTextPerPage =
-    sampleLimit > 0 ? sampledTextLength / sampleLimit : 0;
-  const avgImagesPerPage =
-    sampleLimit > 0 ? sampledImageCount / sampleLimit : 0;
+  const avgTextPerPage = sampleLimit > 0 ? sampledTextLength / sampleLimit : 0;
+  const avgImagesPerPage = sampleLimit > 0 ? sampledImageCount / sampleLimit : 0;
   const isLikelyScanned =
     avgTextPerPage < 500 ||
     avgImagesPerPage >= 0.8 ||
     (avgTextPerPage < 1000 && avgImagesPerPage >= 0.5);
-  const confidence: 'low' | 'medium' | 'high' =
-    avgTextPerPage > 2000 ? 'high' : avgTextPerPage > 1000 ? 'medium' : 'low';
+  const confidence: "low" | "medium" | "high" =
+    avgTextPerPage > 2000 ? "high" : avgTextPerPage > 1000 ? "medium" : "low";
 
   const analysis: PdfAnalysis = {
     sampledPages: sampleLimit,
@@ -285,13 +273,13 @@ export async function extractPdfText(
     avgTextPerPage,
     avgImagesPerPage,
     isLikelyScanned,
-    recommendedTool: isLikelyScanned ? 'deepseek-ocr' : 'pdfjs-dist',
+    recommendedTool: isLikelyScanned ? "deepseek-ocr" : "pdfjs-dist",
     confidence,
   } as const;
 
   return {
     pages,
-    combinedText: combinedParts.join('\n\n').trim(),
+    combinedText: combinedParts.join("\n\n").trim(),
     figures,
     tables,
     images,
@@ -309,10 +297,10 @@ export function shouldUseOcr(
   }
 
   if (analysis.isLikelyScanned) {
-    if (analysis.confidence === 'high') {
+    if (analysis.confidence === "high") {
       return true;
     }
-    if (analysis.confidence === 'medium') {
+    if (analysis.confidence === "medium") {
       return combinedTextLength < threshold * 2;
     }
     return combinedTextLength < threshold;

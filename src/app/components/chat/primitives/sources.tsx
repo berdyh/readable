@@ -2,7 +2,14 @@
 
 import { useState } from "react";
 import { clsx } from "clsx";
-import { CheckCircle2, ChevronDown, ChevronUp, ExternalLink, FileText, XCircle } from "lucide-react";
+import {
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
+  FileText,
+  XCircle,
+} from "lucide-react";
 
 import {
   emitBlockNavigate,
@@ -113,8 +120,7 @@ function CitationRow({ source, paperId }: { source: AnswerCitationSource; paperI
   };
 
   const isFailed = navigationState === "unavailable" || !hasNavigation;
-  const StatusIcon =
-    navigationState === "success" ? CheckCircle2 : isFailed ? XCircle : FileText;
+  const StatusIcon = navigationState === "success" ? CheckCircle2 : isFailed ? XCircle : FileText;
   const statusTone =
     navigationState === "success"
       ? "text-emerald-600 dark:text-emerald-400"

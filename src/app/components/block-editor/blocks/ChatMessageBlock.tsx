@@ -39,9 +39,7 @@ export function ChatMessageBlock({
 
   // Parse chat history from block content
   // Format: messages separated by "---" lines
-  const messages = block.content
-    ? block.content.split(/---+\n/).filter(Boolean)
-    : [];
+  const messages = block.content ? block.content.split(/---+\n/).filter(Boolean) : [];
 
   const handleAnswerReceived = useCallback(
     (answer: string) => {
@@ -65,20 +63,23 @@ export function ChatMessageBlock({
     [onUpdate, onInsertBlocks],
   );
 
-  const handleQuestionSent = useCallback((question: string) => {
-    // Use ref to get the latest content, avoiding stale closure issues
-    // This ensures rapid sequential questions don't overwrite each other
-    const currentContent = contentRef.current || "";
-    const questionLine = `Q: ${question}`;
-    const newContent = currentContent
-      ? `${currentContent}\n${questionLine}\n---\n`
-      : `${questionLine}\n---\n`;
+  const handleQuestionSent = useCallback(
+    (question: string) => {
+      // Use ref to get the latest content, avoiding stale closure issues
+      // This ensures rapid sequential questions don't overwrite each other
+      const currentContent = contentRef.current || "";
+      const questionLine = `Q: ${question}`;
+      const newContent = currentContent
+        ? `${currentContent}\n${questionLine}\n---\n`
+        : `${questionLine}\n---\n`;
 
-    // Update both the ref immediately (for next question) and trigger state update
-    contentRef.current = newContent;
-    onUpdate(newContent);
-    setChatDraft(""); // Clear draft after sending
-  }, [onUpdate]);
+      // Update both the ref immediately (for next question) and trigger state update
+      contentRef.current = newContent;
+      onUpdate(newContent);
+      setChatDraft(""); // Clear draft after sending
+    },
+    [onUpdate],
+  );
 
   const handleError = useCallback((error: string) => {
     console.error("Chat error:", error);
@@ -127,9 +128,7 @@ export function ChatMessageBlock({
       <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-2 dark:border-zinc-600">
         <div className="flex items-center gap-2">
           <MessageSquare className="h-4 w-4 text-zinc-500" />
-          <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-            Inline Chat
-          </span>
+          <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Inline Chat</span>
         </div>
         <button
           type="button"
@@ -186,4 +185,3 @@ export function ChatMessageBlock({
     </div>
   );
 }
-

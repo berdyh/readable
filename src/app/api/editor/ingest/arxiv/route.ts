@@ -1,10 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import {
-  InlineArxivIngestError,
-  ingestArxivInline,
-  normalizeArxivTarget,
-} from "@/server/editor";
+import { InlineArxivIngestError, ingestArxivInline, normalizeArxivTarget } from "@/server/editor";
 
 interface InlineArxivRequest {
   target: string;

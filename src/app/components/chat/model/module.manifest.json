@@ -4,16 +4,10 @@
   "parent": "web.chat",
   "path": "src/app/components/chat/model",
   "goal": "Defines the client-side chat data shapes.",
-  "owns": [
-    "src/app/components/chat/model"
-  ],
+  "owns": ["src/app/components/chat/model"],
   "interface": {
     "entrypoint": "types.ts",
-    "exports": [
-      "ChatMessage",
-      "ChatTab",
-      "fromWireMessage"
-    ]
+    "exports": ["ChatMessage", "ChatTab", "fromWireMessage"]
   },
   "uses": [
     {
@@ -25,11 +19,6 @@
       "via": "@/server/qa/types"
     }
   ],
-  "constraints": [
-    "data shapes",
-    "string and number rules"
-  ],
-  "checks": [
-    "pnpm vitest run src/app/components/chat/model"
-  ]
+  "constraints": ["data shapes", "string and number rules"],
+  "checks": ["pnpm vitest run src/app/components/chat/model"]
 }

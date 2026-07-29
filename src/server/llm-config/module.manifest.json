@@ -4,9 +4,7 @@
   "parent": "server",
   "path": "src/server/llm-config",
   "goal": "Serves the prompt text and model id for a given task.",
-  "owns": [
-    "src/server/llm-config"
-  ],
+  "owns": ["src/server/llm-config"],
   "interface": {
     "entrypoint": "index.ts",
     "exports": [
@@ -17,12 +15,6 @@
       "getModelConfig"
     ]
   },
-  "constraints": [
-    "prompts.json",
-    "models.json",
-    "env overrides"
-  ],
-  "checks": [
-    "pnpm vitest run src/server/llm"
-  ]
+  "constraints": ["prompts.json", "models.json", "env overrides"],
+  "checks": ["pnpm vitest run src/server/llm"]
 }

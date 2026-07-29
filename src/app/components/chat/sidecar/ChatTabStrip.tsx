@@ -29,11 +29,7 @@ export function ChatTabStrip({
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   return (
-    <div
-      className="flex gap-1 overflow-x-auto px-3 pb-2"
-      role="tablist"
-      aria-label="Saved chats"
-    >
+    <div className="flex gap-1 overflow-x-auto px-3 pb-2" role="tablist" aria-label="Saved chats">
       {tabs.map((tab) => {
         const isActive = activeTabId === tab.id;
         const isPendingDelete = pendingDeleteId === tab.id;

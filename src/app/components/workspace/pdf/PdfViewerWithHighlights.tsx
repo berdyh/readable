@@ -10,25 +10,13 @@ import {
   useState,
   type ReactElement,
 } from "react";
-import {
-  PdfHighlighter,
-  PdfLoader,
-  Highlight as PdfHighlight,
-} from "react-pdf-highlighter";
-import type {
-  Content,
-  IHighlight,
-  LTWHP,
-  Scaled,
-  ScaledPosition,
-} from "react-pdf-highlighter";
+import { PdfHighlighter, PdfLoader, Highlight as PdfHighlight } from "react-pdf-highlighter";
+import type { Content, IHighlight, LTWHP, Scaled, ScaledPosition } from "react-pdf-highlighter";
 import { pdfjs } from "react-pdf";
 import clsx from "clsx";
 
-const PDFJS_WORKER_URL =
-  "https://unpkg.com/pdfjs-dist@5.4.296/build/pdf.worker.min.js";
-const PDFJS_STANDARD_FONT_URL =
-  "https://unpkg.com/pdfjs-dist@5.4.296/standard_fonts/";
+const PDFJS_WORKER_URL = "https://unpkg.com/pdfjs-dist@5.4.296/build/pdf.worker.min.js";
+const PDFJS_STANDARD_FONT_URL = "https://unpkg.com/pdfjs-dist@5.4.296/standard_fonts/";
 
 if (typeof window !== "undefined") {
   pdfjs.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL;
@@ -98,9 +86,7 @@ const SelectionToolbar = ({
 
   return (
     <div className="flex w-60 flex-col gap-3 rounded-md border border-zinc-200 bg-white p-3 shadow-md">
-      <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-        Selection
-      </div>
+      <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">Selection</div>
       <div className="max-h-24 overflow-y-auto rounded border border-zinc-100 bg-zinc-50 p-2 text-sm leading-relaxed text-zinc-700">
         {truncated}
         {text.trim().length > truncated.length ? "…" : ""}
@@ -195,10 +181,7 @@ const clamp01 = (value: number): number => {
 
 const MIN_REGION_SIZE = 0.05;
 
-const createRegionRect = (
-  pageNumber: number,
-  region?: PdfHighlightRegion,
-): Scaled => {
+const createRegionRect = (pageNumber: number, region?: PdfHighlightRegion): Scaled => {
   if (!region) {
     return {
       x1: 0,
@@ -232,213 +215,206 @@ const createRegionRect = (
 
 type HighlightState = Record<string, HighlightEntry[]>;
 
-const PdfViewerWithHighlights = forwardRef<
-  PdfViewerHandle,
-  PdfViewerWithHighlightsProps
->(({ pdfUrl, className, onSelectionAction }, ref) => {
-  const [highlightMap, setHighlightMap] = useState<HighlightState>({});
-  const [transientHighlight, setTransientHighlight] =
-    useState<HighlightEntry | null>(null);
-  const scrollToRef = useRef<((highlight: HighlightEntry) => void) | null>(null);
-  const transientTimeoutRef = useRef<number | null>(null);
+const PdfViewerWithHighlights = forwardRef<PdfViewerHandle, PdfViewerWithHighlightsProps>(
+  ({ pdfUrl, className, onSelectionAction }, ref) => {
+    const [highlightMap, setHighlightMap] = useState<HighlightState>({});
+    const [transientHighlight, setTransientHighlight] = useState<HighlightEntry | null>(null);
+    const scrollToRef = useRef<((highlight: HighlightEntry) => void) | null>(null);
+    const transientTimeoutRef = useRef<number | null>(null);
 
-  const highlights = useMemo(
-    () => highlightMap[pdfUrl] ?? [],
-    [highlightMap, pdfUrl],
-  );
+    const highlights = useMemo(() => highlightMap[pdfUrl] ?? [], [highlightMap, pdfUrl]);
 
-  const activeHighlights = useMemo(() => {
-    if (!transientHighlight) {
-      return highlights;
-    }
-    return [transientHighlight, ...highlights];
-  }, [highlights, transientHighlight]);
-
-  useEffect(() => {
-    return () => {
-      if (transientTimeoutRef.current !== null) {
-        window.clearTimeout(transientTimeoutRef.current);
+    const activeHighlights = useMemo(() => {
+      if (!transientHighlight) {
+        return highlights;
       }
-    };
-  }, []);
+      return [transientHighlight, ...highlights];
+    }, [highlights, transientHighlight]);
 
-  const updateHighlightsForUrl = useCallback(
-    (updater: (prev: HighlightEntry[]) => HighlightEntry[]) => {
-      setHighlightMap((prev) => {
-        const current = prev[pdfUrl] ?? [];
-        const next = updater(current);
+    useEffect(() => {
+      return () => {
+        if (transientTimeoutRef.current !== null) {
+          window.clearTimeout(transientTimeoutRef.current);
+        }
+      };
+    }, []);
 
-        if (next === current) {
-          return prev;
+    const updateHighlightsForUrl = useCallback(
+      (updater: (prev: HighlightEntry[]) => HighlightEntry[]) => {
+        setHighlightMap((prev) => {
+          const current = prev[pdfUrl] ?? [];
+          const next = updater(current);
+
+          if (next === current) {
+            return prev;
+          }
+
+          return {
+            ...prev,
+            [pdfUrl]: next,
+          };
+        });
+      },
+      [pdfUrl],
+    );
+
+    useImperativeHandle(ref, () => ({
+      scrollToPage(pageNumber: number, region?: PdfHighlightRegion) {
+        if (!scrollToRef.current) {
+          return;
         }
 
-        return {
-          ...prev,
-          [pdfUrl]: next,
-        };
-      });
-    },
-    [pdfUrl],
-  );
-
-  useImperativeHandle(ref, () => ({
-    scrollToPage(pageNumber: number, region?: PdfHighlightRegion) {
-      if (!scrollToRef.current) {
-        return;
-      }
-
-      const boundingRect = createRegionRect(pageNumber, region);
-      const placeholderHighlight = makeHighlightEntry(
-        {
-          pageNumber,
-          boundingRect,
-          rects: [boundingRect],
-        },
-        { text: "" },
-        "Explain",
-        {
-          includeComment: false,
-          meta: {
-            kind: "transient",
-            source: "navigation",
+        const boundingRect = createRegionRect(pageNumber, region);
+        const placeholderHighlight = makeHighlightEntry(
+          {
+            pageNumber,
+            boundingRect,
+            rects: [boundingRect],
           },
-        },
-      );
+          { text: "" },
+          "Explain",
+          {
+            includeComment: false,
+            meta: {
+              kind: "transient",
+              source: "navigation",
+            },
+          },
+        );
 
-      setTransientHighlight(placeholderHighlight);
+        setTransientHighlight(placeholderHighlight);
 
-      if (transientTimeoutRef.current !== null) {
-        window.clearTimeout(transientTimeoutRef.current);
-      }
+        if (transientTimeoutRef.current !== null) {
+          window.clearTimeout(transientTimeoutRef.current);
+        }
 
-      transientTimeoutRef.current = window.setTimeout(() => {
-        setTransientHighlight(null);
-      }, 2400);
+        transientTimeoutRef.current = window.setTimeout(() => {
+          setTransientHighlight(null);
+        }, 2400);
 
-      scrollToRef.current(placeholderHighlight);
-    },
-  }));
+        scrollToRef.current(placeholderHighlight);
+      },
+    }));
 
-  const removeHighlight = useCallback((id: string) => {
-    updateHighlightsForUrl((prev) => prev.filter((item) => item.id !== id));
-  }, [updateHighlightsForUrl]);
+    const removeHighlight = useCallback(
+      (id: string) => {
+        updateHighlightsForUrl((prev) => prev.filter((item) => item.id !== id));
+      },
+      [updateHighlightsForUrl],
+    );
 
-  const handleSelectionAction = useCallback(
-    (action: SelectionAction, position: ScaledPosition, content: Content) => {
-      const newHighlight = makeHighlightEntry(position, content, action, {
-        meta: {
-          kind: "user",
-          source: "selection",
-        },
-      });
-      updateHighlightsForUrl((prev) => [newHighlight, ...prev]);
-      onSelectionAction?.(action, newHighlight);
-    },
-    [onSelectionAction, updateHighlightsForUrl],
-  );
+    const handleSelectionAction = useCallback(
+      (action: SelectionAction, position: ScaledPosition, content: Content) => {
+        const newHighlight = makeHighlightEntry(position, content, action, {
+          meta: {
+            kind: "user",
+            source: "selection",
+          },
+        });
+        updateHighlightsForUrl((prev) => [newHighlight, ...prev]);
+        onSelectionAction?.(action, newHighlight);
+      },
+      [onSelectionAction, updateHighlightsForUrl],
+    );
 
-  const renderHighlight = useCallback(
-    (
-      highlight: ViewportHighlight,
-      _index: number,
-      setTip: (
+    const renderHighlight = useCallback(
+      (
         highlight: ViewportHighlight,
-        render: (highlight: ViewportHighlight) => ReactElement,
-      ) => void,
-      hideTip: () => void,
-      _viewportToScaled: unknown,
-      _screenshot: unknown,
-      isScrolledTo: boolean,
-    ) => (
-      highlight.meta?.kind === "transient" ? (
-        <div
-          key={highlight.id}
-          className={clsx(
-            "absolute pointer-events-none rounded-md border-2 border-sky-500/60 bg-sky-400/20 shadow-[0_0_0_2px_rgba(56,189,248,0.3)] transition-opacity duration-500",
-            isScrolledTo ? "opacity-100" : "opacity-0",
-          )}
-          style={{
-            left: highlight.position.boundingRect.left,
-            top: highlight.position.boundingRect.top,
-            width: highlight.position.boundingRect.width,
-            height: highlight.position.boundingRect.height,
-          }}
-        />
-      ) : (
-        <PdfHighlight
-          key={highlight.id}
-          position={highlight.position}
-          comment={highlight.comment}
-          isScrolledTo={isScrolledTo}
-          onClick={() =>
-            setTip(highlight, () => (
-              <HighlightPreview highlight={highlight} onRemove={(id) => {
-                removeHighlight(id);
-                hideTip();
-              }} />
-            ))
-          }
-        />
-      )
-    ),
-    [removeHighlight],
-  );
-
-  const handleSelectionFinished = useCallback(
-    (
-      position: ScaledPosition,
-      content: Content,
-      hideTipAndSelection: () => void,
-    ) => {
-      const text = content.text?.trim();
-      if (!text) {
-        hideTipAndSelection();
-        return null;
-      }
-
-      return (
-        <SelectionToolbar
-          text={text}
-          onAction={(action) => {
-            handleSelectionAction(action, position, content);
-            hideTipAndSelection();
-          }}
-        />
-      );
-    },
-    [handleSelectionAction],
-  );
-
-  const handleScrollRef = useCallback(
-    (scrollTo: (highlight: HighlightEntry) => void) => {
-      scrollToRef.current = scrollTo;
-    },
-    [],
-  );
-
-  const handleScrollChange = useCallback(() => {
-    // future hook for analytics or syncing scroll state
-  }, []);
-
-  return (
-    <div className={clsx("relative h-full w-full overflow-hidden", className)}>
-  <PdfLoader url={pdfUrl} beforeLoad={<Loader />} {...pdfOptions}>
-        {(pdfDocument) => (
-          <PdfHighlighter
-            pdfDocument={pdfDocument}
-            highlights={activeHighlights}
-            highlightTransform={renderHighlight}
-            onSelectionFinished={handleSelectionFinished}
-            onScrollChange={handleScrollChange}
-            scrollRef={handleScrollRef}
-            pdfScaleValue="page-width"
-            enableAreaSelection={() => false}
+        _index: number,
+        setTip: (
+          highlight: ViewportHighlight,
+          render: (highlight: ViewportHighlight) => ReactElement,
+        ) => void,
+        hideTip: () => void,
+        _viewportToScaled: unknown,
+        _screenshot: unknown,
+        isScrolledTo: boolean,
+      ) =>
+        highlight.meta?.kind === "transient" ? (
+          <div
+            key={highlight.id}
+            className={clsx(
+              "absolute pointer-events-none rounded-md border-2 border-sky-500/60 bg-sky-400/20 shadow-[0_0_0_2px_rgba(56,189,248,0.3)] transition-opacity duration-500",
+              isScrolledTo ? "opacity-100" : "opacity-0",
+            )}
+            style={{
+              left: highlight.position.boundingRect.left,
+              top: highlight.position.boundingRect.top,
+              width: highlight.position.boundingRect.width,
+              height: highlight.position.boundingRect.height,
+            }}
           />
-        )}
-      </PdfLoader>
-    </div>
-  );
-});
+        ) : (
+          <PdfHighlight
+            key={highlight.id}
+            position={highlight.position}
+            comment={highlight.comment}
+            isScrolledTo={isScrolledTo}
+            onClick={() =>
+              setTip(highlight, () => (
+                <HighlightPreview
+                  highlight={highlight}
+                  onRemove={(id) => {
+                    removeHighlight(id);
+                    hideTip();
+                  }}
+                />
+              ))
+            }
+          />
+        ),
+      [removeHighlight],
+    );
+
+    const handleSelectionFinished = useCallback(
+      (position: ScaledPosition, content: Content, hideTipAndSelection: () => void) => {
+        const text = content.text?.trim();
+        if (!text) {
+          hideTipAndSelection();
+          return null;
+        }
+
+        return (
+          <SelectionToolbar
+            text={text}
+            onAction={(action) => {
+              handleSelectionAction(action, position, content);
+              hideTipAndSelection();
+            }}
+          />
+        );
+      },
+      [handleSelectionAction],
+    );
+
+    const handleScrollRef = useCallback((scrollTo: (highlight: HighlightEntry) => void) => {
+      scrollToRef.current = scrollTo;
+    }, []);
+
+    const handleScrollChange = useCallback(() => {
+      // future hook for analytics or syncing scroll state
+    }, []);
+
+    return (
+      <div className={clsx("relative h-full w-full overflow-hidden", className)}>
+        <PdfLoader url={pdfUrl} beforeLoad={<Loader />} {...pdfOptions}>
+          {(pdfDocument) => (
+            <PdfHighlighter
+              pdfDocument={pdfDocument}
+              highlights={activeHighlights}
+              highlightTransform={renderHighlight}
+              onSelectionFinished={handleSelectionFinished}
+              onScrollChange={handleScrollChange}
+              scrollRef={handleScrollRef}
+              pdfScaleValue="page-width"
+              enableAreaSelection={() => false}
+            />
+          )}
+        </PdfLoader>
+      </div>
+    );
+  },
+);
 
 PdfViewerWithHighlights.displayName = "PdfViewerWithHighlights";
 

@@ -115,7 +115,8 @@ export const SLASH_COMMANDS: SlashCommandDefinition[] = [
             autoSubmit: true,
           }
         : {
-            question: "Summarize this paper's key contribution at a level suitable for stakeholders.",
+            question:
+              "Summarize this paper's key contribution at a level suitable for stakeholders.",
             autoSubmit: true,
           },
   },

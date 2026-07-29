@@ -4,9 +4,7 @@
   "parent": "server.llm",
   "path": "src/server/llm/providers",
   "goal": "Adapts each upstream model API to one provider interface.",
-  "owns": [
-    "src/server/llm/providers"
-  ],
+  "owns": ["src/server/llm/providers"],
   "interface": {
     "entrypoint": "(via ../index.ts)",
     "exports": [
@@ -23,11 +21,6 @@
       "via": "getModel"
     }
   ],
-  "constraints": [
-    "one class per upstream API",
-    "request/response translation"
-  ],
-  "checks": [
-    "pnpm vitest run src/server/llm/providers"
-  ]
+  "constraints": ["one class per upstream API", "request/response translation"],
+  "checks": ["pnpm vitest run src/server/llm/providers"]
 }

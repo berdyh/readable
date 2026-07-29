@@ -140,39 +140,39 @@ Source of truth for paper metadata. Cascading deletes propagate to all child tab
 
 Note the primary key column is **`paper_id`**, not `id` — child tables reference `papers(paper_id)`.
 
-| Column             | Type            | Notes                            |
-| ------------------ | --------------- | -------------------------------- |
-| `paper_id`         | `text` (PK)     | arXiv ID or canonical identifier |
-| `title`            | `text`          |                                  |
-| `abstract`         | `text`          |                                  |
-| `authors`          | `text[]`        | `NOT NULL DEFAULT '{}'`          |
-| `primary_category` | `text`          |                                  |
-| `categories`       | `text[]`        | `NOT NULL DEFAULT '{}'`          |
-| `published_at`     | `timestamptz`   | From arXiv metadata              |
-| `updated_at`       | `timestamptz`   | From arXiv metadata              |
-| `pdf_url`          | `text`          |                                  |
-| `pages`            | `int`           | Optional page count              |
-| `ingested_at`      | `timestamptz`   | `NOT NULL DEFAULT NOW()`         |
-| `refreshed_at`     | `timestamptz`   | `NOT NULL DEFAULT NOW()`         |
+| Column             | Type          | Notes                            |
+| ------------------ | ------------- | -------------------------------- |
+| `paper_id`         | `text` (PK)   | arXiv ID or canonical identifier |
+| `title`            | `text`        |                                  |
+| `abstract`         | `text`        |                                  |
+| `authors`          | `text[]`      | `NOT NULL DEFAULT '{}'`          |
+| `primary_category` | `text`        |                                  |
+| `categories`       | `text[]`      | `NOT NULL DEFAULT '{}'`          |
+| `published_at`     | `timestamptz` | From arXiv metadata              |
+| `updated_at`       | `timestamptz` | From arXiv metadata              |
+| `pdf_url`          | `text`        |                                  |
+| `pages`            | `int`         | Optional page count              |
+| `ingested_at`      | `timestamptz` | `NOT NULL DEFAULT NOW()`         |
+| `refreshed_at`     | `timestamptz` | `NOT NULL DEFAULT NOW()`         |
 
 #### `paper_chunks`
 
 Semantic chunks used for retrieval. The `text_search` column is a generated `tsvector` (English stemming) with a GIN index, giving us BM25-style ranking via `ts_rank_cd` over `websearch_to_tsquery`.
 
-| Column        | Type        | Notes                                              |
-| ------------- | ----------- | -------------------------------------------------- |
-| `id`          | `uuid` (PK) | UUID v5 of `paper_id:chunk_id` (matches Qdrant ID) |
-| `paper_id`    | `text` (FK) | `papers(id)` ON DELETE CASCADE                     |
-| `chunk_id`    | `text`      | Stable chunk key inside the paper                  |
-| `text`        | `text`      | Chunk body                                         |
-| `section`     | `text`      | Heading/section name                               |
-| `page_number` | `int`       |                                                    |
-| `token_start` | `int`       |                                                    |
-| `token_end`   | `int`       |                                                    |
-| `citations`   | `text[]`    | Citation IDs referenced inline                     |
-| `figure_ids`  | `text[]`    | Figure IDs referenced inline                       |
-| `text_search` | `tsvector`  | `GENERATED ALWAYS AS to_tsvector('english', coalesce(text, '')) STORED` |
-| `created_at`  | `timestamptz` | `NOT NULL DEFAULT NOW()`                         |
+| Column        | Type          | Notes                                                                   |
+| ------------- | ------------- | ----------------------------------------------------------------------- |
+| `id`          | `uuid` (PK)   | UUID v5 of `paper_id:chunk_id` (matches Qdrant ID)                      |
+| `paper_id`    | `text` (FK)   | `papers(id)` ON DELETE CASCADE                                          |
+| `chunk_id`    | `text`        | Stable chunk key inside the paper                                       |
+| `text`        | `text`        | Chunk body                                                              |
+| `section`     | `text`        | Heading/section name                                                    |
+| `page_number` | `int`         |                                                                         |
+| `token_start` | `int`         |                                                                         |
+| `token_end`   | `int`         |                                                                         |
+| `citations`   | `text[]`      | Citation IDs referenced inline                                          |
+| `figure_ids`  | `text[]`      | Figure IDs referenced inline                                            |
+| `text_search` | `tsvector`    | `GENERATED ALWAYS AS to_tsvector('english', coalesce(text, '')) STORED` |
+| `created_at`  | `timestamptz` | `NOT NULL DEFAULT NOW()`                                                |
 
 Unique constraint on `(paper_id, chunk_id)`. GIN index on `text_search`. B-tree index on `paper_id` alone (`paper_chunks_paper_idx`) — page-window expansion (`fetchChunksByPageWindow`) filters `paper_id = $1 AND page_number = ANY($2)` and relies on that index plus the filter.
 
@@ -214,11 +214,11 @@ The collection is selected per active embedding provider (`EMBEDDING_PROVIDER=op
 
 `EMBEDDING_PROVIDER=auto` resolves to OpenRouter when `OPENROUTER_API_KEY` is set, otherwise to the built-in local hash embedder.
 
-| Provider config | Collection name (auto-derived) | Vector size |
-|---|---|---|
-| `EMBEDDING_PROVIDER=openai` + `text-embedding-3-small` | `paper_chunks_openai_text_embedding_3_small` | 1536 |
-| `EMBEDDING_PROVIDER=openrouter` + `nvidia/llama-nemotron-embed-vl-1b-v2:free` | `paper_chunks_openrouter_nvidia_llama_nemotron_embed_vl_1b_v2_free` | 2048 (probe to confirm) |
-| `EMBEDDING_PROVIDER=local` (no network; deterministic hash embedder) | `paper_chunks_local_*` | 384 (`LOCAL_EMBEDDING_DIMENSIONS`) |
+| Provider config                                                               | Collection name (auto-derived)                                      | Vector size                        |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------- | ---------------------------------- |
+| `EMBEDDING_PROVIDER=openai` + `text-embedding-3-small`                        | `paper_chunks_openai_text_embedding_3_small`                        | 1536                               |
+| `EMBEDDING_PROVIDER=openrouter` + `nvidia/llama-nemotron-embed-vl-1b-v2:free` | `paper_chunks_openrouter_nvidia_llama_nemotron_embed_vl_1b_v2_free` | 2048 (probe to confirm)            |
+| `EMBEDDING_PROVIDER=local` (no network; deterministic hash embedder)          | `paper_chunks_local_*`                                              | 384 (`LOCAL_EMBEDDING_DIMENSIONS`) |
 
 Override the auto-derived name with `QDRANT_COLLECTION` for stable single-provider deploys.
 
@@ -235,13 +235,13 @@ Use `pnpm embeddings:probe` to discover a remote model's native vector size when
 
 All cross-store IDs are UUID v5 derived from `READABLE_NAMESPACE_UUID` so the same logical record has the same UUID in Postgres and Qdrant. Each seed string is **prefixed with the entity kind**, so two entities can share the same natural key without colliding.
 
-| Entity            | Helper                       | UUID seed                                                  |
-| ----------------- | ---------------------------- | ---------------------------------------------------------- |
-| `paper_chunks`    | `buildPaperChunkUuid`        | `paper-chunk:<paperId>:<chunkId>`                          |
-| `paper_figures`   | `buildFigureUuid`            | `figure:<paperId>:<figureId>`                              |
-| `paper_citations` | `buildCitationUuid`          | `citation:<paperId>:<citationId>`                          |
-| `persona_concepts`| `buildPersonaConceptUuid`    | `persona-concept:<userId>:<concept>`                       |
-| `interactions`    | `buildInteractionUuid`       | `interaction:<userId>:<paperId>:<interactionType>:<prompt>` |
+| Entity             | Helper                    | UUID seed                                                   |
+| ------------------ | ------------------------- | ----------------------------------------------------------- |
+| `paper_chunks`     | `buildPaperChunkUuid`     | `paper-chunk:<paperId>:<chunkId>`                           |
+| `paper_figures`    | `buildFigureUuid`         | `figure:<paperId>:<figureId>`                               |
+| `paper_citations`  | `buildCitationUuid`       | `citation:<paperId>:<citationId>`                           |
+| `persona_concepts` | `buildPersonaConceptUuid` | `persona-concept:<userId>:<concept>`                        |
+| `interactions`     | `buildInteractionUuid`    | `interaction:<userId>:<paperId>:<interactionType>:<prompt>` |
 
 Chat rows are the exception: `chat_sessions.session_id` and `chat_messages.id` are plain `TEXT` supplied by the caller, not derived UUIDs.
 

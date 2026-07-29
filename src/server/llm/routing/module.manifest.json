@@ -4,9 +4,7 @@
   "parent": "server.llm",
   "path": "src/server/llm/routing",
   "goal": "Chooses which provider profile to try next after a failure.",
-  "owns": [
-    "src/server/llm/routing"
-  ],
+  "owns": ["src/server/llm/routing"],
   "interface": {
     "entrypoint": "index.ts",
     "exports": [
@@ -17,12 +15,6 @@
       "hasAnyProviderKey"
     ]
   },
-  "constraints": [
-    "credential discovery",
-    "cooldown state",
-    "failover classification"
-  ],
-  "checks": [
-    "pnpm vitest run src/server/llm/routing"
-  ]
+  "constraints": ["credential discovery", "cooldown state", "failover classification"],
+  "checks": ["pnpm vitest run src/server/llm/routing"]
 }

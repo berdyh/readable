@@ -4,9 +4,7 @@
   "parent": "web.block-editor",
   "path": "src/app/components/block-editor/blocks",
   "goal": "Renders one block of each type.",
-  "owns": [
-    "src/app/components/block-editor/blocks"
-  ],
+  "owns": ["src/app/components/block-editor/blocks"],
   "interface": {
     "entrypoint": "(imported by ../Block.tsx)",
     "exports": [
@@ -19,10 +17,6 @@
       "ChatMessageBlock"
     ]
   },
-  "constraints": [
-    "presentation of a single block"
-  ],
-  "checks": [
-    "pnpm vitest run src/app/components/block-editor"
-  ]
+  "constraints": ["presentation of a single block"],
+  "checks": ["pnpm vitest run src/app/components/block-editor"]
 }

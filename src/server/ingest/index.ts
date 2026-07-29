@@ -18,18 +18,14 @@ export type {
   PaperSection,
   PaperReference,
   PaperFigure,
-} from './types';
+} from "./types";
 
-export { ingestPaper } from './pipeline';
+export { ingestPaper } from "./pipeline";
 
 // --- extraction primitives (see note above) ---
-export { fetchAr5ivHtml, fetchArxivMetadata } from './arxiv';
-export { parseAr5ivHtml } from './ar5iv';
-export { extractPdfText, shouldUseOcr } from './pdf';
-export { runDeepSeekOcr } from './ocr';
-export { fetchTextWithTimeout } from './utils';
-export {
-  buildAr5ivHtmlUrl,
-  getIngestEnvironment,
-  type IngestEnvironmentConfig,
-} from './config';
+export { fetchAr5ivHtml, fetchArxivMetadata } from "./arxiv";
+export { parseAr5ivHtml } from "./ar5iv";
+export { extractPdfText, shouldUseOcr } from "./pdf";
+export { runDeepSeekOcr } from "./ocr";
+export { fetchTextWithTimeout } from "./utils";
+export { buildAr5ivHtmlUrl, getIngestEnvironment, type IngestEnvironmentConfig } from "./config";

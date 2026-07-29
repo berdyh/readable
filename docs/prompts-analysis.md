@@ -13,13 +13,13 @@ There is no `src/server/prompts/` module. One existed as a duplicate of
 
 ## Accessors
 
-| Function | Returns |
-| --- | --- |
-| `getSystemPrompt(task)` | The base system prompt for `'paper_summary' \| 'selection_summary' \| 'qa'`. |
+| Function                        | Returns                                                                          |
+| ------------------------------- | -------------------------------------------------------------------------------- |
+| `getSystemPrompt(task)`         | The base system prompt for `'paper_summary' \| 'selection_summary' \| 'qa'`.     |
 | `getPaperSummaryRequirements()` | The `string[]` of task requirements injected into the paper-summary user prompt. |
-| `getPromptLimits()` | The truncation/count limits below. |
-| `getPromptsConfig()` | The whole typed `PromptConfig` object. |
-| `getModel(task)` | The model id for a task (from `models.json`). |
+| `getPromptLimits()`             | The truncation/count limits below.                                               |
+| `getPromptsConfig()`            | The whole typed `PromptConfig` object.                                           |
+| `getModel(task)`                | The model id for a task (from `models.json`).                                    |
 
 ## The three prompt tasks
 
@@ -57,16 +57,16 @@ There is no `src/server/prompts/` module. One existed as a duplicate of
 
 From `prompts.json` → `limits`, read via `getPromptLimits()`:
 
-| Key | Value | Applies to |
-| --- | --- | --- |
-| `section` | 10 | max sections in the summary outline |
-| `paragraph` | 3 | max key paragraphs per section |
-| `figure` | 6 | max figures in figure context |
-| `paragraph_truncate` | 360 | chars per outline paragraph |
-| `figure_caption_truncate` | 280 | chars per figure caption |
-| `figure_context_truncate` | 320 | chars per figure supporting paragraph |
-| `abstract_truncate` | 1200 | chars of abstract |
-| `text_truncate` | 420 | chars per evidence chunk |
+| Key                       | Value | Applies to                            |
+| ------------------------- | ----- | ------------------------------------- |
+| `section`                 | 10    | max sections in the summary outline   |
+| `paragraph`               | 3     | max key paragraphs per section        |
+| `figure`                  | 6     | max figures in figure context         |
+| `paragraph_truncate`      | 360   | chars per outline paragraph           |
+| `figure_caption_truncate` | 280   | chars per figure caption              |
+| `figure_context_truncate` | 320   | chars per figure supporting paragraph |
+| `abstract_truncate`       | 1200  | chars of abstract                     |
+| `text_truncate`           | 420   | chars per evidence chunk              |
 
 These exist to keep prompts inside the context window; change them in
 `prompts.json`, not at the call site.

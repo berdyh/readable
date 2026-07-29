@@ -141,9 +141,3 @@ The application is ready for:
 - ✅ Testing with real papers
 - ✅ Production deployment considerations
 - ✅ Further feature development
-
-
-
-
-
-

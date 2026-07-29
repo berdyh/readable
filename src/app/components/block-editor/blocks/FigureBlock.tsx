@@ -15,11 +15,7 @@ interface FigureBlockProps {
  * Figure Block Component
  * Displays figure images from research papers with captions and page anchors
  */
-export function FigureBlock({
-  block,
-  paperId,
-  isLocked = false,
-}: FigureBlockProps) {
+export function FigureBlock({ block, paperId, isLocked = false }: FigureBlockProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [imageError, setImageError] = useState(false);
 
@@ -60,11 +56,7 @@ export function FigureBlock({
             Figure {figureId ? `(${figureId})` : ""} {page ? `- Page ${page}` : ""}
           </span>
         </div>
-        {caption && (
-          <div className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">
-            {caption}
-          </div>
-        )}
+        {caption && <div className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">{caption}</div>}
       </div>
     );
   }
@@ -204,9 +196,7 @@ export function FigureBlock({
             {(caption || figureId || page !== undefined) && (
               <div className="mt-4 rounded bg-white/10 p-4 text-white backdrop-blur-sm">
                 {figureId && <div className="text-sm font-medium">Figure {figureId}</div>}
-                {page !== undefined && (
-                  <div className="mt-1 text-xs opacity-80">Page {page}</div>
-                )}
+                {page !== undefined && <div className="mt-1 text-xs opacity-80">Page {page}</div>}
                 {caption && <div className="mt-2 text-sm">{caption}</div>}
               </div>
             )}
@@ -216,4 +206,3 @@ export function FigureBlock({
     </>
   );
 }
-

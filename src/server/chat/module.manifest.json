@@ -4,9 +4,7 @@
   "parent": "server",
   "path": "src/server/chat",
   "goal": "Shapes persisted chat rows into the wire messages the client renders.",
-  "owns": [
-    "src/server/chat"
-  ],
+  "owns": ["src/server/chat"],
   "interface": {
     "entrypoint": "index.ts",
     "exports": [
@@ -24,12 +22,6 @@
       "via": "ChatMessageRow"
     }
   ],
-  "constraints": [
-    "wire shapes",
-    "payload validation",
-    "metadata parsing"
-  ],
-  "checks": [
-    "pnpm vitest run src/server/chat src/app/components/chat"
-  ]
+  "constraints": ["wire shapes", "payload validation", "metadata parsing"],
+  "checks": ["pnpm vitest run src/server/chat src/app/components/chat"]
 }

@@ -57,8 +57,7 @@ function mapQaError(error: unknown): { status: number; message: string; code: st
       return {
         status: 500,
         code: "provider_auth",
-        message:
-          "The configured QA provider could not authenticate. Check provider credentials.",
+        message: "The configured QA provider could not authenticate. Check provider credentials.",
       };
     case "rate_limit":
       return {

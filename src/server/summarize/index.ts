@@ -1,15 +1,15 @@
-import { loadPaperSummaryContext } from './context';
-import { generateJson } from '@/server/llm';
-import { recordPersonaSignals } from '@/server/persona';
+import { loadPaperSummaryContext } from "./context";
+import { generateJson } from "@/server/llm";
+import { recordPersonaSignals } from "@/server/persona";
 import type {
   PageSpan,
   SummaryFigure,
   SummaryKeyFinding,
   SummaryResult,
   SummarySection,
-} from './types';
+} from "./types";
 
-import { getSystemPrompt, getPaperSummaryRequirements, getPromptLimits } from '@/server/llm-config';
+import { getSystemPrompt, getPaperSummaryRequirements, getPromptLimits } from "@/server/llm-config";
 
 const PROMPT_LIMITS = getPromptLimits();
 const PROMPT_SECTION_LIMIT = PROMPT_LIMITS.section;
@@ -17,89 +17,84 @@ const PROMPT_PARAGRAPH_LIMIT = PROMPT_LIMITS.paragraph;
 const PROMPT_FIGURE_LIMIT = PROMPT_LIMITS.figure;
 
 const SUMMARY_SCHEMA: Record<string, unknown> = {
-  type: 'object',
+  type: "object",
   additionalProperties: false,
-  required: ['sections', 'key_findings', 'figures', 'concepts'],
+  required: ["sections", "key_findings", "figures", "concepts"],
   properties: {
     sections: {
-      type: 'array',
+      type: "array",
       minItems: 3,
       maxItems: 6,
       items: {
-        type: 'object',
+        type: "object",
         additionalProperties: false,
-        required: ['section_id', 'title', 'summary', 'reasoning', 'key_points'],
+        required: ["section_id", "title", "summary", "reasoning", "key_points"],
         properties: {
-          section_id: { type: 'string' },
-          title: { type: 'string' },
-          summary: { type: 'string' },
-          reasoning: { type: 'string' },
+          section_id: { type: "string" },
+          title: { type: "string" },
+          summary: { type: "string" },
+          reasoning: { type: "string" },
           key_points: {
-            type: 'array',
+            type: "array",
             minItems: 1,
-            items: { type: 'string' },
+            items: { type: "string" },
             maxItems: 4,
           },
         },
       },
     },
     key_findings: {
-      type: 'array',
+      type: "array",
       minItems: 3,
       items: {
-        type: 'object',
+        type: "object",
         additionalProperties: false,
-        required: [
-          'statement',
-          'evidence',
-          'supporting_sections',
-          'related_figures',
-        ],
+        required: ["statement", "evidence", "supporting_sections", "related_figures"],
         properties: {
-          statement: { type: 'string' },
-          evidence: { type: 'string' },
+          statement: { type: "string" },
+          evidence: { type: "string" },
           supporting_sections: {
-            type: 'array',
+            type: "array",
             minItems: 1,
             maxItems: 4,
-            items: { type: 'string' },
+            items: { type: "string" },
           },
           related_figures: {
-            type: 'array',
+            type: "array",
             maxItems: 3,
-            items: { type: 'string' },
+            items: { type: "string" },
           },
         },
       },
     },
     figures: {
-      type: 'array',
+      type: "array",
       minItems: 1,
       items: {
-        type: 'object',
+        type: "object",
         additionalProperties: false,
-        required: ['figure_id', 'caption_summary', 'insight'],
+        required: ["figure_id", "caption_summary", "insight"],
         properties: {
-          figure_id: { type: 'string' },
-          caption_summary: { type: 'string' },
-          insight: { type: 'string' },
+          figure_id: { type: "string" },
+          caption_summary: { type: "string" },
+          insight: { type: "string" },
         },
       },
     },
     concepts: {
-      type: 'array',
+      type: "array",
       maxItems: 8,
       description:
         'Concepts the reader was exposed to. Names should be terse domain phrases (e.g. "attention mechanism", "Bayesian inference"). Drawn only from the paper — do not invent.',
       items: {
-        type: 'object',
+        type: "object",
         additionalProperties: false,
         // description is nullable so non-strict providers can omit it
         // without violating the contract. The parser drops nulls.
-        required: ['concept', 'description'],
+        required: ["concept", "description"],
         properties: {
-          concept: { type: 'string', minLength: 1, maxLength: 80 },
-          description: { type: ['string', 'null'], maxLength: 240 },
+          concept: { type: "string", minLength: 1, maxLength: 80 },
+          description: { type: ["string", "null"], maxLength: 240 },
         },
       },
     },
@@ -153,40 +148,40 @@ function truncateText(text: string, maxLength = PROMPT_LIMITS.text_truncate): st
 
 function formatPageSpan(span: PageSpan | undefined): string {
   if (!span?.start && !span?.end) {
-    return 'page ?';
+    return "page ?";
   }
 
   const start = span?.start;
   const end = span?.end;
 
-  if (typeof start === 'number' && typeof end === 'number') {
+  if (typeof start === "number" && typeof end === "number") {
     if (start === end) {
       return `page ${start}`;
     }
     return `pages ${start}-${end}`;
   }
 
-  if (typeof start === 'number') {
+  if (typeof start === "number") {
     return `page ${start}`;
   }
 
-  if (typeof end === 'number') {
+  if (typeof end === "number") {
     return `page ${end}`;
   }
 
-  return 'page ?';
+  return "page ?";
 }
 
 function formatPageAnchorFromSpan(span: PageSpan | undefined): string | undefined {
   const page = span?.start ?? span?.end;
-  if (typeof page === 'number' && Number.isFinite(page) && page > 0) {
+  if (typeof page === "number" && Number.isFinite(page) && page > 0) {
     return `(page ${page})`;
   }
   return undefined;
 }
 
 function formatPageAnchor(page?: number): string | undefined {
-  if (typeof page === 'number' && Number.isFinite(page) && page > 0) {
+  if (typeof page === "number" && Number.isFinite(page) && page > 0) {
     return `(page ${page})`;
   }
   return undefined;
@@ -206,7 +201,7 @@ function buildSectionOutlinePrompt(
     .map((section) => {
       const header = `- [${section.id}] ${section.title} (${formatPageSpan(section.pageSpan)})`;
       const figuresLine = section.referencedFigureIds.length
-        ? `    Figures: ${section.referencedFigureIds.join(', ')}`
+        ? `    Figures: ${section.referencedFigureIds.join(", ")}`
         : undefined;
 
       const highlights = section.paragraphs
@@ -216,11 +211,9 @@ function buildSectionOutlinePrompt(
             `    Key ${index + 1}: ${truncateText(paragraph, PROMPT_LIMITS.paragraph_truncate)}`,
         );
 
-      return [header, figuresLine, ...highlights]
-        .filter(Boolean)
-        .join('\n');
+      return [header, figuresLine, ...highlights].filter(Boolean).join("\n");
     })
-    .join('\n');
+    .join("\n");
 }
 
 function buildFigureContextPrompt(
@@ -233,18 +226,18 @@ function buildFigureContextPrompt(
   }>,
 ): string {
   if (!figures.length) {
-    return 'No figures were extracted for this paper.';
+    return "No figures were extracted for this paper.";
   }
 
   return figures
     .slice(0, PROMPT_FIGURE_LIMIT)
     .map((figure) => {
       const header = `- [${figure.id}] ${truncateText(
-        figure.caption ?? 'No caption available',
+        figure.caption ?? "No caption available",
         PROMPT_LIMITS.figure_caption_truncate,
-      )} (${formatPageAnchor(figure.pageNumber) ?? 'page ?'})`;
+      )} (${formatPageAnchor(figure.pageNumber) ?? "page ?"})`;
       const sectionsLine = figure.referencedSectionIds.length
-        ? `    Sections: ${figure.referencedSectionIds.join(', ')}`
+        ? `    Sections: ${figure.referencedSectionIds.join(", ")}`
         : undefined;
 
       const contextLines = figure.supportingParagraphs.map(
@@ -252,11 +245,9 @@ function buildFigureContextPrompt(
           `    Context ${index + 1}: ${truncateText(paragraph, PROMPT_LIMITS.figure_context_truncate)}`,
       );
 
-      return [header, sectionsLine, ...contextLines]
-        .filter(Boolean)
-        .join('\n');
+      return [header, sectionsLine, ...contextLines].filter(Boolean).join("\n");
     })
-    .join('\n');
+    .join("\n");
 }
 
 function buildMetadataPrompt(metadata?: {
@@ -268,7 +259,7 @@ function buildMetadataPrompt(metadata?: {
   updatedAt?: string;
 }): string {
   if (!metadata) {
-    return 'Paper metadata unavailable (fallback to section content).';
+    return "Paper metadata unavailable (fallback to section content).";
   }
 
   const parts: string[] = [];
@@ -277,7 +268,7 @@ function buildMetadataPrompt(metadata?: {
     parts.push(`Title: ${metadata.title}`);
   }
   if (metadata.authors?.length) {
-    parts.push(`Authors: ${metadata.authors.join(', ')}`);
+    parts.push(`Authors: ${metadata.authors.join(", ")}`);
   }
   if (metadata.primaryCategory) {
     parts.push(`Primary field: ${metadata.primaryCategory}`);
@@ -292,7 +283,7 @@ function buildMetadataPrompt(metadata?: {
     parts.push(`Abstract: ${truncateText(metadata.abstract, PROMPT_LIMITS.abstract_truncate)}`);
   }
 
-  return parts.join('\n');
+  return parts.join("\n");
 }
 
 function buildUserPrompt(context: Awaited<ReturnType<typeof loadPaperSummaryContext>>): string {
@@ -304,19 +295,19 @@ function buildUserPrompt(context: Awaited<ReturnType<typeof loadPaperSummaryCont
 
   return [
     `Paper ID: ${context.paperId}`,
-    '',
-    '# Metadata',
+    "",
+    "# Metadata",
     metadataBlock,
-    '',
-    '# Section Outline',
+    "",
+    "# Section Outline",
     sectionOutline,
-    '',
-    '# Figure Context',
+    "",
+    "# Figure Context",
     figureOutline,
-    '',
-    '# Task Requirements',
-    requirements.map((line) => `- ${line}`).join('\n'),
-  ].join('\n');
+    "",
+    "# Task Requirements",
+    requirements.map((line) => `- ${line}`).join("\n"),
+  ].join("\n");
 }
 
 function extractJsonPayload(content: string): unknown {
@@ -334,42 +325,28 @@ function coerceSections(input: unknown): LlmSection[] {
   const sections: LlmSection[] = [];
 
   for (const entry of input) {
-    if (!entry || typeof entry !== 'object') {
+    if (!entry || typeof entry !== "object") {
       continue;
     }
 
     const record = entry as Record<string, unknown>;
 
-    const sectionId =
-      typeof record.section_id === 'string'
-        ? record.section_id.trim()
-        : undefined;
+    const sectionId = typeof record.section_id === "string" ? record.section_id.trim() : undefined;
 
-    const summary =
-      typeof record.summary === 'string'
-        ? record.summary.trim()
-        : undefined;
+    const summary = typeof record.summary === "string" ? record.summary.trim() : undefined;
 
-    const reasoning =
-      typeof record.reasoning === 'string'
-        ? record.reasoning.trim()
-        : undefined;
+    const reasoning = typeof record.reasoning === "string" ? record.reasoning.trim() : undefined;
 
     if (!sectionId || !summary || !reasoning) {
       continue;
     }
 
-    const title =
-      typeof record.title === 'string'
-        ? record.title.trim()
-        : sectionId;
+    const title = typeof record.title === "string" ? record.title.trim() : sectionId;
 
     const keyPointsRaw = record.key_points;
     const keyPoints = Array.isArray(keyPointsRaw)
       ? keyPointsRaw
-          .map((item) =>
-            typeof item === 'string' ? item.trim() : undefined,
-          )
+          .map((item) => (typeof item === "string" ? item.trim() : undefined))
           .filter((item): item is string => Boolean(item))
           .slice(0, 4)
       : [];
@@ -394,28 +371,20 @@ function coerceKeyFindings(input: unknown): LlmKeyFinding[] {
   const findings: LlmKeyFinding[] = [];
 
   for (const entry of input) {
-    if (!entry || typeof entry !== 'object') {
+    if (!entry || typeof entry !== "object") {
       continue;
     }
 
     const record = entry as Record<string, unknown>;
 
-    const statement =
-      typeof record.statement === 'string'
-        ? record.statement.trim()
-        : undefined;
+    const statement = typeof record.statement === "string" ? record.statement.trim() : undefined;
 
-    const evidence =
-      typeof record.evidence === 'string'
-        ? record.evidence.trim()
-        : undefined;
+    const evidence = typeof record.evidence === "string" ? record.evidence.trim() : undefined;
 
     const supportingSectionsRaw = record.supporting_sections;
     const supportingSections = Array.isArray(supportingSectionsRaw)
       ? supportingSectionsRaw
-          .map((item) =>
-            typeof item === 'string' ? item.trim() : undefined,
-          )
+          .map((item) => (typeof item === "string" ? item.trim() : undefined))
           .filter((item): item is string => Boolean(item))
           .slice(0, 4)
       : [];
@@ -427,9 +396,7 @@ function coerceKeyFindings(input: unknown): LlmKeyFinding[] {
     const relatedFiguresRaw = record.related_figures;
     const relatedFigures = Array.isArray(relatedFiguresRaw)
       ? relatedFiguresRaw
-          .map((item) =>
-            typeof item === 'string' ? item.trim() : undefined,
-          )
+          .map((item) => (typeof item === "string" ? item.trim() : undefined))
           .filter((item): item is string => Boolean(item))
           .slice(0, 3)
       : [];
@@ -453,30 +420,21 @@ function coerceFigures(input: unknown): LlmFigure[] {
   const figures: LlmFigure[] = [];
 
   for (const entry of input) {
-    if (!entry || typeof entry !== 'object') {
+    if (!entry || typeof entry !== "object") {
       continue;
     }
 
     const record = entry as Record<string, unknown>;
 
-    const figureId =
-      typeof record.figure_id === 'string'
-        ? record.figure_id.trim()
-        : undefined;
+    const figureId = typeof record.figure_id === "string" ? record.figure_id.trim() : undefined;
 
-    const insight =
-      typeof record.insight === 'string'
-        ? record.insight.trim()
-        : undefined;
+    const insight = typeof record.insight === "string" ? record.insight.trim() : undefined;
 
     if (!figureId || !insight) {
       continue;
     }
 
-    const caption =
-      typeof record.caption_summary === 'string'
-        ? record.caption_summary.trim()
-        : '';
+    const caption = typeof record.caption_summary === "string" ? record.caption_summary.trim() : "";
 
     figures.push({
       figure_id: figureId,
@@ -494,15 +452,12 @@ function coerceConcepts(input: unknown): LlmConcept[] {
   }
   const concepts: LlmConcept[] = [];
   for (const entry of input) {
-    if (!entry || typeof entry !== 'object') continue;
+    if (!entry || typeof entry !== "object") continue;
     const record = entry as Record<string, unknown>;
-    const concept =
-      typeof record.concept === 'string' ? record.concept.trim() : undefined;
+    const concept = typeof record.concept === "string" ? record.concept.trim() : undefined;
     if (!concept) continue;
     const description =
-      typeof record.description === 'string'
-        ? record.description.trim()
-        : undefined;
+      typeof record.description === "string" ? record.description.trim() : undefined;
     concepts.push({ concept, description: description || undefined });
   }
   return concepts.slice(0, 8);
@@ -516,7 +471,7 @@ function parseModelSummary(rawContent: string): LlmSummaryPayload {
   const concepts = coerceConcepts(payload.concepts);
 
   if (sections.length < 1) {
-    throw new Error('Model response did not include any sections.');
+    throw new Error("Model response did not include any sections.");
   }
 
   return {
@@ -539,9 +494,7 @@ function postProcessSummary(
     }),
   );
 
-  const figureContext = new Map(
-    context.figures.map((figure) => [figure.id, figure]),
-  );
+  const figureContext = new Map(context.figures.map((figure) => [figure.id, figure]));
 
   const sections: SummarySection[] = llmSummary.sections
     .map((section) => {
@@ -564,39 +517,35 @@ function postProcessSummary(
     });
 
   if (sections.length < 3 && context.sections.length >= 3) {
-    throw new Error('Model response returned fewer than three sections.');
+    throw new Error("Model response returned fewer than three sections.");
   }
 
-  const keyFindings: SummaryKeyFinding[] = llmSummary.key_findings.map(
-    (finding) => {
-      const anchorSet = new Set<string>();
+  const keyFindings: SummaryKeyFinding[] = llmSummary.key_findings.map((finding) => {
+    const anchorSet = new Set<string>();
 
-      finding.supporting_sections.forEach((sectionId) => {
-        const span = sectionContext.get(sectionId)?.pageSpan;
-        const anchor = formatPageAnchorFromSpan(span);
-        if (anchor) {
-          anchorSet.add(anchor);
-        }
-      });
+    finding.supporting_sections.forEach((sectionId) => {
+      const span = sectionContext.get(sectionId)?.pageSpan;
+      const anchor = formatPageAnchorFromSpan(span);
+      if (anchor) {
+        anchorSet.add(anchor);
+      }
+    });
 
-      (finding.related_figures ?? []).forEach((figureId) => {
-        const pageAnchor = formatPageAnchor(
-          figureContext.get(figureId)?.pageNumber,
-        );
-        if (pageAnchor) {
-          anchorSet.add(pageAnchor);
-        }
-      });
+    (finding.related_figures ?? []).forEach((figureId) => {
+      const pageAnchor = formatPageAnchor(figureContext.get(figureId)?.pageNumber);
+      if (pageAnchor) {
+        anchorSet.add(pageAnchor);
+      }
+    });
 
-      return {
-        statement: finding.statement,
-        evidence: finding.evidence,
-        supporting_sections: finding.supporting_sections,
-        related_figures: finding.related_figures,
-        page_anchors: Array.from(anchorSet),
-      };
-    },
-  );
+    return {
+      statement: finding.statement,
+      evidence: finding.evidence,
+      supporting_sections: finding.supporting_sections,
+      related_figures: finding.related_figures,
+      page_anchors: Array.from(anchorSet),
+    };
+  });
 
   const mappedFigures: SummaryFigure[] = [];
 
@@ -619,9 +568,7 @@ function postProcessSummary(
   let figures: SummaryFigure[] = mappedFigures;
 
   if (!figures.length) {
-    const fallback = context.figures.find((figure) =>
-      formatPageAnchor(figure.pageNumber),
-    );
+    const fallback = context.figures.find((figure) => formatPageAnchor(figure.pageNumber));
     const fallbackAnchor = formatPageAnchor(fallback?.pageNumber);
 
     if (fallback && fallbackAnchor) {
@@ -629,8 +576,7 @@ function postProcessSummary(
         {
           figure_id: fallback.id,
           caption: fallback.caption,
-          insight:
-            'Figure referenced in the paper; review the caption for context.',
+          insight: "Figure referenced in the paper; review the caption for context.",
           page_anchor: fallbackAnchor,
         },
       ];
@@ -650,15 +596,18 @@ export async function summarizePaper(
 ): Promise<SummaryResult> {
   const context = await loadPaperSummaryContext(paperId);
 
-  const systemPrompt = getSystemPrompt('paper_summary');
+  const systemPrompt = getSystemPrompt("paper_summary");
   const userPrompt = buildUserPrompt(context);
-  const rawContent = await generateJson({
-    systemPrompt,
-    userPrompt,
-    schema: SUMMARY_SCHEMA,
-  }, {
-    taskName: 'summary',
-  });
+  const rawContent = await generateJson(
+    {
+      systemPrompt,
+      userPrompt,
+      schema: SUMMARY_SCHEMA,
+    },
+    {
+      taskName: "summary",
+    },
+  );
 
   const llmSummary = parseModelSummary(rawContent);
   const result = postProcessSummary(llmSummary, context);
@@ -667,22 +616,17 @@ export async function summarizePaper(
   void recordPersonaSignals({
     userId: options.userId,
     paperId,
-    interactionType: 'summarize',
+    interactionType: "summarize",
     prompt: `Summarize paper ${paperId}`,
-    response: result.sections.map((s) => s.summary).join('\n'),
+    response: result.sections.map((s) => s.summary).join("\n"),
     chunkIds: [],
     concepts: llmSummary.concepts,
   }).catch((error) => {
-    console.warn('[summarize] failed to persist persona signals:', error);
+    console.warn("[summarize] failed to persist persona signals:", error);
   });
 
   return result;
 }
 
-export type {
-  SummaryResult,
-  SummarySection,
-  SummaryKeyFinding,
-  SummaryFigure,
-} from './types';
+export type { SummaryResult, SummarySection, SummaryKeyFinding, SummaryFigure } from "./types";
 export type { SummarizeOptions };

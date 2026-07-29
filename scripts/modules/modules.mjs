@@ -12,8 +12,20 @@ import { fileURLToPath } from "node:url";
 export const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 const SKIP_DIRS = new Set([
-  "node_modules", ".git", ".next", ".bare", "out", "build", "coverage",
-  "graphify-out", ".vercel", ".clerk", ".gstack", ".codex", ".vscode", "tmp",
+  "node_modules",
+  ".git",
+  ".next",
+  ".bare",
+  "out",
+  "build",
+  "coverage",
+  "graphify-out",
+  ".vercel",
+  ".clerk",
+  ".gstack",
+  ".codex",
+  ".vscode",
+  "tmp",
 ]);
 
 function walk(dir, hits = []) {
@@ -21,7 +33,11 @@ function walk(dir, hits = []) {
     if (SKIP_DIRS.has(name)) continue;
     const full = join(dir, name);
     let st;
-    try { st = statSync(full); } catch { continue; }
+    try {
+      st = statSync(full);
+    } catch {
+      continue;
+    }
     if (st.isDirectory()) walk(full, hits);
     else if (name === "module.manifest.json") hits.push(full);
   }
@@ -33,9 +49,7 @@ export function loadModules() {
   const modules = files.map((f) => {
     const mod = JSON.parse(readFileSync(f, "utf8"));
     const narrativePath = join(dirname(f), "module.narrative.md");
-    mod.narrative = existsSync(narrativePath)
-      ? readFileSync(narrativePath, "utf8")
-      : "";
+    mod.narrative = existsSync(narrativePath) ? readFileSync(narrativePath, "utf8") : "";
     mod.manifestPath = relative(REPO_ROOT, f);
     return mod;
   });
@@ -57,7 +71,10 @@ export function ownerOf(relPath, modules) {
     for (const owned of m.owns ?? []) {
       const prefix = owned === "." ? "" : owned;
       if (prefix === "" || relPath === prefix || relPath.startsWith(prefix + "/")) {
-        if (prefix.length > bestLen) { bestLen = prefix.length; best = m; }
+        if (prefix.length > bestLen) {
+          bestLen = prefix.length;
+          best = m;
+        }
       }
     }
   }

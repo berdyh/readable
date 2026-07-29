@@ -4,24 +4,13 @@
   "parent": "web.workspace",
   "path": "src/app/components/workspace/pdf",
   "goal": "Renders the PDF beside the document with figure callouts.",
-  "owns": [
-    "src/app/components/workspace/pdf"
-  ],
+  "owns": ["src/app/components/workspace/pdf"],
   "interface": {
     "entrypoint": "PdfPanel.tsx",
-    "exports": [
-      "PdfPanel",
-      "FigureCallouts"
-    ]
+    "exports": ["PdfPanel", "FigureCallouts"]
   },
-  "constraints": [
-    "PDF rendering",
-    "highlight overlay",
-    "figure callouts"
-  ],
-  "checks": [
-    "pnpm vitest run src/app/components/workspace"
-  ],
+  "constraints": ["PDF rendering", "highlight overlay", "figure callouts"],
+  "checks": ["pnpm vitest run src/app/components/workspace"],
   "uses": [
     {
       "module": "server.editor",

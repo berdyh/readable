@@ -29,7 +29,6 @@ describe("markdown conversion", () => {
     expect(htmlToMarkdown("<p>done task</p>", "to_do_list")).toBe("done task");
   });
 
-
   it("preserves marker-like text inside todo content", () => {
     const markdown = "[ ] - follow-up";
     const html = markdownToHtml(markdown, "to_do_list");

@@ -5,15 +5,8 @@
  * Mirrors OpenClaw `failover-error.ts` + `coerceToFailoverError`.
  */
 
-import {
-  classifyFailoverSignal,
-  classifyMessage,
-} from './failover-classifier';
-import type {
-  FailoverErrorInit,
-  FailoverReason,
-  RoutingProviderId,
-} from './types';
+import { classifyFailoverSignal, classifyMessage } from "./failover-classifier";
+import type { FailoverErrorInit, FailoverReason, RoutingProviderId } from "./types";
 
 export class FailoverError extends Error {
   readonly reason: FailoverReason;
@@ -24,7 +17,7 @@ export class FailoverError extends Error {
 
   constructor(message: string, init: FailoverErrorInit) {
     super(message);
-    this.name = 'FailoverError';
+    this.name = "FailoverError";
     this.reason = init.reason;
     this.provider = init.provider;
     this.model = init.model;
@@ -48,40 +41,40 @@ export interface CoerceContext {
  * SDKs (OpenAI, Anthropic).
  */
 function readStatus(error: unknown): number | undefined {
-  if (!error || typeof error !== 'object') return undefined;
+  if (!error || typeof error !== "object") return undefined;
   const record = error as Record<string, unknown>;
-  for (const key of ['status', 'statusCode', 'httpStatus', 'code']) {
+  for (const key of ["status", "statusCode", "httpStatus", "code"]) {
     const value = record[key];
-    if (typeof value === 'number' && Number.isFinite(value)) {
+    if (typeof value === "number" && Number.isFinite(value)) {
       return value;
     }
     // Some SDKs put the status in a string. Parse if it looks numeric.
-    if (typeof value === 'string' && /^\d{3}$/.test(value)) {
+    if (typeof value === "string" && /^\d{3}$/.test(value)) {
       return Number(value);
     }
   }
   // OpenAI SDK: error.response.status
   const response = record.response;
-  if (response && typeof response === 'object') {
+  if (response && typeof response === "object") {
     const status = (response as Record<string, unknown>).status;
-    if (typeof status === 'number') return status;
+    if (typeof status === "number") return status;
   }
   return undefined;
 }
 
 function readBody(error: unknown): string | undefined {
   if (!error) return undefined;
-  if (typeof error === 'string') return error;
-  if (typeof error !== 'object') return undefined;
+  if (typeof error === "string") return error;
+  if (typeof error !== "object") return undefined;
   const record = error as Record<string, unknown>;
-  for (const key of ['body', 'responseText', 'text']) {
+  for (const key of ["body", "responseText", "text"]) {
     const value = record[key];
-    if (typeof value === 'string' && value.length > 0) return value;
+    if (typeof value === "string" && value.length > 0) return value;
   }
   // Stringify a JSON body for classifier hints.
-  for (const key of ['data', 'errorDetails', 'response']) {
+  for (const key of ["data", "errorDetails", "response"]) {
     const value = record[key];
-    if (value && typeof value === 'object') {
+    if (value && typeof value === "object") {
       try {
         return JSON.stringify(value);
       } catch {
@@ -93,35 +86,35 @@ function readBody(error: unknown): string | undefined {
 }
 
 function readRetryAfter(error: unknown): number | undefined {
-  if (!error || typeof error !== 'object') return undefined;
+  if (!error || typeof error !== "object") return undefined;
   const record = error as Record<string, unknown>;
 
-  for (const key of ['retryAfter', 'retry_after', 'retryAfterMs']) {
+  for (const key of ["retryAfter", "retry_after", "retryAfterMs"]) {
     const value = record[key];
-    if (typeof value === 'number' && Number.isFinite(value)) {
-      return key === 'retryAfterMs' ? value : value * 1000;
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return key === "retryAfterMs" ? value : value * 1000;
     }
-    if (typeof value === 'string') {
+    if (typeof value === "string") {
       const numeric = Number(value);
       if (!Number.isNaN(numeric)) {
-        return key === 'retryAfterMs' ? numeric : numeric * 1000;
+        return key === "retryAfterMs" ? numeric : numeric * 1000;
       }
     }
   }
 
   // Headers shape — `Retry-After` in seconds.
   const headers = record.headers;
-  if (headers && typeof headers === 'object') {
+  if (headers && typeof headers === "object") {
     const get = (headers as { get?: (name: string) => string | null }).get;
-    if (typeof get === 'function') {
-      const value = get.call(headers, 'retry-after');
+    if (typeof get === "function") {
+      const value = get.call(headers, "retry-after");
       if (value) {
         const numeric = Number(value);
         if (!Number.isNaN(numeric)) return numeric * 1000;
       }
     } else {
-      const value = (headers as Record<string, unknown>)['retry-after'];
-      if (typeof value === 'string') {
+      const value = (headers as Record<string, unknown>)["retry-after"];
+      if (typeof value === "string") {
         const numeric = Number(value);
         if (!Number.isNaN(numeric)) return numeric * 1000;
       }
@@ -132,12 +125,12 @@ function readRetryAfter(error: unknown): number | undefined {
 }
 
 function readMessage(error: unknown): string {
-  if (!error) return 'Unknown error.';
+  if (!error) return "Unknown error.";
   if (error instanceof Error) return error.message || error.name;
-  if (typeof error === 'string') return error;
-  if (typeof error === 'object') {
+  if (typeof error === "string") return error;
+  if (typeof error === "object") {
     const record = error as Record<string, unknown>;
-    if (typeof record.message === 'string') return record.message;
+    if (typeof record.message === "string") return record.message;
     try {
       return JSON.stringify(error);
     } catch {
@@ -151,10 +144,7 @@ function readMessage(error: unknown): string {
  * Convert anything thrown by a provider call into a FailoverError. If
  * the input is *already* a FailoverError, it's returned as-is.
  */
-export function coerceToFailoverError(
-  error: unknown,
-  ctx: CoerceContext,
-): FailoverError {
+export function coerceToFailoverError(error: unknown, ctx: CoerceContext): FailoverError {
   if (error instanceof FailoverError) {
     return error;
   }
@@ -163,11 +153,11 @@ export function coerceToFailoverError(
   // custom timeout) are not failover-worthy in the OpenClaw sense — the
   // user/runtime canceled. We still wrap them so the loop has a uniform
   // type to handle, but mark as 'unknown'.
-  if (error && typeof error === 'object') {
+  if (error && typeof error === "object") {
     const name = (error as { name?: string }).name;
-    if (name === 'AbortError') {
+    if (name === "AbortError") {
       return new FailoverError(readMessage(error), {
-        reason: 'unknown',
+        reason: "unknown",
         provider: ctx.provider,
         model: ctx.model,
         cause: error,
@@ -198,16 +188,14 @@ export function coerceToFailoverError(
  * you want to log/branch on `reason` but don't need to construct a new
  * error.
  */
-export function reasonFromError(
-  error: unknown,
-): FailoverReason | undefined {
+export function reasonFromError(error: unknown): FailoverReason | undefined {
   if (error instanceof FailoverError) {
     return error.reason;
   }
   const status = readStatus(error);
   const body = readBody(error);
   const message = readMessage(error);
-  if (typeof status === 'number') {
+  if (typeof status === "number") {
     return classifyFailoverSignal({ status, body, message });
   }
   return classifyMessage(message) ?? undefined;

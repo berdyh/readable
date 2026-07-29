@@ -4,21 +4,11 @@
   "parent": "server",
   "path": "src/server/external",
   "goal": "Enriches a citation from Semantic Scholar.",
-  "owns": [
-    "src/server/external"
-  ],
+  "owns": ["src/server/external"],
   "interface": {
     "entrypoint": "index.ts",
-    "exports": [
-      "enrichCitation",
-      "SemanticScholarPaper"
-    ]
+    "exports": ["enrichCitation", "SemanticScholarPaper"]
   },
-  "constraints": [
-    "outbound lookups",
-    "response caching"
-  ],
-  "checks": [
-    "pnpm vitest run src/server/external"
-  ]
+  "constraints": ["outbound lookups", "response caching"],
+  "checks": ["pnpm vitest run src/server/external"]
 }

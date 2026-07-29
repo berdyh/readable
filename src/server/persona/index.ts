@@ -5,8 +5,4 @@
  * anything is written (anonymous users are not recorded) is decided inside.
  */
 export { recordPersonaSignals } from "./record";
-export type {
-  ConceptInput,
-  PersonaInteractionType,
-  RecordPersonaSignalsArgs,
-} from "./record";
+export type { ConceptInput, PersonaInteractionType, RecordPersonaSignalsArgs } from "./record";

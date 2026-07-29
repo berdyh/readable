@@ -3,19 +3,11 @@
   "id": "server",
   "path": "src/server",
   "goal": "Holds the server-only business logic the API routes delegate to.",
-  "owns": [
-    "src/server"
-  ],
+  "owns": ["src/server"],
   "interface": {
     "entrypoint": "(per-child index.ts)",
     "exports": []
   },
-  "constraints": [
-    "server-only code",
-    "no React",
-    "no DOM"
-  ],
-  "checks": [
-    "pnpm vitest run src/server"
-  ]
+  "constraints": ["server-only code", "no React", "no DOM"],
+  "checks": ["pnpm vitest run src/server"]
 }

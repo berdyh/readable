@@ -1,28 +1,39 @@
-import { XMLParser } from 'fast-xml-parser';
+import { XMLParser } from "fast-xml-parser";
 
-import { buildAr5ivHtmlUrl, buildArxivMetadataUrl, buildArxivPdfUrl, getIngestEnvironment, type IngestEnvironmentConfig } from './config';
-import type { ArxivMetadata } from './types';
-import { ensureArray, fetchBufferWithTimeout, fetchTextWithTimeout, normalizeWhitespace } from './utils';
+import {
+  buildAr5ivHtmlUrl,
+  buildArxivMetadataUrl,
+  buildArxivPdfUrl,
+  getIngestEnvironment,
+  type IngestEnvironmentConfig,
+} from "./config";
+import type { ArxivMetadata } from "./types";
+import {
+  ensureArray,
+  fetchBufferWithTimeout,
+  fetchTextWithTimeout,
+  normalizeWhitespace,
+} from "./utils";
 
 const xmlParser = new XMLParser({
   ignoreAttributes: false,
-  attributeNamePrefix: '@_',
+  attributeNamePrefix: "@_",
   removeNSPrefix: true,
-  textNodeName: '#text',
+  textNodeName: "#text",
 });
 
 function parseArxivAuthors(entry: Record<string, unknown>): string[] {
   const authors = ensureArray(entry.author as Record<string, unknown>);
   return authors
     .map((author) => {
-      if (typeof author === 'string') {
+      if (typeof author === "string") {
         return normalizeWhitespace(author);
       }
       if (
         author &&
-        typeof author === 'object' &&
-        'name' in author &&
-        typeof (author as { name?: string }).name === 'string'
+        typeof author === "object" &&
+        "name" in author &&
+        typeof (author as { name?: string }).name === "string"
       ) {
         return normalizeWhitespace((author as { name: string }).name);
       }
@@ -34,31 +45,28 @@ function parseArxivAuthors(entry: Record<string, unknown>): string[] {
 function parseArxivCategories(entry: Record<string, unknown>): string[] {
   const primary =
     entry.primary_category &&
-    typeof entry.primary_category === 'object' &&
+    typeof entry.primary_category === "object" &&
     entry.primary_category !== null &&
-    '@_term' in entry.primary_category &&
-    typeof (entry.primary_category as { '@_term'?: string })['@_term'] ===
-      'string'
-      ? (entry.primary_category as { '@_term': string })['@_term']
+    "@_term" in entry.primary_category &&
+    typeof (entry.primary_category as { "@_term"?: string })["@_term"] === "string"
+      ? (entry.primary_category as { "@_term": string })["@_term"]
       : undefined;
 
   const categories = ensureArray(entry.category as Record<string, unknown>)
     .map((category) => {
       if (
         category &&
-        typeof category === 'object' &&
-        '@_term' in category &&
-        typeof (category as { '@_term'?: string })['@_term'] === 'string'
+        typeof category === "object" &&
+        "@_term" in category &&
+        typeof (category as { "@_term"?: string })["@_term"] === "string"
       ) {
-        return (category as { '@_term': string })['@_term'];
+        return (category as { "@_term": string })["@_term"];
       }
       return undefined;
     })
     .filter((value): value is string => Boolean(value));
 
-  const merged = [primary, ...categories].filter(
-    (value): value is string => Boolean(value),
-  );
+  const merged = [primary, ...categories].filter((value): value is string => Boolean(value));
 
   return Array.from(new Set(merged));
 }
@@ -72,14 +80,14 @@ function parseArxivLinks(entry: Record<string, unknown>): {
   for (const link of links) {
     if (
       link &&
-      typeof link === 'object' &&
-      '@_title' in link &&
-      typeof (link as { '@_title'?: string })['@_title'] === 'string' &&
-      (link as { '@_title': string })['@_title'] === 'pdf' &&
-      '@_href' in link &&
-      typeof (link as { '@_href'?: string })['@_href'] === 'string'
+      typeof link === "object" &&
+      "@_title" in link &&
+      typeof (link as { "@_title"?: string })["@_title"] === "string" &&
+      (link as { "@_title": string })["@_title"] === "pdf" &&
+      "@_href" in link &&
+      typeof (link as { "@_href"?: string })["@_href"] === "string"
     ) {
-      pdfUrl = (link as { '@_href': string })['@_href'];
+      pdfUrl = (link as { "@_href": string })["@_href"];
       break;
     }
   }
@@ -99,7 +107,7 @@ export async function fetchArxivMetadata(
     contactEmail
       ? {
           headers: {
-            'User-Agent': `ReadableIngest/1.0 (+mailto:${contactEmail})`,
+            "User-Agent": `ReadableIngest/1.0 (+mailto:${contactEmail})`,
           },
         }
       : undefined,
@@ -118,10 +126,7 @@ export async function fetchArxivMetadata(
     return undefined;
   }
 
-  const id =
-    typeof entry.id === 'string'
-      ? entry.id.split('/abs/').pop() ?? entry.id
-      : arxivId;
+  const id = typeof entry.id === "string" ? (entry.id.split("/abs/").pop() ?? entry.id) : arxivId;
 
   const { pdfUrl } = parseArxivLinks(entry);
 
@@ -129,22 +134,12 @@ export async function fetchArxivMetadata(
 
   return {
     id,
-    title:
-      typeof entry.title === 'string'
-        ? normalizeWhitespace(entry.title)
-        : undefined,
-    abstract:
-      typeof entry.summary === 'string'
-        ? normalizeWhitespace(entry.summary)
-        : undefined,
+    title: typeof entry.title === "string" ? normalizeWhitespace(entry.title) : undefined,
+    abstract: typeof entry.summary === "string" ? normalizeWhitespace(entry.summary) : undefined,
     publishedAt:
-      typeof entry.published === 'string'
-        ? new Date(entry.published).toISOString()
-        : undefined,
+      typeof entry.published === "string" ? new Date(entry.published).toISOString() : undefined,
     updatedAt:
-      typeof entry.updated === 'string'
-        ? new Date(entry.updated).toISOString()
-        : undefined,
+      typeof entry.updated === "string" ? new Date(entry.updated).toISOString() : undefined,
     authors: parseArxivAuthors(entry),
     pdfUrl: pdfUrl ?? buildArxivPdfUrl(arxivId),
     primaryCategory: categories[0],
@@ -168,9 +163,7 @@ export async function fetchArxivPdf(
   const pdfUrl = buildArxivPdfUrl(arxivId);
   return fetchBufferWithTimeout(pdfUrl, environment.pdfFetchTimeoutMs, {
     headers: {
-      'User-Agent': `ReadableIngest/1.0${
-        contactEmail ? ` (+mailto:${contactEmail})` : ''
-      }`,
+      "User-Agent": `ReadableIngest/1.0${contactEmail ? ` (+mailto:${contactEmail})` : ""}`,
     },
   });
 }

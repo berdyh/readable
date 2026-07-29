@@ -76,16 +76,16 @@ large component is weak evidence.
 
 The largest remaining non-test files, most likely to be hiding the same class of finding:
 
-| Lines | File |
-| --- | --- |
-| 744 | `src/server/llm/providers/local-coding-agent.ts` |
-| 735 | `src/server/db/papers.ts` |
-| 699 | `src/server/ingest/pipeline.ts` |
-| 688 | `src/server/summarize/index.ts` |
-| 482 | `src/app/components/block-editor/Block.tsx` |
-| 477 | `src/app/components/block-editor/parsers.ts` |
-| 451 | `src/app/components/workspace/pdf/PdfViewerWithHighlights.tsx` |
-| 442 | `src/server/editor/selection.ts` |
+| Lines | File                                                           |
+| ----- | -------------------------------------------------------------- |
+| 744   | `src/server/llm/providers/local-coding-agent.ts`               |
+| 735   | `src/server/db/papers.ts`                                      |
+| 699   | `src/server/ingest/pipeline.ts`                                |
+| 688   | `src/server/summarize/index.ts`                                |
+| 482   | `src/app/components/block-editor/Block.tsx`                    |
+| 477   | `src/app/components/block-editor/parsers.ts`                   |
+| 451   | `src/app/components/workspace/pdf/PdfViewerWithHighlights.tsx` |
+| 442   | `src/server/editor/selection.ts`                               |
 
 Budget for fixing what a split exposes rather than treating it as a regression the split
 caused.

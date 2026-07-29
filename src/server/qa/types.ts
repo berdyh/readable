@@ -66,13 +66,9 @@ export interface AnswerCitation {
   sourceAvailable?: boolean;
 }
 
-export type QaVectorRetrievalStatus =
-  | 'ok'
-  | 'skipped'
-  | 'embedding_failed'
-  | 'search_failed';
+export type QaVectorRetrievalStatus = "ok" | "skipped" | "embedding_failed" | "search_failed";
 
-export type QaTextRetrievalStatus = 'ok' | 'empty';
+export type QaTextRetrievalStatus = "ok" | "empty";
 
 export interface QaRetrievalDiagnostics {
   vector: {
@@ -86,7 +82,7 @@ export interface QaRetrievalDiagnostics {
   };
 }
 
-export type AnswerTrustStatus = 'sourced' | 'uncited' | 'refused';
+export type AnswerTrustStatus = "sourced" | "uncited" | "refused";
 
 export interface AnswerTrustMetadata {
   status: AnswerTrustStatus;

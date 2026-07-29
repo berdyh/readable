@@ -1,5 +1,5 @@
-import promptsData from './prompts.json';
-export * from './models';
+import promptsData from "./prompts.json";
+export * from "./models";
 
 export interface PromptConfig {
   system: {
@@ -38,9 +38,7 @@ export interface PromptConfig {
  * (previously sourced from Kontext.dev) was removed; the base prompt
  * from prompts.json is now returned as-is.
  */
-export function getSystemPrompt(
-  taskType: 'paper_summary' | 'selection_summary' | 'qa',
-): string {
+export function getSystemPrompt(taskType: "paper_summary" | "selection_summary" | "qa"): string {
   return promptsData.system[taskType].base;
 }
 
@@ -64,4 +62,3 @@ export function getPromptLimits() {
 export function getPromptsConfig(): PromptConfig {
   return promptsData as PromptConfig;
 }
-

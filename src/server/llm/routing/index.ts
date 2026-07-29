@@ -18,7 +18,7 @@ export type {
   ProfileUsageStats,
   RoutingProviderId,
   UsageStats,
-} from './types';
+} from "./types";
 
 export {
   collectProviderApiKeys,
@@ -26,7 +26,7 @@ export {
   hasAnyProviderKey,
   type ResolvedProviderKey,
   type CollectKeysOptions,
-} from './env-keys';
+} from "./env-keys";
 
 export {
   classifyFailoverSignal,
@@ -34,14 +34,14 @@ export {
   classifyMessage,
   shouldAdvanceFallback,
   shouldAllowCooldownProbeForReason,
-} from './failover-classifier';
+} from "./failover-classifier";
 
 export {
   FailoverError,
   coerceToFailoverError,
   reasonFromError,
   type CoerceContext,
-} from './failover-error';
+} from "./failover-error";
 
 export {
   applyCooldown,
@@ -58,12 +58,9 @@ export {
   saveUsageStatsOnly,
   upsertAuthProfileInStore,
   type StorePathSet,
-} from './auth-profile-store';
+} from "./auth-profile-store";
 
-export {
-  promoteAuthProfileInOrder,
-  resolveAuthProfileOrder,
-} from './auth-profile-order';
+export { promoteAuthProfileInOrder, resolveAuthProfileOrder } from "./auth-profile-order";
 
 export {
   detectCliCredentials,
@@ -75,14 +72,14 @@ export {
   resetCliCredentialCache,
   type CliCredential,
   type DetectedCliCredentials,
-} from './cli-detect';
+} from "./cli-detect";
 
 export {
   buildAuthProfileStore,
   listAvailableProviders,
   type BuildAuthProfileStoreOptions,
   type ProviderAvailability,
-} from './external-cli-sync';
+} from "./external-cli-sync";
 
 export {
   FallbackSummaryError,
@@ -93,4 +90,4 @@ export {
   type RunFnContext,
   type RunWithFallbackOptions,
   type RunWithFallbackResult,
-} from './fallback';
+} from "./fallback";

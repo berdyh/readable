@@ -4,10 +4,7 @@
   "parent": "server",
   "path": "src/server/auth",
   "goal": "Resolves the authenticated user id for a request.",
-  "owns": [
-    "src/server/auth",
-    "src/proxy.ts"
-  ],
+  "owns": ["src/server/auth", "src/proxy.ts"],
   "interface": {
     "entrypoint": "index.ts",
     "exports": [
@@ -17,11 +14,6 @@
       "AUTH_REQUIRED_MESSAGE"
     ]
   },
-  "constraints": [
-    "authentication",
-    "the authenticated-user error contract"
-  ],
-  "checks": [
-    "pnpm vitest run src/app/api"
-  ]
+  "constraints": ["authentication", "the authenticated-user error contract"],
+  "checks": ["pnpm vitest run src/app/api"]
 }

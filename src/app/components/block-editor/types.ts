@@ -61,4 +61,3 @@ export interface BlockOperation {
   newIndex?: number;
   oldIndex?: number;
 }
-

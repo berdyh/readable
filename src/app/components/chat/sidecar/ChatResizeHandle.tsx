@@ -46,7 +46,9 @@ export function ChatResizeHandle({
       <GripVertical
         className={clsx(
           "pointer-events-none h-5 w-5 rounded bg-white/90 p-0.5 text-zinc-400 shadow-sm transition-opacity duration-150 dark:bg-zinc-950/90 dark:text-zinc-500",
-          isResizing ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100",
+          isResizing
+            ? "opacity-100"
+            : "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100",
         )}
         aria-hidden="true"
       />

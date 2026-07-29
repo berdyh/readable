@@ -34,7 +34,7 @@ registry entry, not touching the menu component.
 
 **Locked blocks.** Anything the API generates is inserted with `metadata.locked = true` and is read-only
 until explicitly unlocked. The non-obvious rule: a slash command typed inside a locked block inserts its
-result *after* that block rather than into it, so generated output is never silently edited. Full
+result _after_ that block rather than into it, so generated output is never silently edited. Full
 behaviour in `src/app/components/block-editor/LOCKED_BLOCKS.md`.
 
 **Markdown** round-tripping rules are in `MARKDOWN_FORMAT.md`; the parsing lives in `parsers.ts` and
@@ -48,14 +48,14 @@ outside consumer is `BlockEditor.tsx`.
 The submodules are split by **what each is allowed to touch**, which makes "where does this new file
 go?" answerable without reading the whole module:
 
-| Submodule | Owns | May touch | Must not touch |
-| --- | --- | --- | --- |
-| `model/` | message/tab shapes, slash catalogue, prompt builders, panel-width math | pure data and rules | React, `fetch`, the DOM |
-| `api/` | `chatApi.ts` — the only chat network calls (`/api/chat/session`, `/api/chat/history`, `/api/qa`) | `fetch` | component state, the DOM |
-| `hooks/` | all chat client state: `useChatSessions`, `useChatPanelWidth`, `useSlashCommandMenu`, `useEditorIntentPrompt` | state, effects, the api layer | direct DOM styling |
-| `primitives/` | presentational pieces: answer card, conversation, message, prompt input, reasoning, sources | props → markup | `fetch`, app state |
-| `sidecar/` | the docked panel: header, tab strip, transcript, composer, resize handle, auth gate, launcher | composing the above | new network calls |
-| `inline/` | the ephemeral in-block panel and its slash menu | composing the above | new network calls |
+| Submodule     | Owns                                                                                                          | May touch                     | Must not touch           |
+| ------------- | ------------------------------------------------------------------------------------------------------------- | ----------------------------- | ------------------------ |
+| `model/`      | message/tab shapes, slash catalogue, prompt builders, panel-width math                                        | pure data and rules           | React, `fetch`, the DOM  |
+| `api/`        | `chatApi.ts` — the only chat network calls (`/api/chat/session`, `/api/chat/history`, `/api/qa`)              | `fetch`                       | component state, the DOM |
+| `hooks/`      | all chat client state: `useChatSessions`, `useChatPanelWidth`, `useSlashCommandMenu`, `useEditorIntentPrompt` | state, effects, the api layer | direct DOM styling       |
+| `primitives/` | presentational pieces: answer card, conversation, message, prompt input, reasoning, sources                   | props → markup                | `fetch`, app state       |
+| `sidecar/`    | the docked panel: header, tab strip, transcript, composer, resize handle, auth gate, launcher                 | composing the above           | new network calls        |
+| `inline/`     | the ephemeral in-block panel and its slash menu                                                               | composing the above           | new network calls        |
 
 `sidecar/` and `inline/` are two different products, not duplication: the sidecar is a persistent,
 resizable, multi-session panel; the inline panel is an ephemeral prompt attached to one block.
@@ -69,7 +69,7 @@ client assumption that broke. Fix the client; don't relax the assertion.
 
 `fromWireMessage()` is the wire→view boundary: it lifts `metadata.trust` to the top level and drops
 citations the UI cannot render. That second job exists because the two shapes genuinely disagree — a
-citation passes server validation if it carries *any* field, so a quote-only entry is valid on the wire
+citation passes server validation if it carries _any_ field, so a quote-only entry is valid on the wire
 but has neither a chunk id to navigate with nor a title to display.
 
 ## The editor↔chat seam

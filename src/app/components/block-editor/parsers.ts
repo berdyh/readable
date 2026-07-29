@@ -84,14 +84,14 @@ export function parseSummaryToBlocks(summary: SummaryResult): Block[] {
 
   // Parse key findings as callout blocks
   if (summary.key_findings && summary.key_findings.length > 0) {
-      blocks.push({
-        id: uuidv4(),
-        type: "heading_2",
-        content: "Key Findings",
-        metadata: {
-          locked: true, // Generated blocks are locked by default
-        },
-      });
+    blocks.push({
+      id: uuidv4(),
+      type: "heading_2",
+      content: "Key Findings",
+      metadata: {
+        locked: true, // Generated blocks are locked by default
+      },
+    });
 
     for (const finding of summary.key_findings) {
       const findingText = `${finding.statement}\n\nEvidence: ${finding.evidence}`;
@@ -119,14 +119,14 @@ export function parseSummaryToBlocks(summary: SummaryResult): Block[] {
 
   // Parse figures
   if (summary.figures && summary.figures.length > 0) {
-      blocks.push({
-        id: uuidv4(),
-        type: "heading_2",
-        content: "Figures",
-        metadata: {
-          locked: true, // Generated blocks are locked by default
-        },
-      });
+    blocks.push({
+      id: uuidv4(),
+      type: "heading_2",
+      content: "Figures",
+      metadata: {
+        locked: true, // Generated blocks are locked by default
+      },
+    });
 
     for (const figure of summary.figures) {
       // Parse page number from page_anchor format: "(page 4)" -> 4
@@ -137,7 +137,7 @@ export function parseSummaryToBlocks(summary: SummaryResult): Block[] {
           pageNumber = parseInt(match[1], 10);
         }
       }
-      
+
       blocks.push({
         id: uuidv4(),
         type: "figure",
@@ -190,10 +190,10 @@ export function parseCitationsToBlocks(result: SelectionCitationsResult): Block[
 
   if (result.citations && result.citations.length > 0) {
     for (const citation of result.citations) {
-      const citationText = citation.title 
+      const citationText = citation.title
         ? `${citation.title}${citation.authors ? ` - ${citation.authors.join(", ")}` : ""}${citation.year ? ` (${citation.year})` : ""}`
         : citation.citationId;
-      
+
       blocks.push({
         id: uuidv4(),
         type: "paragraph",
@@ -454,4 +454,3 @@ export function parseArxivHtmlToBlocks(result: InlineArxivIngestResult): Block[]
 
   return blocks;
 }
-

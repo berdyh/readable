@@ -4,14 +4,10 @@
   "parent": "server",
   "path": "src/server/summarize",
   "goal": "Produces a structured summary of a stored paper.",
-  "owns": [
-    "src/server/summarize"
-  ],
+  "owns": ["src/server/summarize"],
   "interface": {
     "entrypoint": "index.ts",
-    "exports": [
-      "summarizePaper"
-    ]
+    "exports": ["summarizePaper"]
   },
   "uses": [
     {
@@ -35,11 +31,6 @@
       "via": "getSystemPrompt"
     }
   ],
-  "constraints": [
-    "context assembly",
-    "structured summary output"
-  ],
-  "checks": [
-    "pnpm vitest run src/server/e2e"
-  ]
+  "constraints": ["context assembly", "structured summary output"],
+  "checks": ["pnpm vitest run src/server/e2e"]
 }

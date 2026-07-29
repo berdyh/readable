@@ -50,8 +50,8 @@ import from `@/server/*` **only for types** (`qa/types`, `summarize/types`, `edi
   `index.ts` prompts the LLM for structured JSON, then upserts the returned `concepts` into
   `persona_concepts` via `server/persona/record.ts`.
 - **Q&A** (`/api/qa` → `server/qa/`): `context.ts` calls `server/search/hybrid.ts` (Qdrant vector search
-  + Postgres `tsvector` full-text, fused with Reciprocal Rank Fusion, plus a page-window expansion),
-  `index.ts` answers with a JSON schema that forces grounded `citations` + `concepts`.
+  - Postgres `tsvector` full-text, fused with Reciprocal Rank Fusion, plus a page-window expansion),
+    `index.ts` answers with a JSON schema that forces grounded `citations` + `concepts`.
 - **Selection actions** (`/api/editor/selection/{summary,figures,citations}` → `server/editor/selection.ts`):
   the same retrieval machinery scoped to a text selection in the editor.
 - **Chat** (`/api/chat/{session,history}` → `server/db/chat.ts`): persisted per-paper chat sessions;
@@ -102,7 +102,7 @@ Three sibling modules — editor, chat, reading surface. The legacy `components/
 - Slash commands are declared in `commandRegistry.ts`, dispatched by `commands.ts`; commands with a
   `backendCommand` route through `apiHandlers.ts` to the `/api/editor/*` routes.
 - Blocks produced by API calls carry `metadata.locked` and are read-only until explicitly unlocked — see
-  `LOCKED_BLOCKS.md`. Slash commands inside a locked block insert their result *after* it.
+  `LOCKED_BLOCKS.md`. Slash commands inside a locked block insert their result _after_ it.
 - Markdown round-tripping rules are in `MARKDOWN_FORMAT.md`; parsing lives in `parsers.ts` and
   `utils/markdown.ts`.
 
@@ -110,13 +110,13 @@ Three sibling modules — editor, chat, reading surface. The legacy `components/
 consumer outside the module is `BlockEditor.tsx`. The submodules are split by what they may touch, which is
 the rule to check a new file against:
 
-| Submodule | May touch | Must not |
-| --- | --- | --- |
-| `model/` | data shapes, string/number rules | React, fetch, DOM |
-| `api/` | `fetch` to `/api/chat/*`, `/api/qa` | component state, DOM |
-| `hooks/` | client state, effects | direct DOM styling |
-| `primitives/` | props → markup | fetch, app state |
-| `sidecar/`, `inline/` | composition of the above | new network calls |
+| Submodule             | May touch                           | Must not             |
+| --------------------- | ----------------------------------- | -------------------- |
+| `model/`              | data shapes, string/number rules    | React, fetch, DOM    |
+| `api/`                | `fetch` to `/api/chat/*`, `/api/qa` | component state, DOM |
+| `hooks/`              | client state, effects               | direct DOM styling   |
+| `primitives/`         | props → markup                      | fetch, app state     |
+| `sidecar/`, `inline/` | composition of the above            | new network calls    |
 
 **`workspace/` — the paper reading surface.** `ReaderWorkspace` composes `ThreePassBar` + `BlockEditor` +
 `SkillsPanel` + `workspace/pdf/PdfPanel`; the pass/paper/status hooks live beside it.

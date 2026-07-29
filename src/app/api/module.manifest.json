@@ -4,9 +4,7 @@
   "parent": "web",
   "path": "src/app/api",
   "goal": "Adapts HTTP requests to the server modules that do the work.",
-  "owns": [
-    "src/app/api"
-  ],
+  "owns": ["src/app/api"],
   "interface": {
     "entrypoint": "(Next.js file-based routes)",
     "exports": []
@@ -45,27 +43,17 @@
       "via": "classifyFailoverSignal"
     }
   ],
-  "constraints": [
-    "auth",
-    "request validation",
-    "response shaping"
-  ],
-  "checks": [
-    "pnpm vitest run src/app/api"
-  ],
+  "constraints": ["auth", "request validation", "response shaping"],
+  "checks": ["pnpm vitest run src/app/api"],
   "stubs": [
     {
       "id": "web.api.is-a-layer-not-a-module",
       "why": "'Handles HTTP routing' is a technical role, not a job — a change to Q&A cuts across api/qa/, server/qa/, and web.chat at once. Normally route files belong to the feature module they expose, but Next.js file-based routing pins them to src/app/api/** and makes that physically impossible.",
       "action": "accept-and-document",
-      "paths": [
-        "src/app/api"
-      ],
+      "paths": ["src/app/api"],
       "contract": {
         "target": "Handlers stay thin — auth, validate, delegate, shape. Logic that grows here belongs in a server module.",
-        "validation": [
-          "pnpm vitest run src/app/api"
-        ]
+        "validation": ["pnpm vitest run src/app/api"]
       }
     }
   ]

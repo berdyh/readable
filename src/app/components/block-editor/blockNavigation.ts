@@ -52,7 +52,9 @@ function matchByQuote(blocks: Block[], quote: string): Block | undefined {
     return undefined;
   }
 
-  const quoteWords = normalizedQuote.split(" ").filter((word) => word.length > MIN_FUZZY_WORD_LENGTH);
+  const quoteWords = normalizedQuote
+    .split(" ")
+    .filter((word) => word.length > MIN_FUZZY_WORD_LENGTH);
   if (quoteWords.length === 0) {
     return undefined;
   }

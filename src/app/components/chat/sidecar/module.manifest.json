@@ -4,22 +4,13 @@
   "parent": "web.chat",
   "path": "src/app/components/chat/sidecar",
   "goal": "Composes the docked chat panel.",
-  "owns": [
-    "src/app/components/chat/sidecar"
-  ],
+  "owns": ["src/app/components/chat/sidecar"],
   "interface": {
     "entrypoint": "ChatSidePanel.tsx",
-    "exports": [
-      "ChatSidePanel",
-      "ChatButton"
-    ]
+    "exports": ["ChatSidePanel", "ChatButton"]
   },
-  "constraints": [
-    "composition of model, api, hooks, and primitives"
-  ],
-  "checks": [
-    "pnpm vitest run src/app/components/chat"
-  ],
+  "constraints": ["composition of model, api, hooks, and primitives"],
+  "checks": ["pnpm vitest run src/app/components/chat"],
   "uses": [
     {
       "module": "server.qa",

@@ -15,10 +15,7 @@ const nextConfig: NextConfig = {
   webpack: (config) => {
     config.resolve ??= {};
     config.resolve.alias ??= {};
-    config.resolve.alias.canvas = path.resolve(
-      __dirname,
-      "src/shims/emptyCanvas.ts",
-    );
+    config.resolve.alias.canvas = path.resolve(__dirname, "src/shims/emptyCanvas.ts");
     return config;
   },
 };

@@ -33,10 +33,7 @@ import {
   type ProviderAvailability,
   type RoutingProviderId,
 } from "@/server/llm/routing";
-import {
-  listAvailableLocalCodingAgents,
-  type CodingAgentId,
-} from "@/server/llm";
+import { listAvailableLocalCodingAgents, type CodingAgentId } from "@/server/llm";
 
 const ENV_FILE = path.join(process.cwd(), ".env.local");
 

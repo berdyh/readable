@@ -85,11 +85,13 @@ const ReaderWorkspace = ({ paperId, pdfUrl }: ReaderWorkspaceProps) => {
 
   return (
     <div className="flex min-h-screen flex-col bg-zinc-50 font-sans text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
-      <main
+      <div
         className={clsx(
-          // pt-20 clears the fixed account chip in the root layout, which used
-          // to sit on top of the skills panel and the chat panel header.
-          "mx-auto flex w-full flex-1 flex-col px-5 pb-10 pt-20 transition-[max-width] duration-200 ease-out motion-reduce:transition-none",
+          // No pt-20 here any more. It existed only to clear the account chip
+          // that the root layout used to position `fixed` over every route;
+          // the chip now sits in normal flow, so the reader no longer has to
+          // know about it.
+          "mx-auto flex w-full flex-1 flex-col px-5 pb-10 pt-2 transition-[max-width] duration-200 ease-out motion-reduce:transition-none",
           isResearchChatOpen ? "max-w-7xl" : "max-w-6xl",
         )}
       >
@@ -148,7 +150,7 @@ const ReaderWorkspace = ({ paperId, pdfUrl }: ReaderWorkspaceProps) => {
           <button
             type="button"
             onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-zinc-300 bg-white text-zinc-600 shadow-sm transition-colors duration-150 hover:bg-zinc-100 hover:text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+            className="touch-target relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-zinc-300 bg-white text-zinc-600 shadow-sm transition-colors duration-150 hover:bg-zinc-100 hover:text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
             title="Toggle theme"
             aria-label="Toggle theme"
           >
@@ -165,7 +167,7 @@ const ReaderWorkspace = ({ paperId, pdfUrl }: ReaderWorkspaceProps) => {
             onStatus={setStatusMessage}
           />
         </div>
-      </main>
+      </div>
     </div>
   );
 };

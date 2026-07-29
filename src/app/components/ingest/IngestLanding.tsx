@@ -169,7 +169,8 @@ const IngestLanding = () => {
         </p>
       </header>
 
-      <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-6 pb-16">
+      {/* div, not main: the root layout already provides the page's <main>. */}
+      <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-6 pb-16">
         <section className="grid gap-6 lg:grid-cols-2">
           <form
             onSubmit={handleIngest}
@@ -304,7 +305,7 @@ const IngestLanding = () => {
             </li>
           </ul>
         </section>
-      </main>
+      </div>
     </div>
   );
 };

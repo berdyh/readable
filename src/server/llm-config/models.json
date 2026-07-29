@@ -91,32 +91,32 @@
   },
   "openrouter": {
     "paper_summary": {
-      "model": "google/gemma-4-26b-a4b-it:free",
-      "rationale": "The only free model that completes a whole-paper summary with real content. On the full 25kB Attention Is All You Need text: gemma 4 findings in 56s; nemotron-3-ultra failed instantly with ResourceExhausted (free-tier rate limit); nemotron-3-super returned 0 findings in 4s. Slower than the others and that is fine — it is the one that actually answers.",
+      "model": "deepseek/deepseek-v4-flash",
+      "rationale": "Measured on the real 24kB full-paper payload: 6.2s / 4 findings, against gemma-4-26b:free at 47.1s / 3 findings. The free option was close enough to the request timeout to be the cause of /api/summarize aborting. ~5.7k tokens per summary is roughly $0.001 a paper.",
       "pricing": {
-        "input_per_1m": 0,
-        "output_per_1m": 0
+        "input_per_1m": 0.14,
+        "output_per_1m": 0.28
       }
     },
     "selection_summary": {
-      "model": "nvidia/nemotron-3-super-120b-a12b:free",
-      "rationale": "A selection summary is short and bounded, and super handles that fine (2 bullets in 7.2s) — its weakness only showed on full-paper input. Kept distinct from the qa/summary model so the three tasks do not share one free-tier rate limit.",
+      "model": "deepseek/deepseek-v4-flash",
+      "rationale": "Same model deliberately. The free nemotron-3-super was fine on short selections but returned an EMPTY findings array on full-paper input, and a model that fails silently by size is not one to keep on a hot path. Selection payloads are small, so the cost is a fraction of a cent.",
       "pricing": {
-        "input_per_1m": 0,
-        "output_per_1m": 0
+        "input_per_1m": 0.14,
+        "output_per_1m": 0.28
       }
     },
     "qa": {
-      "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
-      "rationale": "Fastest and highest quality of the free models actually tested against this app's JSON-schema calls (3s short, 8s long). Q&A is where grounding quality matters most.",
+      "model": "deepseek/deepseek-v4-flash",
+      "rationale": "nemotron-3-ultra:free answers qa correctly but hit free-tier ResourceExhausted under load, which surfaces as an opaque 502. Paid flash removes that failure mode for about $0.001 a question. 1M context also covers the widest retrieval windows.",
       "pricing": {
-        "input_per_1m": 0,
-        "output_per_1m": 0
+        "input_per_1m": 0.14,
+        "output_per_1m": 0.28
       }
     },
     "default": {
-      "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
-      "rationale": "Default fallback - free tier on OpenRouter."
+      "model": "deepseek/deepseek-v4-flash",
+      "rationale": "Default fallback."
     }
   },
   "notes": {
@@ -124,6 +124,7 @@
     "customization": "Override specific models by setting environment variables: {PROVIDER}_{TASK}_MODEL (e.g., OPENAI_QA_MODEL=gpt-4o)",
     "update_date": "2024-12-19",
     "openrouter_free_tier": "OpenRouter rotates and retires :free slugs without notice — every model configured here before 2026-07-29 returned 404. If summarize or qa fail with a 404 naming a paid slug, re-check https://openrouter.ai/api/v1/models for current :free ids rather than assuming a code fault.",
-    "openrouter_model_selection": "Pick on two measured properties, not on parameter count or blog rankings. (1) The model must honour response_format json_schema — this app calls generateJson everywhere. The catalogue's supported_parameters field is unreliable in BOTH directions: openai/gpt-oss-20b advertises structured_outputs and returns ```json-fenced markdown, while nemotron-3-ultra advertises neither and complies correctly. (2) It must still do the work on a realistic payload. nemotron-3-super passes a toy prompt but returns an empty findings array on a real 13.8kB paper. Always test with real chunk text. Payload size changes the winner: nemotron-3-ultra handles a 14kB excerpt in 8s but hits free-tier ResourceExhausted on a full 25kB paper, so paper_summary and qa deliberately use different models. Test at the size the task actually sends."
+    "openrouter_model_selection": "Pick on two measured properties, not on parameter count or blog rankings. (1) The model must honour response_format json_schema — this app calls generateJson everywhere. The catalogue's supported_parameters field is unreliable in BOTH directions: openai/gpt-oss-20b advertises structured_outputs and returns ```json-fenced markdown, while nemotron-3-ultra advertises neither and complies correctly. (2) It must still do the work on a realistic payload. nemotron-3-super passes a toy prompt but returns an empty findings array on a real 13.8kB paper. Always test with real chunk text. Payload size changes the winner: nemotron-3-ultra handles a 14kB excerpt in 8s but hits free-tier ResourceExhausted on a full 25kB paper, so paper_summary and qa deliberately use different models. Test at the size the task actually sends.",
+    "openrouter_cost": "The openrouter entries are intentionally PAID. Free slugs were tried first and are still the fallback (OPENROUTER_FALLBACK_MODELS=google/gemma-4-26b-a4b-it:free): the free tier works but is 3-8x slower, rate-limits under load, and rotates without notice. deepseek-v4-flash costs about $0.001 per summary or question. Revisit if a free model matches it on the full-paper benchmark."
   }
 }

@@ -1,7 +1,14 @@
 # Open issues and next steps
 
-Working state as of **2026-07-29**, `main`. `pnpm verify` green: 304 tests on `main`, 0 lint errors, 0 lint warnings. `pnpm test:api -- --live` is
+Working state as of **2026-07-29**, `main`. `pnpm verify` green: 314 tests on `main`, 0 lint errors, 0 lint warnings. `pnpm test:api -- --live` is
 **5/5** — health, qa, summarize, chat session, arXiv ingest.
+
+The local coding-agent items that used to lead this file are done: auth detection now probes
+the CLI itself (`codex login status` / `claude auth status`, sandboxed, cached, with the old
+file shape-check kept as fallback), the chat picker's agent pin reaches `/summary` and
+`/explain`, mid-call token refreshes are written back from the sandbox, and the `--tools ""`
+ordering has a regression test. The durable explanations live as doc comments in
+`src/server/llm/providers/local-coding-agent.ts`.
 
 This file is a **living checklist, not a record** — when an item is done, delete it rather
 than marking it ✅, and put the durable explanation in the doc that owns that subject.
@@ -9,48 +16,7 @@ Anything frozen belongs in [`archive/`](./archive/).
 
 ## Next session — start here
 
-Two items, both deliberately deferred rather than rushed.
-
-### 1. Make local coding-agent detection self-correcting
-
-`isAgentAuthenticated()` in `src/server/llm/providers/local-coding-agent.ts` decides whether
-you are signed in by **reading and shape-checking the CLI's credential file**. It never asks
-the CLI. That makes the whole feature pinned to the file formats of `codex-cli 0.145.0` and
-`claude 2.1.220`.
-
-That assumption has already broken once: `codex exec --ask-for-approval never` used to be
-valid, the flag moved, and the resulting exit-2 was the original reason
-`LLM_PROVIDER=coding-agent` failed for everyone.
-
-What is genuinely portable today (verified by reading the code, not by running it elsewhere):
-
-- No hardcoded paths — `os.homedir()`, and `CODEX_HOME` / `CLAUDE_CONFIG_DIR` are honoured.
-- `PATH` discovery splits on `path.delimiter`, so it is not Unix-only.
-- A missing or unparseable credential file returns `null`, so the agent renders **greyed out**
-  rather than crashing. The failure mode is safe.
-
-Where it will silently misreport on another machine:
-
-- **macOS** — Claude Code may hold credentials in the Keychain rather than
-  `~/.claude/.credentials.json`. You would be signed in and the picker would grey it out.
-- **Any future format change** in either CLI — same false negative, no diagnostic.
-
-**The fix:** probe rather than parse. Run the CLI's own status (or a trivial `exec`) once,
-cache it for the session, and trust _its_ answer. That survives format changes by
-construction, which file-shape checking cannot.
-
-Related, from the same work and worth doing at the same time:
-
-- The picker only reaches `/api/qa`. `/api/summarize` and `/api/editor/selection/*` still use
-  the configured order, so "I picked Claude Code" is scoped to chat only.
-- Credential refresh is write-through-to-nowhere: an agent refreshing its OAuth token mid-call
-  writes into the temp `CODEX_HOME` we then delete. Correct, but it repeats the refresh
-  round-trip every request, and would become a real problem if upstream ever rotated refresh
-  tokens on use.
-- `--tools ""` on Claude Code is a variadic flag — the empty string must stay last or it
-  swallows the following argument.
-
-### 2. Stop sending the whole paper to the model
+### Stop sending the whole paper to the model
 
 `/api/summarize` currently assembles the entire paper into one prompt. That is wrong on cost,
 on latency, and on quality — the relevant couple of kB is buried in ~24kB of noise.

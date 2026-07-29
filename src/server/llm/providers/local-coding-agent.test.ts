@@ -442,7 +442,7 @@ exit 1
     // an opaque failure here is what let the broken invocation go unnoticed.
     await expect(
       provider.generateText({ systemPrompt: "Be concise.", userPrompt: "Ask." }),
-    ).rejects.toThrow(/exited with status 1.*Not logged in/s);
+    ).rejects.toThrow(/exited with status 1[\s\S]*Not logged in/);
   });
 
   it("classifies a missing binary rather than retrying it forever", () => {

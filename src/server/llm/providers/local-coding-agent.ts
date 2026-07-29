@@ -259,6 +259,33 @@ export function listAvailableLocalCodingAgents(
   return available;
 }
 
+/**
+ * Env markers set by the serverless platforms this app can be deployed to.
+ * Spawning a CLI there is not "unconfigured", it is impossible — there is no
+ * persistent filesystem to install one on and no `~/.codex` to authenticate
+ * from.
+ */
+const SERVERLESS_ENV_MARKERS = [
+  "VERCEL",
+  "NETLIFY",
+  "AWS_LAMBDA_FUNCTION_NAME",
+  "AWS_EXECUTION_ENV",
+  "K_SERVICE",
+  "FUNCTIONS_WORKER_RUNTIME",
+];
+
+/**
+ * Can this process spawn local CLI agents at all?
+ *
+ * Deliberately a denylist rather than an allowlist of "is this localhost":
+ * a self-hosted container is a perfectly good place to run Codex, and
+ * `describeLocalCodingAgents` will honestly report "not installed" there if it
+ * is not. Only the platforms where the answer is structurally no are excluded.
+ */
+export function isLocalAgentRuntime(): boolean {
+  return !SERVERLESS_ENV_MARKERS.some((marker) => Boolean(process.env[marker]?.trim()));
+}
+
 /** Why an agent cannot be selected. `null` means it can. */
 export type LocalAgentUnavailableReason = "not_installed" | "not_authenticated" | "not_enabled";
 
@@ -457,6 +484,14 @@ function buildLocalAgentEnv(tempDir: string): NodeJS.ProcessEnv {
  * it), but hands the agent the developer's entire Codex home: `config.toml`,
  * MCP server definitions, session transcripts, skills and plugins. Staging a
  * lone `auth.json` gives it strictly less.
+ *
+ * Known trade-off: the staged copy is write-through-to-nowhere. If the agent
+ * refreshes its OAuth token mid-call it writes the new one into the temp dir,
+ * which we then delete, so the refresh is discarded and the next invocation
+ * starts from the same on-disk token. That is correct but wasteful — a
+ * long-expired access token means one refresh round-trip per request — and it
+ * would become a real problem if the upstream ever rotated refresh tokens on
+ * use. Re-running `codex login` / `claude login` repairs it either way.
  */
 interface StagedCredentials {
   env: Record<string, string>;
@@ -499,6 +534,12 @@ async function writePrivateFile(filePath: string, contents: string): Promise<voi
  * `CODEX_AUTH_FILE`, which is why the old hook of that name was inert.
  * Everything in `auth.json` (`auth_mode`, `tokens`, `last_refresh`) is the
  * credential itself, so it is copied verbatim; the rest of `~/.codex` is not.
+ *
+ * Two Codex behaviours this has to respect: `CODEX_HOME` pointing at a
+ * directory that does not exist is a hard error rather than an implicit
+ * mkdir, so the file is written (creating the dir) before the var is set; and
+ * `OPENAI_API_KEY` does *not* authenticate the CLI, so there is no env-var
+ * shortcut that would let us skip staging a file.
  */
 async function stageCodexCredentials(tempDir: string): Promise<StagedCredentials> {
   const source = resolveAgentAuthFile("codex-cli");

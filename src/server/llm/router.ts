@@ -44,6 +44,19 @@ export function getDefaultProvider(): LlmProvider {
 }
 
 /**
+ * Is the local coding-agent path the one actually serving requests?
+ *
+ * `LLM_PROVIDER` is the whole answer: `parseAllowedProviders()` filters to
+ * `HTTP_ROUTING_PROVIDERS`, so `coding-agent` can never enter the failover
+ * ladder as a fallback, and `shouldUseFallbackRouting` short-circuits when it
+ * is primary. Callers use this to decide whether local-agent UI is worth
+ * showing at all.
+ */
+export function isLocalCodingAgentActive(): boolean {
+  return getDefaultProvider() === "coding-agent";
+}
+
+/**
  * Create an LLM provider instance based on configuration
  */
 export function createLlmProvider(config?: LlmConfig, taskType?: string): LlmProviderInterface {

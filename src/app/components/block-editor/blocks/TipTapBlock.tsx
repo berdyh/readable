@@ -117,7 +117,7 @@ export function TipTapBlock({
         ),
       },
       // Prevent TipTap from handling drops when we're dragging blocks for reordering
-      handleDrop: (view, event, _slice, moved) => {
+      handleDrop: (view, event, _slice, _moved) => {
         // Check if this is a block reordering drag (has our custom data type)
         const dragData = (event as DragEvent).dataTransfer;
         if (dragData) {

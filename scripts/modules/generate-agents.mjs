@@ -12,8 +12,7 @@
  *   node scripts/modules/generate-agents.mjs --check    # fail on any diff
  */
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
-import { join, dirname, relative } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join, relative } from "node:path";
 
 import { loadModules, REPO_ROOT } from "./modules.mjs";
 

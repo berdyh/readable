@@ -6,7 +6,7 @@
  * to update.
  */
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
-import { join, dirname, relative, sep } from "node:path";
+import { join, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");

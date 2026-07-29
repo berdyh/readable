@@ -4,33 +4,13 @@
 
 import { v4 as uuidv4 } from "uuid";
 import type { Block } from "./types";
-import type {
-  SummaryResult,
-  SummarySection,
-  SummaryKeyFinding,
-  SummaryFigure,
-} from "@/server/summarize/types";
+import type { SummaryResult } from "@/server/summarize/types";
 import type {
   SelectionSummaryResult,
   SelectionFiguresResult,
   SelectionCitationsResult,
   InlineArxivIngestResult,
 } from "@/server/editor/types";
-
-interface FigureData {
-  id: string;
-  caption?: string;
-  pageNumber?: number;
-  imageUrl?: string;
-}
-
-interface CitationData {
-  id: string;
-  author?: string;
-  title?: string;
-  url?: string;
-  pageNumber?: number;
-}
 
 /**
  * Parse SummaryResult from /api/summarize into blocks

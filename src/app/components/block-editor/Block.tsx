@@ -388,12 +388,7 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
         );
       case "figure":
         return (
-          <FigureBlock
-            block={block}
-            paperId={state.paperId}
-            isLocked={isLocked}
-            onUpdate={handleUpdate}
-          />
+          <FigureBlock block={block} paperId={state.paperId} isLocked={isLocked} />
         );
       default:
         return (

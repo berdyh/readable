@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import { MessageSquare, Send, X } from "lucide-react";
+import { MessageSquare, X } from "lucide-react";
 import { clsx } from "clsx";
 import type { Block } from "../types";
 import { InlineChatPanel } from "../../chat";

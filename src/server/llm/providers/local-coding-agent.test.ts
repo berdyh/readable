@@ -307,6 +307,35 @@ printf '%s' "$*"
     expect(output).toContain("--ephemeral");
   });
 
+  it("keeps the variadic --tools '' last in the Claude Code argv", async () => {
+    // `--tools` swallows every following argument as a tool name, so the empty
+    // string that means "no tools" only works as the final argument. Anything
+    // appended after it would silently become a tool name instead of a flag.
+    const claudeAgent = await makeAgentScript(
+      tempDir,
+      "claude.sh",
+      `
+cat >/dev/null
+for arg in "$@"; do printf 'arg:%s\\n' "$arg"; done
+`,
+    );
+    process.env.LLM_LOCAL_AGENTS = "claude-code";
+    process.env.LLM_AGENT_CLAUDE_CODE_COMMAND = claudeAgent;
+    // Exercise the model flag too, so the guard also covers argv built with
+    // optional segments present.
+    process.env.LLM_AGENT_CLAUDE_CODE_MODEL = "claude-sonnet-5";
+
+    const provider = new LocalCodingAgentProvider({ provider: "coding-agent" });
+    const output = await provider.generateText({
+      systemPrompt: "Be concise.",
+      userPrompt: "Check argv.",
+    });
+
+    const args = output.trimEnd().split("\n");
+    expect(args.at(-2)).toBe("arg:--tools");
+    expect(args.at(-1)).toBe("arg:");
+  });
+
   it("runs agents with throwaway HOME/XDG dirs and does not expose app secrets by default", async () => {
     const agent = await makeAgentScript(
       tempDir,

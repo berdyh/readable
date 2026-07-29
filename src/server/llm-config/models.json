@@ -91,8 +91,8 @@
   },
   "openrouter": {
     "paper_summary": {
-      "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
-      "rationale": "Chosen by measurement, not reputation. On a real 13.8kB payload from an ingested paper it returned 5 key findings in 8s. nemotron-3-super returned valid JSON with an EMPTY findings array on the same input — a silent no-op that is worse than an error. 1M context also fits a whole paper without truncation.",
+      "model": "google/gemma-4-26b-a4b-it:free",
+      "rationale": "The only free model that completes a whole-paper summary with real content. On the full 25kB Attention Is All You Need text: gemma 4 findings in 56s; nemotron-3-ultra failed instantly with ResourceExhausted (free-tier rate limit); nemotron-3-super returned 0 findings in 4s. Slower than the others and that is fine — it is the one that actually answers.",
       "pricing": {
         "input_per_1m": 0,
         "output_per_1m": 0
@@ -124,6 +124,6 @@
     "customization": "Override specific models by setting environment variables: {PROVIDER}_{TASK}_MODEL (e.g., OPENAI_QA_MODEL=gpt-4o)",
     "update_date": "2024-12-19",
     "openrouter_free_tier": "OpenRouter rotates and retires :free slugs without notice — every model configured here before 2026-07-29 returned 404. If summarize or qa fail with a 404 naming a paid slug, re-check https://openrouter.ai/api/v1/models for current :free ids rather than assuming a code fault.",
-    "openrouter_model_selection": "Pick on two measured properties, not on parameter count or blog rankings. (1) The model must honour response_format json_schema — this app calls generateJson everywhere. The catalogue's supported_parameters field is unreliable in BOTH directions: openai/gpt-oss-20b advertises structured_outputs and returns ```json-fenced markdown, while nemotron-3-ultra advertises neither and complies correctly. (2) It must still do the work on a realistic payload. nemotron-3-super passes a toy prompt but returns an empty findings array on a real 13.8kB paper. Always test with real chunk text."
+    "openrouter_model_selection": "Pick on two measured properties, not on parameter count or blog rankings. (1) The model must honour response_format json_schema — this app calls generateJson everywhere. The catalogue's supported_parameters field is unreliable in BOTH directions: openai/gpt-oss-20b advertises structured_outputs and returns ```json-fenced markdown, while nemotron-3-ultra advertises neither and complies correctly. (2) It must still do the work on a realistic payload. nemotron-3-super passes a toy prompt but returns an empty findings array on a real 13.8kB paper. Always test with real chunk text. Payload size changes the winner: nemotron-3-ultra handles a 14kB excerpt in 8s but hits free-tier ResourceExhausted on a full 25kB paper, so paper_summary and qa deliberately use different models. Test at the size the task actually sends."
   }
 }

@@ -44,6 +44,21 @@ interface TestResult extends TestCase {
   error?: string;
 }
 
+/** When the current token was minted; undefined if the user supplied one. */
+let mintedAt: number | undefined;
+
+const TOKEN_MAX_AGE_MS = 40_000;
+
+async function refreshMintedTokenIfStale(): Promise<void> {
+  // Only refresh tokens we minted. An explicitly supplied TEST_AUTH_TOKEN is
+  // the caller's to manage.
+  if (mintedAt === undefined) return;
+  if (Date.now() - mintedAt < TOKEN_MAX_AGE_MS) return;
+  const minted = await mintClerkSessionToken();
+  authToken = minted.token;
+  mintedAt = Date.now();
+}
+
 function authHeaders(): HeadersInit {
   return authToken ? { Authorization: `Bearer ${authToken}` } : {};
 }
@@ -214,6 +229,7 @@ async function liveChecks(): Promise<TestCase[]> {
     try {
       const minted = await mintClerkSessionToken();
       authToken = minted.token;
+      mintedAt = Date.now();
       console.log(
         `Minted a Clerk session token for ${minted.userId}` +
           `${minted.createdUser ? " (test user created)" : ""}.\n`,
@@ -311,6 +327,10 @@ async function runTests(): Promise<void> {
 
   const results: TestResult[] = [];
   for (const test of tests) {
+    // Clerk session tokens live ~60s and a live run takes minutes, so a token
+    // minted once at the start expires partway through and later checks fail as
+    // spurious 401s. Refresh before each request instead.
+    await refreshMintedTokenIfStale();
     results.push(await testEndpoint(test));
   }
 

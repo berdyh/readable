@@ -91,16 +91,16 @@
   },
   "openrouter": {
     "paper_summary": {
-      "model": "nvidia/nemotron-3-super-120b-a12b:free",
-      "rationale": "Free tier on OpenRouter, 262k context — enough to summarise a full paper in one pass. Replaces deepseek/deepseek-chat-v3.1:free, which OpenRouter retired (the paid slug survives; the :free one 404s).",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "rationale": "Chosen by measurement, not reputation. On a real 13.8kB payload from an ingested paper it returned 5 key findings in 8s. nemotron-3-super returned valid JSON with an EMPTY findings array on the same input — a silent no-op that is worse than an error. 1M context also fits a whole paper without truncation.",
       "pricing": {
         "input_per_1m": 0,
         "output_per_1m": 0
       }
     },
     "selection_summary": {
-      "model": "nvidia/nemotron-3-nano-30b-a3b:free",
-      "rationale": "Free tier; a selection summary is short and bounded, so the smallest capable model is the right trade. Replaces qwen/qwen3-235b-a22b:free, retired.",
+      "model": "nvidia/nemotron-3-super-120b-a12b:free",
+      "rationale": "A selection summary is short and bounded, and super handles that fine (2 bullets in 7.2s) — its weakness only showed on full-paper input. Kept distinct from the qa/summary model so the three tasks do not share one free-tier rate limit.",
       "pricing": {
         "input_per_1m": 0,
         "output_per_1m": 0
@@ -108,14 +108,14 @@
     },
     "qa": {
       "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
-      "rationale": "Free tier and the strongest free reasoning model currently on OpenRouter, with 1M context. Q&A is the task where grounding quality matters most. Replaces meta-llama/llama-3.3-70b-instruct:free, retired.",
+      "rationale": "Fastest and highest quality of the free models actually tested against this app's JSON-schema calls (3s short, 8s long). Q&A is where grounding quality matters most.",
       "pricing": {
         "input_per_1m": 0,
         "output_per_1m": 0
       }
     },
     "default": {
-      "model": "nvidia/nemotron-3-super-120b-a12b:free",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
       "rationale": "Default fallback - free tier on OpenRouter."
     }
   },
@@ -123,6 +123,7 @@
     "selection_strategy": "Models chosen based on cost-effectiveness and task-specific requirements. Summarization tasks prioritize cost while Q&A prioritizes reasoning quality.",
     "customization": "Override specific models by setting environment variables: {PROVIDER}_{TASK}_MODEL (e.g., OPENAI_QA_MODEL=gpt-4o)",
     "update_date": "2024-12-19",
-    "openrouter_free_tier": "OpenRouter rotates its :free slugs and retires them without notice — all three models configured here before 2026-07-29 returned 404. If summarize or qa start failing with a 404 naming a paid slug, re-check https://openrouter.ai/api/v1/models for the current :free ids rather than assuming a code fault."
+    "openrouter_free_tier": "OpenRouter rotates and retires :free slugs without notice — every model configured here before 2026-07-29 returned 404. If summarize or qa fail with a 404 naming a paid slug, re-check https://openrouter.ai/api/v1/models for current :free ids rather than assuming a code fault.",
+    "openrouter_model_selection": "Pick on two measured properties, not on parameter count or blog rankings. (1) The model must honour response_format json_schema — this app calls generateJson everywhere. The catalogue's supported_parameters field is unreliable in BOTH directions: openai/gpt-oss-20b advertises structured_outputs and returns ```json-fenced markdown, while nemotron-3-ultra advertises neither and complies correctly. (2) It must still do the work on a realistic payload. nemotron-3-super passes a toy prompt but returns an empty findings array on a real 13.8kB paper. Always test with real chunk text."
   }
 }

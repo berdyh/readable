@@ -338,6 +338,7 @@ export async function answerPaperQuestion(
     {
       taskName: "qa",
       temperature: 0.2,
+      localAgent: options.localAgent,
     },
   );
 

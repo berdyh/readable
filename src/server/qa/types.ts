@@ -9,6 +9,11 @@ export interface QuestionOptions {
   selection?: QuestionSelection;
   alpha?: number;
   limit?: number;
+  /**
+   * Pins the answer to one local CLI coding agent (`claude-code`, `codex-cli`).
+   * Ignored unless the app is configured to use the coding-agent provider.
+   */
+  localAgent?: string;
 }
 
 export interface QaChunkContext {

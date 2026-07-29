@@ -360,6 +360,12 @@ export async function generateJson(
     taskName?: string;
     temperature?: number;
     config?: LlmConfig;
+    /**
+     * Pins `coding-agent` requests to one local CLI. Folded into the provider
+     * config rather than passed alongside it, so it travels the same path as
+     * every other provider-specific setting.
+     */
+    localAgent?: string;
   },
 ): Promise<string> {
   const finalRequest = {
@@ -377,6 +383,7 @@ export async function generateJson(
     const config: LlmConfig = {
       provider: primaryProvider,
       ...options?.config,
+      ...(options?.localAgent ? { localAgent: options.localAgent } : {}),
     };
     const llm = createLlmProvider(config, options?.taskName);
     return llm.generateJson(finalRequest, { taskName: options?.taskName });
@@ -385,7 +392,9 @@ export async function generateJson(
   return routeRequest((llm) => llm.generateJson(finalRequest, { taskName: options?.taskName }), {
     primaryProvider,
     taskType: options?.taskName,
-    baseConfig: options?.config,
+    baseConfig: options?.localAgent
+      ? { ...options.config, provider: primaryProvider, localAgent: options.localAgent }
+      : options?.config,
   });
 }
 

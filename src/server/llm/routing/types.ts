@@ -6,7 +6,7 @@
  * live-auth-keys.ts for the upstream implementation.
  */
 
-import type { LlmProvider } from '../types';
+import type { LlmProvider } from "../types";
 
 /**
  * Provider IDs that can appear in a model reference. The base set mirrors
@@ -16,8 +16,13 @@ import type { LlmProvider } from '../types';
  */
 export type RoutingProviderId =
   | LlmProvider
-  | 'openai-codex'
-  | 'google-vertex';
+  | "openai-codex"
+  | "google-vertex"
+  | "claude-code"
+  | "codex-cli"
+  | "gemini-cli"
+  | "antigravity"
+  | "opencode";
 
 /**
  * Slash-form `provider/model` reference. Always lowercased; provider must
@@ -38,19 +43,19 @@ export interface ParsedModelRef {
  * Mirrors OpenClaw's `FailoverReason` (pi-embedded-helpers/types.ts:3-16).
  */
 export type FailoverReason =
-  | 'auth' // 401/403, transient — try a different profile or provider
-  | 'auth_permanent' // sustained 401/403 with permanent-auth markers
-  | 'format' // 400/422 due to bad request/schema; not a transport problem
-  | 'rate_limit' // 429
-  | 'overloaded' // 529 / explicit "overloaded" responses
-  | 'billing' // 402 / quota-exhausted billing problems
-  | 'timeout' // 408/410/500/502/503/504, network timeouts
-  | 'model_not_found' // 404 — provider doesn't have this model
-  | 'session_expired' // OAuth token has expired and can be refreshed
-  | 'empty_response' // 200 OK but no content
-  | 'no_error_details' // non-OK with no body or unparseable body
-  | 'unclassified' // we got something but couldn't classify it
-  | 'unknown'; // anything else (network error, abort, etc.)
+  | "auth" // 401/403, transient — try a different profile or provider
+  | "auth_permanent" // sustained 401/403 with permanent-auth markers
+  | "format" // 400/422 due to bad request/schema; not a transport problem
+  | "rate_limit" // 429
+  | "overloaded" // 529 / explicit "overloaded" responses
+  | "billing" // 402 / quota-exhausted billing problems
+  | "timeout" // 408/410/500/502/503/504, network timeouts
+  | "model_not_found" // 404 — provider doesn't have this model
+  | "session_expired" // OAuth token has expired and can be refreshed
+  | "empty_response" // 200 OK but no content
+  | "no_error_details" // non-OK with no body or unparseable body
+  | "unclassified" // we got something but couldn't classify it
+  | "unknown"; // anything else (network error, abort, etc.)
 
 export interface FailoverErrorInit {
   reason: FailoverReason;
@@ -69,7 +74,7 @@ export interface FailoverErrorInit {
  *   (`~/.codex/auth.json`, `~/.claude/.credentials.json`, ...)
  * - `token`: long-lived session token (e.g. Anthropic Console, Workspace)
  */
-export type AuthProfileType = 'api_key' | 'oauth' | 'token';
+export type AuthProfileType = "api_key" | "oauth" | "token";
 
 export interface AuthProfile {
   /**
@@ -92,7 +97,7 @@ export interface AuthProfile {
   /** ms-since-epoch when the access token expires, if known. */
   expiresAt?: number;
   /** Where the credential came from — useful in `openclaw models auth list`-style output. */
-  source?: 'env' | 'cli-file' | 'manual' | 'live';
+  source?: "env" | "cli-file" | "manual" | "live";
   /**
    * If true, never write back to the on-disk store; treat as ephemeral.
    * Used for `OPENCLAW_LIVE_*_KEY` short-circuit credentials.
@@ -134,7 +139,7 @@ export interface ModelCandidate {
   provider: RoutingProviderId;
   model: string;
   /** Source — primary | fallback list | configured-provider fallback. */
-  source: 'primary' | 'fallback' | 'configured-provider-fallback';
+  source: "primary" | "fallback" | "configured-provider-fallback";
 }
 
 export interface FallbackAttempt {

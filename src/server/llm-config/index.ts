@@ -1,20 +1,11 @@
-import promptsData from './prompts.json';
-export * from './models';
+import promptsData from "./prompts.json";
+export * from "./models";
 
 export interface PromptConfig {
   system: {
-    paper_summary: {
-      base: string;
-      persona_prefix: string;
-    };
-    selection_summary: {
-      base: string;
-      persona_prefix: string;
-    };
-    qa: {
-      base: string;
-      persona_prefix: string;
-    };
+    paper_summary: { base: string };
+    selection_summary: { base: string };
+    qa: { base: string };
   };
   user: {
     paper_summary: {
@@ -34,13 +25,14 @@ export interface PromptConfig {
 }
 
 /**
- * Get system prompt for a specific task. The persona-prefix layer
- * (previously sourced from Kontext.dev) was removed; the base prompt
- * from prompts.json is now returned as-is.
+ * Get system prompt for a specific task.
+ *
+ * There is no persona-prefix layer. One existed when prompts were sourced from
+ * Kontext.dev; it was removed, but the `persona_prefix` keys were left behind in
+ * prompts.json for a while afterwards, where setting one produced silence rather
+ * than an error. They are gone now — the base prompt is returned as-is.
  */
-export function getSystemPrompt(
-  taskType: 'paper_summary' | 'selection_summary' | 'qa',
-): string {
+export function getSystemPrompt(taskType: "paper_summary" | "selection_summary" | "qa"): string {
   return promptsData.system[taskType].base;
 }
 
@@ -64,4 +56,3 @@ export function getPromptLimits() {
 export function getPromptsConfig(): PromptConfig {
   return promptsData as PromptConfig;
 }
-

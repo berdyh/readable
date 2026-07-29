@@ -41,7 +41,7 @@ export function ListBlock({
     <div className="flex items-start gap-2 w-full">
       <div
         className={clsx(
-          "flex items-center justify-center min-w-[24px] text-neutral-600 dark:text-neutral-400 select-none flex-shrink-0",
+          "flex items-center justify-center min-w-[24px] text-zinc-600 dark:text-zinc-400 select-none flex-shrink-0",
           isBulletList ? "text-xl" : "text-sm font-mono",
         )}
         style={{

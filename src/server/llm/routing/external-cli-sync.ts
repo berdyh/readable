@@ -7,28 +7,18 @@
  * keychain step.
  */
 
-import { collectProviderApiKeys } from './env-keys';
-import {
-  detectCliCredentials,
-  type DetectedCliCredentials,
-} from './cli-detect';
-import {
-  loadAuthProfileStore,
-  upsertAuthProfileInStore,
-} from './auth-profile-store';
-import type {
-  AuthProfile,
-  AuthProfileStore,
-  RoutingProviderId,
-} from './types';
+import { collectProviderApiKeys } from "./env-keys";
+import { detectCliCredentials, type DetectedCliCredentials } from "./cli-detect";
+import { loadAuthProfileStore, upsertAuthProfileInStore } from "./auth-profile-store";
+import type { AuthProfile, AuthProfileStore, RoutingProviderId } from "./types";
 
 const ALL_PROVIDERS: RoutingProviderId[] = [
-  'openai',
-  'openai-codex',
-  'anthropic',
-  'gemini',
-  'google-vertex',
-  'openrouter',
+  "openai",
+  "openai-codex",
+  "anthropic",
+  "gemini",
+  "google-vertex",
+  "openrouter",
 ];
 
 function shortFingerprint(input: string): string {
@@ -41,25 +31,21 @@ function shortFingerprint(input: string): string {
   return (hash >>> 0).toString(36);
 }
 
-function profileIdForEnvKey(
-  provider: RoutingProviderId,
-  source: string,
-  key: string,
-): string {
-  if (source === 'live') {
+function profileIdForEnvKey(provider: RoutingProviderId, source: string, key: string): string {
+  if (source === "live") {
     return `${provider}:live`;
   }
-  if (source === 'primary') {
+  if (source === "primary") {
     return `${provider}:env`;
   }
-  if (source.startsWith('numbered:')) {
+  if (source.startsWith("numbered:")) {
     return `${provider}:env-${shortFingerprint(key)}`;
   }
-  if (source === 'list') {
+  if (source === "list") {
     return `${provider}:env-${shortFingerprint(key)}`;
   }
-  if (source.startsWith('fallback:')) {
-    const name = source.slice('fallback:'.length).toLowerCase();
+  if (source.startsWith("fallback:")) {
+    const name = source.slice("fallback:".length).toLowerCase();
     return `${provider}:env-${name}`;
   }
   return `${provider}:env-${shortFingerprint(key)}`;
@@ -77,10 +63,10 @@ function applyEnvKeysToStore(
       next = upsertAuthProfileInStore(next, {
         id,
         provider,
-        type: 'api_key',
+        type: "api_key",
         secret: key,
-        source: source === 'live' ? 'live' : 'env',
-        ephemeral: source === 'live',
+        source: source === "live" ? "live" : "env",
+        ephemeral: source === "live",
       });
     }
   }
@@ -95,54 +81,54 @@ function applyCliCredentialsToStore(
 
   if (cli.codex) {
     next = upsertAuthProfileInStore(next, {
-      id: 'openai-codex:cli',
-      provider: 'openai-codex',
-      type: 'oauth',
+      id: "openai-codex:cli",
+      provider: "openai-codex",
+      type: "oauth",
       secret: cli.codex.accessToken,
       oauthRefresh: cli.codex.refreshToken,
       expiresAt: cli.codex.expiresAt,
-      label: cli.codex.accountId ?? 'Codex CLI',
-      source: 'cli-file',
+      label: cli.codex.accountId ?? "Codex CLI",
+      source: "cli-file",
     });
   }
 
   if (cli.claude) {
     next = upsertAuthProfileInStore(next, {
-      id: 'anthropic:cli',
-      provider: 'anthropic',
-      type: 'oauth',
+      id: "anthropic:cli",
+      provider: "anthropic",
+      type: "oauth",
       secret: cli.claude.accessToken,
       oauthRefresh: cli.claude.refreshToken,
       expiresAt: cli.claude.expiresAt,
-      label: 'Claude CLI',
-      source: 'cli-file',
+      label: "Claude CLI",
+      source: "cli-file",
     });
   }
 
   if (cli.gemini) {
     next = upsertAuthProfileInStore(next, {
-      id: 'gemini:cli',
-      provider: 'gemini',
-      type: 'oauth',
+      id: "gemini:cli",
+      provider: "gemini",
+      type: "oauth",
       secret: cli.gemini.accessToken,
       oauthRefresh: cli.gemini.refreshToken,
       expiresAt: cli.gemini.expiresAt,
-      label: 'Gemini CLI',
-      source: 'cli-file',
+      label: "Gemini CLI",
+      source: "cli-file",
     });
   }
 
   if (cli.gcloud) {
     next = upsertAuthProfileInStore(next, {
-      id: 'google-vertex:adc',
-      provider: 'google-vertex',
-      type: 'oauth',
+      id: "google-vertex:adc",
+      provider: "google-vertex",
+      type: "oauth",
       // Empty access token signals "use refresh token to mint one at
       // request time". The provider implementation handles that.
       secret: cli.gcloud.accessToken,
       oauthRefresh: cli.gcloud.refreshToken,
-      label: cli.gcloud.accountId ?? 'gcloud ADC',
-      source: 'cli-file',
+      label: cli.gcloud.accountId ?? "gcloud ADC",
+      source: "cli-file",
     });
   }
 
@@ -180,7 +166,7 @@ export interface BuildAuthProfileStoreOptions {
 export async function buildAuthProfileStore(
   options: BuildAuthProfileStoreOptions = {},
 ): Promise<AuthProfileStore> {
-  const agentId = options.agentId ?? 'default';
+  const agentId = options.agentId ?? "default";
 
   const persisted: AuthProfileStore =
     options.loadFromDisk === false
@@ -214,9 +200,7 @@ export interface ProviderAvailability {
  * setup CLI ("you have Claude + OpenRouter; pick one") and by the router
  * to skip providers with no usable profile.
  */
-export function listAvailableProviders(
-  store: AuthProfileStore,
-): ProviderAvailability[] {
+export function listAvailableProviders(store: AuthProfileStore): ProviderAvailability[] {
   const buckets = new Map<RoutingProviderId, ProviderAvailability>();
   for (const provider of ALL_PROVIDERS) {
     buckets.set(provider, {
@@ -230,8 +214,8 @@ export function listAvailableProviders(
     const bucket = buckets.get(profile.provider);
     if (!bucket) continue;
     bucket.profiles.push(profile);
-    if (profile.source === 'cli-file') bucket.hasCli = true;
-    if (profile.source === 'env' || profile.source === 'live') bucket.hasEnv = true;
+    if (profile.source === "cli-file") bucket.hasCli = true;
+    if (profile.source === "env" || profile.source === "live") bucket.hasEnv = true;
   }
   return Array.from(buckets.values()).filter((b) => b.profiles.length > 0);
 }

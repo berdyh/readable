@@ -1,10 +1,5 @@
-import type {
-  LlmProvider,
-  LlmProviderInterface,
-  LlmRequest,
-  LlmConfig,
-} from '../types';
-import { getModel } from '@/server/llm-config/models';
+import type { LlmProvider, LlmProviderInterface, LlmRequest, LlmConfig } from "../types";
+import { getModel } from "@/server/llm-config";
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 
@@ -25,45 +20,42 @@ function requireEnvVar(name: string, purpose: string): string {
 
 function getDefaultModel(taskType?: string): string {
   // Use model config from llm-config, with env var override support
-  const modelFromConfig = getModel('gemini', taskType);
-  
+  const modelFromConfig = getModel("gemini", taskType);
+
   // Check for legacy env vars or new override
   // Normalize taskType to check aliases (getModel already handles this, but we check env vars here)
-  const normalizedTaskType = taskType?.toLowerCase().replace(/-/g, '_');
-  const isSummaryTask = normalizedTaskType === 'paper_summary' || 
-                       normalizedTaskType === 'summary' || 
-                       normalizedTaskType === 'summarize';
-  const isQaTask = normalizedTaskType === 'qa' || normalizedTaskType === 'question';
-  
-  const envModel = process.env.GEMINI_MODEL || 
-                   (isSummaryTask 
-                     ? process.env.GEMINI_SUMMARY_MODEL || process.env.GEMINI_PAPER_SUMMARY_MODEL
-                     : undefined) ||
-                   (isQaTask 
-                     ? process.env.GEMINI_QA_MODEL 
-                     : undefined);
-  
+  const normalizedTaskType = taskType?.toLowerCase().replace(/-/g, "_");
+  const isSummaryTask =
+    normalizedTaskType === "paper_summary" ||
+    normalizedTaskType === "summary" ||
+    normalizedTaskType === "summarize";
+  const isQaTask = normalizedTaskType === "qa" || normalizedTaskType === "question";
+
+  const envModel =
+    process.env.GEMINI_MODEL ||
+    (isSummaryTask
+      ? process.env.GEMINI_SUMMARY_MODEL || process.env.GEMINI_PAPER_SUMMARY_MODEL
+      : undefined) ||
+    (isQaTask ? process.env.GEMINI_QA_MODEL : undefined);
+
   return envModel || modelFromConfig;
 }
 
 function getGeminiConfig(config?: LlmConfig, taskType?: string): GeminiProviderConfig {
   const apiKey =
-    config?.apiKey ??
-    requireEnvVar('GEMINI_API_KEY', 'to use Gemini. Set it in your environment.');
+    config?.apiKey ?? requireEnvVar("GEMINI_API_KEY", "to use Gemini. Set it in your environment.");
   const baseUrl =
     (config?.baseUrl as string) ??
     process.env.GEMINI_API_BASE_URL ??
-    'https://generativelanguage.googleapis.com/v1beta';
-  const model =
-    (config?.model as string) ?? getDefaultModel(taskType);
+    "https://generativelanguage.googleapis.com/v1beta";
+  const model = (config?.model as string) ?? getDefaultModel(taskType);
 
   return {
     apiKey,
-    baseUrl: baseUrl.replace(/\/+$/, ''),
+    baseUrl: baseUrl.replace(/\/+$/, ""),
     model,
     timeoutMs:
-      (config?.timeoutMs as number) ??
-      Number(process.env.GEMINI_TIMEOUT_MS ?? DEFAULT_TIMEOUT_MS),
+      (config?.timeoutMs as number) ?? Number(process.env.GEMINI_TIMEOUT_MS ?? DEFAULT_TIMEOUT_MS),
   };
 }
 
@@ -76,10 +68,7 @@ export class GeminiProvider implements LlmProviderInterface {
     this.taskType = taskType;
   }
 
-  async generateJson(
-    request: LlmRequest,
-    _options?: { taskName?: string },
-  ): Promise<string> {
+  async generateJson(request: LlmRequest, _options?: { taskName?: string }): Promise<string> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.config.timeoutMs);
 
@@ -91,9 +80,9 @@ export class GeminiProvider implements LlmProviderInterface {
       const systemInstruction = `${request.systemPrompt}\n\nYou must respond with valid JSON only. Follow this schema: ${JSON.stringify(request.schema ?? {})}`;
 
       const response = await fetch(url, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           contents: [
@@ -114,19 +103,15 @@ export class GeminiProvider implements LlmProviderInterface {
           },
           generationConfig: {
             temperature: request.temperature ?? 0.3,
-            responseMimeType: 'application/json',
+            responseMimeType: "application/json",
           },
         }),
         signal: controller.signal,
       });
 
       if (!response.ok) {
-        const body = await response
-          .text()
-          .catch(() => 'Unable to read response body.');
-        throw new Error(
-          `Gemini request failed with status ${response.status}: ${body}`,
-        );
+        const body = await response.text().catch(() => "Unable to read response body.");
+        throw new Error(`Gemini request failed with status ${response.status}: ${body}`);
       }
 
       const payload = (await response.json()) as Record<string, unknown>;
@@ -136,20 +121,20 @@ export class GeminiProvider implements LlmProviderInterface {
       }>;
 
       if (!Array.isArray(candidates) || candidates.length === 0) {
-        throw new Error('Gemini response did not include candidates.');
+        throw new Error("Gemini response did not include candidates.");
       }
 
       const firstCandidate = candidates[0];
       const parts = firstCandidate.content?.parts;
 
       if (!Array.isArray(parts) || parts.length === 0) {
-        throw new Error('Gemini response did not include content parts.');
+        throw new Error("Gemini response did not include content parts.");
       }
 
       const textContent = parts[0]?.text;
 
-      if (typeof textContent !== 'string' || !textContent.trim()) {
-        throw new Error('Gemini response did not include text content.');
+      if (typeof textContent !== "string" || !textContent.trim()) {
+        throw new Error("Gemini response did not include text content.");
       }
 
       // Extract JSON from response (may be wrapped in markdown code blocks)
@@ -169,9 +154,9 @@ export class GeminiProvider implements LlmProviderInterface {
       const url = `${this.config.baseUrl}/models/${this.config.model}:generateContent?key=${this.config.apiKey}`;
 
       const response = await fetch(url, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           contents: [
@@ -191,12 +176,8 @@ export class GeminiProvider implements LlmProviderInterface {
       });
 
       if (!response.ok) {
-        const body = await response
-          .text()
-          .catch(() => 'Unable to read response body.');
-        throw new Error(
-          `Gemini request failed with status ${response.status}: ${body}`,
-        );
+        const body = await response.text().catch(() => "Unable to read response body.");
+        throw new Error(`Gemini request failed with status ${response.status}: ${body}`);
       }
 
       const payload = (await response.json()) as Record<string, unknown>;
@@ -205,20 +186,20 @@ export class GeminiProvider implements LlmProviderInterface {
       }>;
 
       if (!Array.isArray(candidates) || candidates.length === 0) {
-        throw new Error('Gemini response did not include candidates.');
+        throw new Error("Gemini response did not include candidates.");
       }
 
       const firstCandidate = candidates[0];
       const parts = firstCandidate.content?.parts;
 
       if (!Array.isArray(parts) || parts.length === 0) {
-        throw new Error('Gemini response did not include content parts.');
+        throw new Error("Gemini response did not include content parts.");
       }
 
       const textContent = parts[0]?.text;
 
-      if (typeof textContent !== 'string' || !textContent.trim()) {
-        throw new Error('Gemini response did not include text content.');
+      if (typeof textContent !== "string" || !textContent.trim()) {
+        throw new Error("Gemini response did not include text content.");
       }
 
       return textContent.trim();
@@ -228,7 +209,6 @@ export class GeminiProvider implements LlmProviderInterface {
   }
 
   getProviderName(): LlmProvider {
-    return 'gemini';
+    return "gemini";
   }
 }
-

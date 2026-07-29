@@ -1,10 +1,6 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type {
-  PaperFigure,
-  PaperReference,
-  PaperSection,
-} from '@/server/ingest';
+import type { PaperFigure, PaperReference, PaperSection } from "@/server/ingest";
 
 interface MockChunk {
   id: string;
@@ -92,79 +88,69 @@ interface PaperFixture {
   qa: Record<string, PersonaFixtures<LlmQaPayload>>;
 }
 
-const PERSONA_PROMPTS: Record<string, string> = {
-  'demo-persona':
-    'Persona focus: translate dense technical results into accessible takeaways for product-minded stakeholders.',
-};
-
 const PAPER_FIXTURES: Record<string, PaperFixture> = {
-  '1706.03762': {
+  "1706.03762": {
     metadata: {
-      id: '1706.03762',
-      title: 'Attention Is All You Need',
+      id: "1706.03762",
+      title: "Attention Is All You Need",
       abstract:
-        'The Transformer leverages self-attention to achieve state-of-the-art performance on translation tasks.',
-      authors: [
-        'Ashish Vaswani',
-        'Noam Shazeer',
-        'Niki Parmar',
-        'Jakob Uszkoreit',
-      ],
+        "The Transformer leverages self-attention to achieve state-of-the-art performance on translation tasks.",
+      authors: ["Ashish Vaswani", "Noam Shazeer", "Niki Parmar", "Jakob Uszkoreit"],
     },
     tei: {
       pageCount: 12,
       sections: [
         {
-          id: 'S1',
-          title: 'Introduction',
+          id: "S1",
+          title: "Introduction",
           level: 1,
           pageStart: 1,
           pageEnd: 2,
           paragraphs: [
             {
-              id: 'S1-p1',
-              text: 'The Transformer introduces self-attention to eliminate recurrence and enable efficient parallel computation.',
-              citations: ['bahdanau2014'],
+              id: "S1-p1",
+              text: "The Transformer introduces self-attention to eliminate recurrence and enable efficient parallel computation.",
+              citations: ["bahdanau2014"],
               figureIds: [],
               pageNumber: 1,
             },
             {
-              id: 'S1-p2',
-              text: 'By leveraging scaled dot-product attention, the model captures dependencies without sequential bottlenecks.',
-              citations: ['vaswani2017'],
+              id: "S1-p2",
+              text: "By leveraging scaled dot-product attention, the model captures dependencies without sequential bottlenecks.",
+              citations: ["vaswani2017"],
               figureIds: [],
               pageNumber: 2,
             },
           ],
         },
         {
-          id: 'S2',
-          title: 'Model Architecture',
+          id: "S2",
+          title: "Model Architecture",
           level: 1,
           pageStart: 3,
           pageEnd: 4,
           paragraphs: [
             {
-              id: 'S2-p1',
-              text: 'Multi-head attention allows the encoder to jointly attend to information from different representation subspaces at different positions.',
-              citations: ['vaswani2017'],
-              figureIds: ['fig-arch'],
+              id: "S2-p1",
+              text: "Multi-head attention allows the encoder to jointly attend to information from different representation subspaces at different positions.",
+              citations: ["vaswani2017"],
+              figureIds: ["fig-arch"],
               pageNumber: 3,
             },
           ],
         },
         {
-          id: 'S3',
-          title: 'Results',
+          id: "S3",
+          title: "Results",
           level: 1,
           pageStart: 5,
           pageEnd: 6,
           paragraphs: [
             {
-              id: 'S3-p1',
-              text: 'On WMT14 English-to-German, the Transformer achieves a BLEU score of 41.8, surpassing previous convolutional and recurrent models.',
-              citations: ['wu2016'],
-              figureIds: ['fig-results'],
+              id: "S3-p1",
+              text: "On WMT14 English-to-German, the Transformer achieves a BLEU score of 41.8, surpassing previous convolutional and recurrent models.",
+              citations: ["wu2016"],
+              figureIds: ["fig-results"],
               pageNumber: 5,
             },
           ],
@@ -172,41 +158,42 @@ const PAPER_FIXTURES: Record<string, PaperFixture> = {
       ],
       references: [
         {
-          id: 'bahdanau2014',
-          title: 'Neural Machine Translation by Jointly Learning to Align and Translate',
-          authors: ['Dzmitry Bahdanau', 'Kyunghyun Cho', 'Yoshua Bengio'],
+          id: "bahdanau2014",
+          title: "Neural Machine Translation by Jointly Learning to Align and Translate",
+          authors: ["Dzmitry Bahdanau", "Kyunghyun Cho", "Yoshua Bengio"],
           year: 2014,
-          source: 'ICLR',
-          url: 'https://arxiv.org/abs/1409.0473',
+          source: "ICLR",
+          url: "https://arxiv.org/abs/1409.0473",
         },
         {
-          id: 'vaswani2017',
-          title: 'Attention Is All You Need',
-          authors: ['Ashish Vaswani', 'Noam Shazeer', 'Niki Parmar'],
+          id: "vaswani2017",
+          title: "Attention Is All You Need",
+          authors: ["Ashish Vaswani", "Noam Shazeer", "Niki Parmar"],
           year: 2017,
-          source: 'NIPS',
-          url: 'https://arxiv.org/abs/1706.03762',
+          source: "NIPS",
+          url: "https://arxiv.org/abs/1706.03762",
         },
         {
-          id: 'wu2016',
-          title: 'Google\'s Neural Machine Translation System: Bridging the Gap between Human and Machine Translation',
-          authors: ['Yonghui Wu', 'Mike Schuster'],
+          id: "wu2016",
+          title:
+            "Google's Neural Machine Translation System: Bridging the Gap between Human and Machine Translation",
+          authors: ["Yonghui Wu", "Mike Schuster"],
           year: 2016,
-          source: 'arXiv',
-          url: 'https://arxiv.org/abs/1609.08144',
+          source: "arXiv",
+          url: "https://arxiv.org/abs/1609.08144",
         },
       ],
       figures: [
         {
-          id: 'fig-arch',
-          label: 'Figure 1',
-          caption: 'Transformer encoder-decoder architecture overview.',
+          id: "fig-arch",
+          label: "Figure 1",
+          caption: "Transformer encoder-decoder architecture overview.",
           pageNumber: 3,
         },
         {
-          id: 'fig-results',
-          label: 'Figure 2',
-          caption: 'BLEU improvements over recurrent baselines on WMT14.',
+          id: "fig-results",
+          label: "Figure 2",
+          caption: "BLEU improvements over recurrent baselines on WMT14.",
           pageNumber: 5,
         },
       ],
@@ -215,90 +202,85 @@ const PAPER_FIXTURES: Record<string, PaperFixture> = {
       base: {
         sections: [
           {
-            section_id: 'S1',
-            title: 'Introduction',
+            section_id: "S1",
+            title: "Introduction",
             summary:
-              'The authors frame self-attention as a route to faster, more scalable translation by discarding recurrence.',
+              "The authors frame self-attention as a route to faster, more scalable translation by discarding recurrence.",
             reasoning:
-              'Removing sequential dependencies enables hardware-efficient training without sacrificing contextual awareness.',
+              "Removing sequential dependencies enables hardware-efficient training without sacrificing contextual awareness.",
             key_points: [
-              'Self-attention replaces recurrence for efficiency.',
-              'Parallelization reduces training bottlenecks.',
+              "Self-attention replaces recurrence for efficiency.",
+              "Parallelization reduces training bottlenecks.",
             ],
           },
           {
-            section_id: 'S2',
-            title: 'Model Architecture',
+            section_id: "S2",
+            title: "Model Architecture",
             summary:
-              'The model stacks multi-head self-attention and feed-forward layers with residual connections.',
+              "The model stacks multi-head self-attention and feed-forward layers with residual connections.",
             reasoning:
-              'Multiple heads capture complementary relationships while skip connections stabilize optimization.',
+              "Multiple heads capture complementary relationships while skip connections stabilize optimization.",
             key_points: [
-              'Multi-head attention views tokens from different subspaces.',
-              'Position-wise feed-forward layers refine representations.',
+              "Multi-head attention views tokens from different subspaces.",
+              "Position-wise feed-forward layers refine representations.",
             ],
           },
           {
-            section_id: 'S3',
-            title: 'Results',
-            summary:
-              'The Transformer outperforms prior systems on WMT14 translation benchmarks.',
+            section_id: "S3",
+            title: "Results",
+            summary: "The Transformer outperforms prior systems on WMT14 translation benchmarks.",
             reasoning:
-              'Empirical BLEU gains stem from deeper attention stacks and label smoothing regularization.',
+              "Empirical BLEU gains stem from deeper attention stacks and label smoothing regularization.",
             key_points: [
-              'Achieves 41.8 BLEU on WMT14 En-De.',
-              'Outperforms convolutional and recurrent baselines.',
+              "Achieves 41.8 BLEU on WMT14 En-De.",
+              "Outperforms convolutional and recurrent baselines.",
             ],
           },
         ],
         key_findings: [
           {
-            statement:
-              'Self-attention eliminates recurrence while retaining long-range reasoning.',
-            evidence:
-              'Parallel attention layers process sequences without step-wise dependencies.',
-            supporting_sections: ['S1', 'S2'],
-            related_figures: ['fig-arch'],
+            statement: "Self-attention eliminates recurrence while retaining long-range reasoning.",
+            evidence: "Parallel attention layers process sequences without step-wise dependencies.",
+            supporting_sections: ["S1", "S2"],
+            related_figures: ["fig-arch"],
           },
           {
-            statement:
-              'The architecture delivers state-of-the-art machine translation quality.',
+            statement: "The architecture delivers state-of-the-art machine translation quality.",
             evidence:
-              'On WMT14 English-to-German the Transformer reaches 41.8 BLEU, exceeding prior work.',
-            supporting_sections: ['S3'],
-            related_figures: ['fig-results'],
+              "On WMT14 English-to-German the Transformer reaches 41.8 BLEU, exceeding prior work.",
+            supporting_sections: ["S3"],
+            related_figures: ["fig-results"],
           },
         ],
         figures: [
           {
-            figure_id: 'fig-arch',
+            figure_id: "fig-arch",
             insight:
-              'Visualizes how stacked encoder-decoder blocks coordinate through multi-head attention.',
-            caption_summary: 'Architecture diagram.',
+              "Visualizes how stacked encoder-decoder blocks coordinate through multi-head attention.",
+            caption_summary: "Architecture diagram.",
           },
           {
-            figure_id: 'fig-results',
-            insight:
-              'Highlights BLEU gains showing the practical impact of the architecture.',
-            caption_summary: 'BLEU performance comparison.',
+            figure_id: "fig-results",
+            insight: "Highlights BLEU gains showing the practical impact of the architecture.",
+            caption_summary: "BLEU performance comparison.",
           },
         ],
       },
     },
     qa: {
-      'How does self-attention improve efficiency?': {
+      "How does self-attention improve efficiency?": {
         base: {
           answer:
-            'Self-attention lets each token attend to all others in parallel, removing the sequential bottleneck and enabling efficient computation (page 1).',
+            "Self-attention lets each token attend to all others in parallel, removing the sequential bottleneck and enabling efficient computation (page 1).",
           citations: [
             {
-              chunk_id: 'S1-p1',
+              chunk_id: "S1-p1",
               page: 1,
               quote:
-                'The Transformer introduces self-attention to eliminate recurrence and enable efficient parallel computation.',
+                "The Transformer introduces self-attention to eliminate recurrence and enable efficient parallel computation.",
             },
             {
-              chunk_id: 'S2-p1',
+              chunk_id: "S2-p1",
               page: 3,
             },
           ],
@@ -306,66 +288,61 @@ const PAPER_FIXTURES: Record<string, PaperFixture> = {
       },
     },
   },
-  '1810.04805': {
+  "1810.04805": {
     metadata: {
-      id: '1810.04805',
-      title: 'BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding',
+      id: "1810.04805",
+      title: "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding",
       abstract:
-        'BERT pre-trains bidirectional Transformers on large corpora to improve downstream NLP tasks.',
-      authors: [
-        'Jacob Devlin',
-        'Ming-Wei Chang',
-        'Kenton Lee',
-        'Kristina Toutanova',
-      ],
+        "BERT pre-trains bidirectional Transformers on large corpora to improve downstream NLP tasks.",
+      authors: ["Jacob Devlin", "Ming-Wei Chang", "Kenton Lee", "Kristina Toutanova"],
     },
     tei: {
       pageCount: 14,
       sections: [
         {
-          id: 'S1',
-          title: 'Overview',
+          id: "S1",
+          title: "Overview",
           level: 1,
           pageStart: 1,
           pageEnd: 2,
           paragraphs: [
             {
-              id: 'S1-p1',
-              text: 'BERT introduces bidirectional Transformer encoders that leverage masked language modeling and next sentence prediction.',
-              citations: ['vaswani2017'],
+              id: "S1-p1",
+              text: "BERT introduces bidirectional Transformer encoders that leverage masked language modeling and next sentence prediction.",
+              citations: ["vaswani2017"],
               figureIds: [],
               pageNumber: 1,
             },
           ],
         },
         {
-          id: 'S2',
-          title: 'Pre-training Tasks',
+          id: "S2",
+          title: "Pre-training Tasks",
           level: 1,
           pageStart: 3,
           pageEnd: 4,
           paragraphs: [
             {
-              id: 'S2-p1',
-              text: 'The model pre-trains on BooksCorpus and English Wikipedia using masked language modeling and next sentence prediction objectives.',
-              citations: ['zhu2015', 'devlin2018'],
-              figureIds: ['fig-pretrain'],
+              id: "S2-p1",
+              text: "The model pre-trains on BooksCorpus and English Wikipedia using masked language modeling and next sentence prediction objectives.",
+              citations: ["zhu2015", "devlin2018"],
+              figureIds: ["fig-pretrain"],
               pageNumber: 3,
             },
           ],
         },
         {
-          id: 'S3',
-          title: 'Fine-tuning Performance',
+          id: "S3",
+          title: "Fine-tuning Performance",
           level: 1,
           pageStart: 6,
           pageEnd: 7,
           paragraphs: [
             {
-              id: 'S3-p1',
-              text: 'Fine-tuning BERT yields new state-of-the-art results on GLUE, MultiNLI, and SQuAD benchmarks.',
-              citations: ['wang2018'],
-              figureIds: ['fig-results'],
+              id: "S3-p1",
+              text: "Fine-tuning BERT yields new state-of-the-art results on GLUE, MultiNLI, and SQuAD benchmarks.",
+              citations: ["wang2018"],
+              figureIds: ["fig-results"],
               pageNumber: 6,
             },
           ],
@@ -373,41 +350,43 @@ const PAPER_FIXTURES: Record<string, PaperFixture> = {
       ],
       references: [
         {
-          id: 'zhu2015',
-          title: 'Aligning Books and Movies: Towards Story-like Visual Explanations by Watching Movies and Reading Books',
-          authors: ['Yukun Zhu', 'Ryan Kiros'],
+          id: "zhu2015",
+          title:
+            "Aligning Books and Movies: Towards Story-like Visual Explanations by Watching Movies and Reading Books",
+          authors: ["Yukun Zhu", "Ryan Kiros"],
           year: 2015,
-          source: 'ICCV',
-          url: 'https://arxiv.org/abs/1506.06724',
+          source: "ICCV",
+          url: "https://arxiv.org/abs/1506.06724",
         },
         {
-          id: 'devlin2018',
-          title: 'BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding',
-          authors: ['Jacob Devlin', 'Ming-Wei Chang'],
+          id: "devlin2018",
+          title: "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding",
+          authors: ["Jacob Devlin", "Ming-Wei Chang"],
           year: 2018,
-          source: 'arXiv',
-          url: 'https://arxiv.org/abs/1810.04805',
+          source: "arXiv",
+          url: "https://arxiv.org/abs/1810.04805",
         },
         {
-          id: 'wang2018',
-          title: 'GLUE: A Multi-Task Benchmark and Analysis Platform for Natural Language Understanding',
-          authors: ['Alex Wang', 'Amanpreet Singh'],
+          id: "wang2018",
+          title:
+            "GLUE: A Multi-Task Benchmark and Analysis Platform for Natural Language Understanding",
+          authors: ["Alex Wang", "Amanpreet Singh"],
           year: 2018,
-          source: 'ICLR',
-          url: 'https://arxiv.org/abs/1804.07461',
+          source: "ICLR",
+          url: "https://arxiv.org/abs/1804.07461",
         },
       ],
       figures: [
         {
-          id: 'fig-pretrain',
-          label: 'Figure 1',
-          caption: 'BERT pre-training tasks and corpora overview.',
+          id: "fig-pretrain",
+          label: "Figure 1",
+          caption: "BERT pre-training tasks and corpora overview.",
           pageNumber: 3,
         },
         {
-          id: 'fig-results',
-          label: 'Figure 2',
-          caption: 'Fine-tuning results across NLP benchmarks.',
+          id: "fig-results",
+          label: "Figure 2",
+          caption: "Fine-tuning results across NLP benchmarks.",
           pageNumber: 6,
         },
       ],
@@ -416,124 +395,119 @@ const PAPER_FIXTURES: Record<string, PaperFixture> = {
       base: {
         sections: [
           {
-            section_id: 'S1',
-            title: 'Overview',
+            section_id: "S1",
+            title: "Overview",
             summary:
-              'BERT adapts the Transformer encoder to learn deep bidirectional representations with two unsupervised objectives.',
+              "BERT adapts the Transformer encoder to learn deep bidirectional representations with two unsupervised objectives.",
             reasoning:
-              'Bidirectionality captures context from both directions, enabling stronger general-purpose language models.',
+              "Bidirectionality captures context from both directions, enabling stronger general-purpose language models.",
           },
           {
-            section_id: 'S2',
-            title: 'Pre-training Tasks',
+            section_id: "S2",
+            title: "Pre-training Tasks",
             summary:
-              'Masked language modeling and next sentence prediction on BooksCorpus and Wikipedia provide broad linguistic knowledge.',
+              "Masked language modeling and next sentence prediction on BooksCorpus and Wikipedia provide broad linguistic knowledge.",
             reasoning:
-              'These complementary objectives teach both token-level understanding and sentence-level coherence.',
+              "These complementary objectives teach both token-level understanding and sentence-level coherence.",
           },
           {
-            section_id: 'S3',
-            title: 'Fine-tuning Performance',
+            section_id: "S3",
+            title: "Fine-tuning Performance",
             summary:
-              'Fine-tuned BERT achieves state-of-the-art results on GLUE, MultiNLI, and SQuAD benchmarks.',
+              "Fine-tuned BERT achieves state-of-the-art results on GLUE, MultiNLI, and SQuAD benchmarks.",
             reasoning:
-              'Task-specific heads leverage shared representations, delivering gains without heavy engineering.',
+              "Task-specific heads leverage shared representations, delivering gains without heavy engineering.",
           },
         ],
         key_findings: [
           {
             statement:
-              'Pre-training on large unlabeled corpora transfers effectively to diverse NLP tasks.',
-            evidence:
-              'Fine-tuned models exceed prior best results on GLUE and SQuAD.',
-            supporting_sections: ['S2', 'S3'],
-            related_figures: ['fig-results'],
+              "Pre-training on large unlabeled corpora transfers effectively to diverse NLP tasks.",
+            evidence: "Fine-tuned models exceed prior best results on GLUE and SQuAD.",
+            supporting_sections: ["S2", "S3"],
+            related_figures: ["fig-results"],
           },
         ],
         figures: [
           {
-            figure_id: 'fig-pretrain',
-            insight:
-              'Summarizes the dual-objective setup leveraging BooksCorpus and Wikipedia.',
+            figure_id: "fig-pretrain",
+            insight: "Summarizes the dual-objective setup leveraging BooksCorpus and Wikipedia.",
           },
           {
-            figure_id: 'fig-results',
-            insight:
-              'Shows benchmark improvements that validate the pre-training strategy.',
+            figure_id: "fig-results",
+            insight: "Shows benchmark improvements that validate the pre-training strategy.",
           },
         ],
       },
       persona: {
         sections: [
           {
-            section_id: 'S1',
-            title: 'Overview',
+            section_id: "S1",
+            title: "Overview",
             summary:
-              'Think of BERT as a reusable language foundation: it soaks up context from both directions so downstream teams start with rich intuition.',
+              "Think of BERT as a reusable language foundation: it soaks up context from both directions so downstream teams start with rich intuition.",
             reasoning:
-              'Bidirectional attention supplies product teams with ready-to-adapt representations, accelerating iteration.',
+              "Bidirectional attention supplies product teams with ready-to-adapt representations, accelerating iteration.",
           },
           {
-            section_id: 'S2',
-            title: 'Pre-training Tasks',
+            section_id: "S2",
+            title: "Pre-training Tasks",
             summary:
-              'It learns by blanking out words and predicting sentence order across BooksCorpus and Wikipedia—essentially teaching itself broad knowledge.',
+              "It learns by blanking out words and predicting sentence order across BooksCorpus and Wikipedia—essentially teaching itself broad knowledge.",
             reasoning:
-              'These routines mimic real documentation scenarios, aligning with stakeholder needs.',
+              "These routines mimic real documentation scenarios, aligning with stakeholder needs.",
           },
           {
-            section_id: 'S3',
-            title: 'Fine-tuning Performance',
+            section_id: "S3",
+            title: "Fine-tuning Performance",
             summary:
-              'When fine-tuned, BERT consistently tops GLUE, MultiNLI, and SQuAD—evidence the foundation transfers cleanly.',
+              "When fine-tuned, BERT consistently tops GLUE, MultiNLI, and SQuAD—evidence the foundation transfers cleanly.",
             reasoning:
-              'Teams simply bolt on light heads, so the heavy lifting stays in pre-training.',
+              "Teams simply bolt on light heads, so the heavy lifting stays in pre-training.",
           },
         ],
         key_findings: [
           {
             statement:
-              'Foundation models let product groups ship faster because broad linguistic knowledge is already baked in.',
-            evidence:
-              'Across GLUE tasks BERT outperforms bespoke models, proving the reuse story.',
-            supporting_sections: ['S2', 'S3'],
-            related_figures: ['fig-results'],
+              "Foundation models let product groups ship faster because broad linguistic knowledge is already baked in.",
+            evidence: "Across GLUE tasks BERT outperforms bespoke models, proving the reuse story.",
+            supporting_sections: ["S2", "S3"],
+            related_figures: ["fig-results"],
           },
         ],
         figures: [
           {
-            figure_id: 'fig-pretrain',
-            insight:
-              'Clarifies the self-supervised recipe stakeholders can reuse for new domains.',
+            figure_id: "fig-pretrain",
+            insight: "Clarifies the self-supervised recipe stakeholders can reuse for new domains.",
           },
           {
-            figure_id: 'fig-results',
+            figure_id: "fig-results",
             insight:
-              'Quantifies the business upside via benchmark wins that reduce experimentation risk.',
+              "Quantifies the business upside via benchmark wins that reduce experimentation risk.",
           },
         ],
       },
     },
     qa: {
-      'Which corpora power BERT pre-training?': {
+      "Which corpora power BERT pre-training?": {
         base: {
           answer:
-            'BERT pre-trains on BooksCorpus together with English Wikipedia, pairing masked language modeling with next sentence prediction (page 3).',
+            "BERT pre-trains on BooksCorpus together with English Wikipedia, pairing masked language modeling with next sentence prediction (page 3).",
           citations: [
             {
-              chunk_id: 'S2-p1',
+              chunk_id: "S2-p1",
               page: 3,
               quote:
-                'The model pre-trains on BooksCorpus and English Wikipedia using masked language modeling and next sentence prediction objectives.',
+                "The model pre-trains on BooksCorpus and English Wikipedia using masked language modeling and next sentence prediction objectives.",
             },
           ],
         },
         persona: {
           answer:
-            'To give teams broad intuition, BERT trains on the BooksCorpus plus English Wikipedia—huge, complementary corpora—before fine-tuning (page 3).',
+            "To give teams broad intuition, BERT trains on the BooksCorpus plus English Wikipedia—huge, complementary corpora—before fine-tuning (page 3).",
           citations: [
             {
-              chunk_id: 'S2-p1',
+              chunk_id: "S2-p1",
               page: 3,
             },
           ],
@@ -552,44 +526,42 @@ const CITATION_METADATA: Record<
     authors: string[];
   }
 > = {
-  '1409.0473': {
-    id: '1409.0473',
-    title:
-      'Neural Machine Translation by Jointly Learning to Align and Translate',
-    abstract:
-      'Introduces an attention-based encoder-decoder model for machine translation.',
-    authors: ['Dzmitry Bahdanau', 'Kyunghyun Cho', 'Yoshua Bengio'],
+  "1409.0473": {
+    id: "1409.0473",
+    title: "Neural Machine Translation by Jointly Learning to Align and Translate",
+    abstract: "Introduces an attention-based encoder-decoder model for machine translation.",
+    authors: ["Dzmitry Bahdanau", "Kyunghyun Cho", "Yoshua Bengio"],
   },
-  '1609.08144': {
-    id: '1609.08144',
+  "1609.08144": {
+    id: "1609.08144",
     title:
       "Google's Neural Machine Translation System: Bridging the Gap between Human and Machine Translation",
     abstract:
-      'Describes the GNMT system that achieves human parity on select translation benchmarks.',
-    authors: ['Yonghui Wu', 'Mike Schuster'],
+      "Describes the GNMT system that achieves human parity on select translation benchmarks.",
+    authors: ["Yonghui Wu", "Mike Schuster"],
   },
-  '1506.06724': {
-    id: '1506.06724',
-    title: 'Aligning Books and Movies',
-    authors: ['Yukun Zhu', 'Ryan Kiros'],
+  "1506.06724": {
+    id: "1506.06724",
+    title: "Aligning Books and Movies",
+    authors: ["Yukun Zhu", "Ryan Kiros"],
   },
-  '1804.07461': {
-    id: '1804.07461',
-    title: 'GLUE: A Multi-Task Benchmark and Analysis Platform',
-    authors: ['Alex Wang', 'Amanpreet Singh'],
+  "1804.07461": {
+    id: "1804.07461",
+    title: "GLUE: A Multi-Task Benchmark and Analysis Platform",
+    authors: ["Alex Wang", "Amanpreet Singh"],
   },
 };
 
 const summaryRequests: Array<{
   paperId: string;
-  persona: 'base' | 'persona';
+  persona: "base" | "persona";
   systemPrompt: string;
   userPrompt: string;
 }> = [];
 
 const qaRequests: Array<{
   paperId: string;
-  persona: 'base' | 'persona';
+  persona: "base" | "persona";
   question: string;
   systemPrompt: string;
   userPrompt: string;
@@ -657,18 +629,15 @@ function extractPaperIdFromPrompt(prompt: string): string | undefined {
 }
 
 const generateJsonSummaryMock = vi.fn(
-  async (params: {
-    systemPrompt: string;
-    userPrompt: string;
-  }): Promise<string> => {
+  async (params: { systemPrompt: string; userPrompt: string }): Promise<string> => {
     const paperId = extractPaperIdFromPrompt(params.userPrompt);
     if (!paperId) {
-      throw new Error('Unable to detect paper ID in summary prompt.');
+      throw new Error("Unable to detect paper ID in summary prompt.");
     }
 
-    const personaMode: 'base' | 'persona' = params.systemPrompt.trim().startsWith('Persona focus')
-      ? 'persona'
-      : 'base';
+    const personaMode: "base" | "persona" = params.systemPrompt.trim().startsWith("Persona focus")
+      ? "persona"
+      : "base";
 
     summaryRequests.push({
       paperId,
@@ -683,7 +652,7 @@ const generateJsonSummaryMock = vi.fn(
     }
 
     const payload =
-      personaMode === 'persona' && fixture.summary.persona
+      personaMode === "persona" && fixture.summary.persona
         ? fixture.summary.persona
         : fixture.summary.base;
 
@@ -692,23 +661,18 @@ const generateJsonSummaryMock = vi.fn(
 );
 
 const generateQaResponseMock = vi.fn(
-  async (params: {
-    systemPrompt: string;
-    userPrompt: string;
-  }): Promise<string> => {
+  async (params: { systemPrompt: string; userPrompt: string }): Promise<string> => {
     const paperId = extractPaperIdFromPrompt(params.userPrompt);
     if (!paperId) {
-      throw new Error('Unable to detect paper ID in QA prompt.');
+      throw new Error("Unable to detect paper ID in QA prompt.");
     }
 
     const questionMatch = params.userPrompt.match(/Question:\s*(.+)/);
-    const question = questionMatch?.[1]?.trim() ?? '';
+    const question = questionMatch?.[1]?.trim() ?? "";
 
-    const personaMode: 'base' | 'persona' = params.systemPrompt.includes(
-      'Persona guidance:',
-    )
-      ? 'persona'
-      : 'base';
+    const personaMode: "base" | "persona" = params.systemPrompt.includes("Persona guidance:")
+      ? "persona"
+      : "base";
 
     qaRequests.push({
       paperId,
@@ -724,18 +688,17 @@ const generateQaResponseMock = vi.fn(
       throw new Error(`Missing QA fixture for "${question}"`);
     }
 
-    const payload =
-      personaMode === 'persona' && qaEntry.persona
-        ? qaEntry.persona
-        : qaEntry.base;
+    const payload = personaMode === "persona" && qaEntry.persona ? qaEntry.persona : qaEntry.base;
 
     return JSON.stringify(payload);
   },
 );
 
-vi.mock('@/server/ingest/arxiv', () => ({
+vi.mock("@/server/ingest/arxiv", () => ({
   fetchArxivMetadata: vi.fn(
-    async (arxivId: string): Promise<
+    async (
+      arxivId: string,
+    ): Promise<
       | {
           id: string;
           title?: string;
@@ -767,19 +730,17 @@ vi.mock('@/server/ingest/arxiv', () => ({
     },
   ),
   fetchAr5ivHtml: vi.fn(async (arxivId: string) => `ar5iv:${arxivId}`),
-  fetchArxivPdf: vi.fn(async (arxivId: string) =>
-    new TextEncoder().encode(arxivId).buffer,
-  ),
+  fetchArxivPdf: vi.fn(async (arxivId: string) => new TextEncoder().encode(arxivId).buffer),
 }));
 
-vi.mock('@/server/ingest/ar5iv', () => ({
+vi.mock("@/server/ingest/ar5iv", () => ({
   parseAr5ivHtml: vi.fn((htmlPayload: string) => {
     // The fetchAr5ivHtml mock above returns `ar5iv:<arxivId>` so we can
     // route the fixture's structured sections + figures (originally
     // sourced from the TEI fixture) into the now-primary ar5iv parse
     // path. References are not produced by ar5iv parsing in real life,
     // so we drop them — the test stays meaningful for sections/figures.
-    const [, paperId] = htmlPayload.split(':');
+    const [, paperId] = htmlPayload.split(":");
     const fixture = PAPER_FIXTURES[paperId];
     if (!fixture) {
       return { sections: [], figures: [] };
@@ -791,77 +752,136 @@ vi.mock('@/server/ingest/ar5iv', () => ({
   }),
 }));
 
-
-vi.mock('@/server/ingest/pdf', () => ({
+vi.mock("@/server/ingest/pdf", () => ({
   extractPdfText: vi.fn(async () => undefined),
   shouldUseOcr: vi.fn(() => false),
 }));
 
-vi.mock('@/server/ingest/ocr', () => ({
+vi.mock("@/server/ingest/ocr", () => ({
   runDeepSeekOcr: vi.fn(async () => undefined),
 }));
 
 const storeMock = {
   upsertPaper: vi.fn(async () => undefined),
 
-  upsertPaperChunks: vi.fn(async (chunks: Array<Omit<MockChunk, 'id'>>) => {
-    for (const chunk of chunks) {
-      const list = ensureChunks(chunk.paperId);
-      const filtered = list.filter(
-        (existing) => existing.chunkId !== chunk.chunkId,
-      );
-      filtered.push({
-        ...chunk,
-        id: `${chunk.paperId}:${chunk.chunkId}`,
-        citations: [...(chunk.citations ?? [])],
-        figureIds: [...(chunk.figureIds ?? [])],
-      });
-      mockStore.chunks.set(chunk.paperId, filtered);
-    }
+  upsertPaperChunks: vi.fn(
+    async (
+      chunks: Array<Omit<MockChunk, "id">>,
+      options?: { replaceExistingForPaper?: boolean },
+    ) => {
+      if (options?.replaceExistingForPaper) {
+        const chunkIdsByPaper = new Map<string, Set<string>>();
+        for (const chunk of chunks) {
+          const existing = chunkIdsByPaper.get(chunk.paperId) ?? new Set<string>();
+          existing.add(chunk.chunkId);
+          chunkIdsByPaper.set(chunk.paperId, existing);
+        }
 
-    return chunks.map((chunk) => `${chunk.paperId}:${chunk.chunkId}`);
-  }),
+        for (const [paperId, chunkIds] of chunkIdsByPaper) {
+          const list = ensureChunks(paperId);
+          mockStore.chunks.set(
+            paperId,
+            list.filter((existing) => chunkIds.has(existing.chunkId)),
+          );
+        }
+      }
 
-  upsertFigures: vi.fn(async (figures: Array<Omit<MockFigure, 'id'>>) => {
-    for (const figure of figures) {
-      const list = ensureFigures(figure.paperId);
-      const filtered = list.filter(
-        (existing) => existing.figureId !== figure.figureId,
-      );
-      filtered.push({
-        ...figure,
-        id: `${figure.paperId}:${figure.figureId}`,
-        chunkIds: figure.chunkIds ? [...figure.chunkIds] : undefined,
-      });
-      mockStore.figures.set(figure.paperId, filtered);
-    }
-    return figures.map((figure) => `${figure.paperId}:${figure.figureId}`);
-  }),
+      for (const chunk of chunks) {
+        const list = ensureChunks(chunk.paperId);
+        const filtered = list.filter((existing) => existing.chunkId !== chunk.chunkId);
+        filtered.push({
+          ...chunk,
+          id: `${chunk.paperId}:${chunk.chunkId}`,
+          citations: [...(chunk.citations ?? [])],
+          figureIds: [...(chunk.figureIds ?? [])],
+        });
+        mockStore.chunks.set(chunk.paperId, filtered);
+      }
 
-  upsertCitations: vi.fn(async (citations: Array<Omit<MockCitation, 'id'>>) => {
-    for (const citation of citations) {
-      const list = ensureCitations(citation.paperId);
-      const filtered = list.filter(
-        (existing) => existing.citationId !== citation.citationId,
-      );
-      filtered.push({
-        ...citation,
-        id: `${citation.paperId}:${citation.citationId}`,
-        chunkIds: citation.chunkIds ? [...citation.chunkIds] : undefined,
-      });
-      mockStore.citations.set(citation.paperId, filtered);
-    }
+      return chunks.map((chunk) => `${chunk.paperId}:${chunk.chunkId}`);
+    },
+  ),
 
-    return citations.map(
-      (citation) => `${citation.paperId}:${citation.citationId}`,
-    );
-  }),
+  upsertFigures: vi.fn(
+    async (
+      figures: Array<Omit<MockFigure, "id">>,
+      options?: { paperId?: string; replaceExistingForPaper?: boolean },
+    ) => {
+      const paperIds = new Set([
+        ...figures.map((figure) => figure.paperId),
+        ...(options?.paperId ? [options.paperId] : []),
+      ]);
+
+      if (options?.replaceExistingForPaper) {
+        for (const paperId of paperIds) {
+          const figureIds = new Set(
+            figures.filter((figure) => figure.paperId === paperId).map((figure) => figure.figureId),
+          );
+          const list = ensureFigures(paperId);
+          mockStore.figures.set(
+            paperId,
+            list.filter((existing) => figureIds.has(existing.figureId)),
+          );
+        }
+      }
+
+      for (const figure of figures) {
+        const list = ensureFigures(figure.paperId);
+        const filtered = list.filter((existing) => existing.figureId !== figure.figureId);
+        filtered.push({
+          ...figure,
+          id: `${figure.paperId}:${figure.figureId}`,
+          chunkIds: figure.chunkIds ? [...figure.chunkIds] : undefined,
+        });
+        mockStore.figures.set(figure.paperId, filtered);
+      }
+      return figures.map((figure) => `${figure.paperId}:${figure.figureId}`);
+    },
+  ),
+
+  upsertCitations: vi.fn(
+    async (
+      citations: Array<Omit<MockCitation, "id">>,
+      options?: { paperId?: string; replaceExistingForPaper?: boolean },
+    ) => {
+      const paperIds = new Set([
+        ...citations.map((citation) => citation.paperId),
+        ...(options?.paperId ? [options.paperId] : []),
+      ]);
+
+      if (options?.replaceExistingForPaper) {
+        for (const paperId of paperIds) {
+          const citationIds = new Set(
+            citations
+              .filter((citation) => citation.paperId === paperId)
+              .map((citation) => citation.citationId),
+          );
+          const list = ensureCitations(paperId);
+          mockStore.citations.set(
+            paperId,
+            list.filter((existing) => citationIds.has(existing.citationId)),
+          );
+        }
+      }
+
+      for (const citation of citations) {
+        const list = ensureCitations(citation.paperId);
+        const filtered = list.filter((existing) => existing.citationId !== citation.citationId);
+        filtered.push({
+          ...citation,
+          id: `${citation.paperId}:${citation.citationId}`,
+          chunkIds: citation.chunkIds ? [...citation.chunkIds] : undefined,
+        });
+        mockStore.citations.set(citation.paperId, filtered);
+      }
+
+      return citations.map((citation) => `${citation.paperId}:${citation.citationId}`);
+    },
+  ),
 
   fetchPaperChunksByPaperId: vi.fn(async (paperId: string) => {
     const chunks = mockStore.chunks.get(paperId) ?? [];
-    return chunks.map(cloneChunk).sort((a, b) =>
-      a.chunkId.localeCompare(b.chunkId),
-    );
+    return chunks.map(cloneChunk).sort((a, b) => a.chunkId.localeCompare(b.chunkId));
   }),
 
   fetchPaperFiguresByPaperId: vi.fn(async (paperId: string) => {
@@ -876,21 +896,16 @@ const storeMock = {
 };
 
 const hybridSearchMock = vi.fn(
-  async (options: {
-    paperId: string;
-    query: string;
-    limit?: number;
-  }) => {
+  async (options: { paperId: string; query: string; limit?: number }) => {
     const chunks = mockStore.chunks.get(options.paperId) ?? [];
     const normalizedQuery = options.query.toLowerCase();
 
     const matching = chunks.filter((chunk) => {
-      const haystack = `${chunk.text} ${chunk.section ?? ''}`.toLowerCase();
+      const haystack = `${chunk.text} ${chunk.section ?? ""}`.toLowerCase();
       return haystack.includes(normalizedQuery);
     });
 
-    const selected =
-      matching.length > 0 ? matching : chunks.slice(0, options.limit ?? 5);
+    const selected = matching.length > 0 ? matching : chunks.slice(0, options.limit ?? 5);
 
     const hits = selected.slice(0, options.limit ?? 5).map((chunk, index) => ({
       id: `${chunk.paperId}:${chunk.chunkId}:${index}`,
@@ -920,89 +935,122 @@ const upsertPersonaConceptsMock = vi.fn(async (rows: unknown[]) =>
   rows.map((_, index) => `concept-${index}`),
 );
 const listPersonaConceptsForUserMock = vi.fn(async () => []);
+const ensureQdrantCollectionMock = vi.fn(async () => undefined);
+const upsertPaperChunkVectorsMock = vi.fn(async () => undefined);
+const deletePaperChunkVectorsByPaperMock = vi.fn(async () => undefined);
 
-vi.mock('@/server/db', () => ({
+vi.mock("@/server/db", () => ({
   upsertPaper: storeMock.upsertPaper,
   upsertPaperChunks: storeMock.upsertPaperChunks,
   upsertFigures: storeMock.upsertFigures,
   upsertCitations: storeMock.upsertCitations,
+  replacePaperIngestData: vi.fn(
+    async (
+      input: {
+        paper: { paperId: string };
+        chunks: Array<Omit<MockChunk, "id">>;
+        figures: Array<Omit<MockFigure, "id">>;
+        citations: Array<Omit<MockCitation, "id">>;
+      },
+      options?: {
+        afterCommit?: (result: {
+          chunkIds: string[];
+          figureIds: string[];
+          citationIds: string[];
+        }) => Promise<void>;
+      },
+    ) => {
+      await storeMock.upsertPaper();
+      const chunkIds = await storeMock.upsertPaperChunks(input.chunks, {
+        replaceExistingForPaper: true,
+      });
+      const figureIds = await storeMock.upsertFigures(input.figures, {
+        paperId: input.paper.paperId,
+        replaceExistingForPaper: true,
+      });
+      const citationIds = await storeMock.upsertCitations(input.citations, {
+        paperId: input.paper.paperId,
+        replaceExistingForPaper: true,
+      });
+      const result = { chunkIds, figureIds, citationIds };
+      await options?.afterCommit?.(result);
+      return result;
+    },
+  ),
   fetchPaperChunksByPaperId: storeMock.fetchPaperChunksByPaperId,
   fetchPaperFiguresByPaperId: storeMock.fetchPaperFiguresByPaperId,
   fetchPaperCitationsByPaperId: storeMock.fetchPaperCitationsByPaperId,
   upsertInteractions: upsertInteractionsMock,
   upsertPersonaConcepts: upsertPersonaConceptsMock,
   listPersonaConceptsForUser: listPersonaConceptsForUserMock,
-  buildPaperChunkUuid: (paperId: string, chunkId: string) =>
-    `${paperId}:${chunkId}`,
+  buildPaperChunkUuid: (paperId: string, chunkId: string) => `${paperId}:${chunkId}`,
 }));
 
-vi.mock('@/server/search/hybrid', () => ({
+vi.mock("@/server/search/hybrid", () => ({
   hybridPaperChunkSearch: hybridSearchMock,
 }));
 
-vi.mock('@/server/vector/qdrant', () => ({
-  ensureQdrantCollection: vi.fn(async () => undefined),
-  upsertPaperChunkVectors: vi.fn(async () => undefined),
-  deletePaperChunkVectorsByPaper: vi.fn(async () => undefined),
+vi.mock("@/server/vector/qdrant", () => ({
+  ensureQdrantCollection: ensureQdrantCollectionMock,
+  upsertPaperChunkVectors: upsertPaperChunkVectorsMock,
+  deletePaperChunkVectorsByPaper: deletePaperChunkVectorsByPaperMock,
 }));
 
-vi.mock('@/server/vector/embeddings', () => ({
-  embedTexts: vi.fn(async (texts: string[]) =>
-    texts.map(() => Array.from({ length: 4 }, () => 0)),
-  ),
+vi.mock("@/server/vector/embeddings", () => ({
+  embedTexts: vi.fn(async (texts: string[]) => texts.map(() => Array.from({ length: 4 }, () => 0))),
   embedQuery: vi.fn(async () => Array.from({ length: 4 }, () => 0)),
   getEmbeddingEnvironment: vi.fn(() => ({
-    providerId: 'openai',
-    apiKey: 'test',
-    baseUrl: 'https://api.openai.com/v1',
-    model: 'text-embedding-3-small',
+    providerId: "openai",
+    apiKey: "test",
+    baseUrl: "https://api.openai.com/v1",
+    model: "text-embedding-3-small",
     dimensions: 4,
     timeoutMs: 30_000,
-    collection: 'paper_chunks_test',
+    collection: "paper_chunks_test",
   })),
-  getActiveEmbeddingProvider: vi.fn(() => 'openai'),
+  getActiveEmbeddingProvider: vi.fn(() => "openai"),
 }));
 
-vi.mock('@/server/llm', () => ({
+vi.mock("@/server/llm", () => ({
   generateJson: vi.fn(
-    async (
-      params: { systemPrompt: string; userPrompt: string },
-      ctx?: { taskName?: string },
-    ) => {
-      if (ctx?.taskName === 'qa') {
+    async (params: { systemPrompt: string; userPrompt: string }, ctx?: { taskName?: string }) => {
+      if (ctx?.taskName === "qa") {
         return generateQaResponseMock(params);
       }
       return generateJsonSummaryMock(params);
     },
   ),
-  generateText: vi.fn(async () => ''),
+  generateText: vi.fn(async () => ""),
 }));
 
-let ingestPaper: typeof import('@/server/ingest').ingestPaper;
-let summarizePaper: typeof import('@/server/summarize').summarizePaper;
-let answerPaperQuestion: typeof import('@/server/qa').answerPaperQuestion;
+let ingestPaper: typeof import("@/server/ingest").ingestPaper;
+let summarizePaper: typeof import("@/server/summarize").summarizePaper;
+let answerPaperQuestion: typeof import("@/server/qa").answerPaperQuestion;
 
 beforeAll(async () => {
-  ({ ingestPaper } = await import('@/server/ingest'));
-  ({ summarizePaper } = await import('@/server/summarize'));
-  ({ answerPaperQuestion } = await import('@/server/qa'));
+  ({ ingestPaper } = await import("@/server/ingest"));
+  ({ summarizePaper } = await import("@/server/summarize"));
+  ({ answerPaperQuestion } = await import("@/server/qa"));
 });
 
 beforeEach(() => {
+  vi.clearAllMocks();
   resetStore();
   summaryRequests.length = 0;
   qaRequests.length = 0;
-  generateJsonSummaryMock.mockClear();
-  generateQaResponseMock.mockClear();
 });
 
-describe('ingest → summarize → QA pipeline', () => {
-  it('ingests a reference paper and produces summary with page anchors plus QA citations', async () => {
-    const paperId = '1706.03762';
+describe("ingest → summarize → QA pipeline", () => {
+  it("ingests a reference paper and produces summary with page anchors plus QA citations", async () => {
+    const paperId = "1706.03762";
 
     const ingestResult = await ingestPaper({ arxivId: paperId });
 
     expect(ingestResult.paperId).toBe(paperId);
+    const { parseAr5ivHtml } = await import("@/server/ingest/ar5iv");
+    expect(parseAr5ivHtml).toHaveBeenCalledWith("ar5iv:1706.03762", {
+      imageBaseUrl: "https://ar5iv.org/html/1706.03762",
+    });
     expect(mockStore.chunks.get(paperId)).toHaveLength(4);
     expect(ingestResult.sections).toHaveLength(3);
     expect(ingestResult.figures).toHaveLength(2);
@@ -1014,23 +1062,54 @@ describe('ingest → summarize → QA pipeline', () => {
 
     const summary = await summarizePaper(paperId);
 
-    expect(summary.sections.map((section) => section.section_id)).toEqual([
-      'S1',
-      'S2',
-      'S3',
-    ]);
-    expect(summary.sections[0].page_anchor).toBe('(page 1)');
-    expect(summary.sections[1].page_anchor).toBe('(page 3)');
-    expect(summary.figures[0]?.page_anchor).toBe('(page 3)');
-    expect(summary.key_findings[0]?.page_anchors).toContain('(page 3)');
+    expect(summary.sections.map((section) => section.section_id)).toEqual(["S1", "S2", "S3"]);
+    expect(summary.sections[0].page_anchor).toBe("(page 1)");
+    expect(summary.sections[1].page_anchor).toBe("(page 3)");
+    expect(summary.figures[0]?.page_anchor).toBe("(page 3)");
+    expect(summary.key_findings[0]?.page_anchors).toContain("(page 3)");
 
-    const question = 'How does self-attention improve efficiency?';
+    const question = "How does self-attention improve efficiency?";
     const answer = await answerPaperQuestion(paperId, question);
 
-    expect(answer.answer).toContain('parallel');
-    expect(answer.cites[0]?.chunkId).toBe('S1-p1');
+    expect(answer.answer).toContain("parallel");
+    expect(answer.cites[0]?.chunkId).toBe("S1-p1");
     expect(answer.cites[0]?.page).toBe(1);
-    expect(answer.cites[1]?.chunkId).toBe('S2-p1');
+    expect(answer.cites[1]?.chunkId).toBe("S2-p1");
+  });
+
+  it("replaces stale chunks and vector points when a paper is re-ingested", async () => {
+    const paperId = "1810.04805";
+    const fixture = PAPER_FIXTURES[paperId];
+    const originalSections = fixture.tei.sections;
+    const originalFigures = fixture.tei.figures;
+
+    await ingestPaper({ arxivId: paperId });
+
+    expect(mockStore.chunks.get(paperId)?.map((chunk) => chunk.chunkId)).toEqual([
+      "S1-p1",
+      "S2-p1",
+      "S3-p1",
+    ]);
+
+    fixture.tei.sections = [originalSections[0]];
+    fixture.tei.figures = [originalFigures[0]];
+
+    try {
+      await ingestPaper({ arxivId: paperId });
+
+      expect(mockStore.chunks.get(paperId)?.map((chunk) => chunk.chunkId)).toEqual(["S1-p1"]);
+      expect(mockStore.figures.get(paperId)?.map((figure) => figure.figureId)).toEqual([
+        "fig-pretrain",
+      ]);
+      expect(ensureQdrantCollectionMock.mock.invocationCallOrder[1]).toBeLessThan(
+        deletePaperChunkVectorsByPaperMock.mock.invocationCallOrder[1],
+      );
+      expect(deletePaperChunkVectorsByPaperMock).toHaveBeenCalledWith(paperId);
+      expect(upsertPaperChunkVectorsMock).toHaveBeenCalled();
+    } finally {
+      fixture.tei.sections = originalSections;
+      fixture.tei.figures = originalFigures;
+    }
   });
 });
 

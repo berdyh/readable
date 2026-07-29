@@ -7,84 +7,80 @@
  * when status is ambiguous (400/402/422).
  */
 
-import type { FailoverReason } from './types';
+import type { FailoverReason } from "./types";
 
 const PERMANENT_AUTH_HINTS = [
-  'invalid_api_key',
-  'invalid api key',
-  'invalid token',
-  'expired token',
-  'authentication failed',
-  'unauthorized',
-  'permission_denied',
+  "invalid_api_key",
+  "invalid api key",
+  "invalid token",
+  "expired token",
+  "authentication failed",
+  "unauthorized",
+  "permission_denied",
 ];
 
 const RATE_LIMIT_HINTS = [
-  'rate limit',
-  'rate-limit',
-  'rate_limit',
-  'too many requests',
-  'usage_limit',
-  'quota_exhausted',
+  "rate limit",
+  "rate-limit",
+  "rate_limit",
+  "too many requests",
+  "usage_limit",
+  "quota_exhausted",
   // OpenAI sends this on 402 when the per-window quota is hit but the
   // account is still in good standing — semantically a rate_limit, not a
   // billing failure.
-  'usage cap',
+  "usage cap",
 ];
 
 const BILLING_HINTS = [
-  'insufficient_quota',
-  'insufficient quota',
-  'billing',
-  'payment_required',
-  'plan_canceled',
-  'subscription expired',
+  "insufficient_quota",
+  "insufficient quota",
+  "billing",
+  "payment_required",
+  "plan_canceled",
+  "subscription expired",
 ];
 
 const OVERLOADED_HINTS = [
-  'overloaded',
-  'capacity',
-  'overload',
-  'try again',
-  'service is overloaded',
+  "overloaded",
+  "capacity",
+  "overload",
+  "try again",
+  "service is overloaded",
 ];
 
 const FORMAT_HINTS = [
-  'invalid_request',
-  'invalid request',
-  'unprocessable',
-  'schema',
-  'json_schema',
-  'json schema',
-  'response_format',
+  "invalid_request",
+  "invalid request",
+  "unprocessable",
+  "schema",
+  "json_schema",
+  "json schema",
+  "response_format",
 ];
 
 const TIMEOUT_HINTS = [
-  'timeout',
-  'timed out',
-  'gateway timeout',
-  'econnreset',
-  'econnrefused',
-  'eai_again',
-  'fetch failed',
-  'aborted',
+  "timeout",
+  "timed out",
+  "gateway timeout",
+  "econnreset",
+  "econnrefused",
+  "eai_again",
+  "fetch failed",
+  "aborted",
 ];
 
 const MODEL_NOT_FOUND_HINTS = [
-  'model_not_found',
-  'model not found',
-  'no such model',
-  'unknown model',
+  "model_not_found",
+  "model not found",
+  "no such model",
+  "unknown model",
 ];
 
-const EMPTY_RESPONSE_HINTS = [
-  'no choices',
-  'empty content',
-  'empty response',
-];
+const EMPTY_RESPONSE_HINTS = ["no choices", "empty content", "empty response"];
 
 function lowerSafe(value: unknown): string {
-  if (typeof value !== 'string') return '';
+  if (typeof value !== "string") return "";
   return value.toLowerCase();
 }
 
@@ -105,10 +101,7 @@ function anyHint(text: string, hints: string[]): boolean {
  * it when available — it greatly improves classification accuracy on
  * OpenAI's overloaded `400 Bad Request` and on rate-limit-as-402 cases.
  */
-export function classifyHttpStatus(
-  status: number,
-  body?: string,
-): FailoverReason | null {
+export function classifyHttpStatus(status: number, body?: string): FailoverReason | null {
   if (status >= 200 && status < 300) {
     return null;
   }
@@ -119,21 +112,21 @@ export function classifyHttpStatus(
   // current profile) from "permanent" (key revoked).
   if (status === 401 || status === 403) {
     if (anyHint(lower, PERMANENT_AUTH_HINTS)) {
-      return 'auth_permanent';
+      return "auth_permanent";
     }
-    return 'auth';
+    return "auth";
   }
 
   // 402: usually billing — but OpenAI uses 402 for usage-window cap too,
   // which we want to treat as rate_limit so the cooldown drains faster.
   if (status === 402) {
-    if (anyHint(lower, RATE_LIMIT_HINTS)) return 'rate_limit';
-    return 'billing';
+    if (anyHint(lower, RATE_LIMIT_HINTS)) return "rate_limit";
+    return "billing";
   }
 
   // 404: model not found.
   if (status === 404) {
-    return 'model_not_found';
+    return "model_not_found";
   }
 
   // 408 / 410 / 5xx (except 529): timeout-ish.
@@ -145,31 +138,31 @@ export function classifyHttpStatus(
     status === 503 ||
     status === 504
   ) {
-    return 'timeout';
+    return "timeout";
   }
 
   // 429: rate limit.
   if (status === 429) {
-    return 'rate_limit';
+    return "rate_limit";
   }
 
   // 529: Anthropic / a few others use this for "overloaded".
   if (status === 529) {
-    return 'overloaded';
+    return "overloaded";
   }
 
   // 400/422: format-ish. Only reclassify if message strongly suggests
   // something else.
   if (status === 400 || status === 422) {
-    if (anyHint(lower, RATE_LIMIT_HINTS)) return 'rate_limit';
-    if (anyHint(lower, OVERLOADED_HINTS)) return 'overloaded';
-    if (anyHint(lower, BILLING_HINTS)) return 'billing';
-    if (anyHint(lower, MODEL_NOT_FOUND_HINTS)) return 'model_not_found';
-    return 'format';
+    if (anyHint(lower, RATE_LIMIT_HINTS)) return "rate_limit";
+    if (anyHint(lower, OVERLOADED_HINTS)) return "overloaded";
+    if (anyHint(lower, BILLING_HINTS)) return "billing";
+    if (anyHint(lower, MODEL_NOT_FOUND_HINTS)) return "model_not_found";
+    return "format";
   }
 
   // Anything else in 4xx/5xx — fall through to message classifier.
-  return classifyMessage(body) ?? 'no_error_details';
+  return classifyMessage(body) ?? "no_error_details";
 }
 
 /**
@@ -181,17 +174,17 @@ export function classifyMessage(message: unknown): FailoverReason | null {
   const lower = lowerSafe(message);
   if (!lower) return null;
 
-  if (anyHint(lower, RATE_LIMIT_HINTS)) return 'rate_limit';
-  if (anyHint(lower, BILLING_HINTS)) return 'billing';
-  if (anyHint(lower, OVERLOADED_HINTS)) return 'overloaded';
-  if (anyHint(lower, TIMEOUT_HINTS)) return 'timeout';
-  if (anyHint(lower, PERMANENT_AUTH_HINTS)) return 'auth_permanent';
-  if (anyHint(lower, MODEL_NOT_FOUND_HINTS)) return 'model_not_found';
-  if (anyHint(lower, EMPTY_RESPONSE_HINTS)) return 'empty_response';
-  if (anyHint(lower, FORMAT_HINTS)) return 'format';
+  if (anyHint(lower, RATE_LIMIT_HINTS)) return "rate_limit";
+  if (anyHint(lower, BILLING_HINTS)) return "billing";
+  if (anyHint(lower, OVERLOADED_HINTS)) return "overloaded";
+  if (anyHint(lower, TIMEOUT_HINTS)) return "timeout";
+  if (anyHint(lower, PERMANENT_AUTH_HINTS)) return "auth_permanent";
+  if (anyHint(lower, MODEL_NOT_FOUND_HINTS)) return "model_not_found";
+  if (anyHint(lower, EMPTY_RESPONSE_HINTS)) return "empty_response";
+  if (anyHint(lower, FORMAT_HINTS)) return "format";
 
-  if (lower.includes('session') && lower.includes('expir')) {
-    return 'session_expired';
+  if (lower.includes("session") && lower.includes("expir")) {
+    return "session_expired";
   }
 
   return null;
@@ -213,7 +206,7 @@ export function classifyFailoverSignal(input: {
   message?: unknown;
 }): FailoverReason {
   const messageString =
-    typeof input.message === 'string'
+    typeof input.message === "string"
       ? input.message
       : input.message !== undefined && input.message !== null
         ? (() => {
@@ -223,16 +216,16 @@ export function classifyFailoverSignal(input: {
               return String(input.message);
             }
           })()
-        : '';
-  const combined = [input.body ?? '', messageString].filter(Boolean).join(' ');
+        : "";
+  const combined = [input.body ?? "", messageString].filter(Boolean).join(" ");
 
-  if (typeof input.status === 'number') {
+  if (typeof input.status === "number") {
     const fromStatus = classifyHttpStatus(input.status, combined);
     if (fromStatus) return fromStatus;
   }
   const fromMessage = classifyMessage(combined);
   if (fromMessage) return fromMessage;
-  return 'unknown';
+  return "unknown";
 }
 
 /**
@@ -243,8 +236,8 @@ export function classifyFailoverSignal(input: {
  */
 export function shouldAdvanceFallback(reason: FailoverReason): boolean {
   switch (reason) {
-    case 'auth_permanent':
-    case 'format':
+    case "auth_permanent":
+    case "format":
       // These won't be helped by a different provider — the request shape
       // itself is wrong, or the credential is permanently broken.
       return false;
@@ -260,17 +253,15 @@ export function shouldAdvanceFallback(reason: FailoverReason): boolean {
  *
  * Mirrors OpenClaw `failover-policy.ts:shouldAllowCooldownProbeForReason`.
  */
-export function shouldAllowCooldownProbeForReason(
-  reason: FailoverReason | undefined,
-): boolean {
+export function shouldAllowCooldownProbeForReason(reason: FailoverReason | undefined): boolean {
   switch (reason) {
-    case 'rate_limit':
-    case 'overloaded':
-    case 'timeout':
-    case 'unknown':
-    case 'no_error_details':
-    case 'unclassified':
-    case 'empty_response':
+    case "rate_limit":
+    case "overloaded":
+    case "timeout":
+    case "unknown":
+    case "no_error_details":
+    case "unclassified":
+    case "empty_response":
       return true;
     default:
       return false;

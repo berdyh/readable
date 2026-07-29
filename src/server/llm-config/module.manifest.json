@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "server.llm-config",
+  "parent": "server",
+  "path": "src/server/llm-config",
+  "goal": "Serves the prompt text and model id for a given task.",
+  "owns": ["src/server/llm-config"],
+  "interface": {
+    "entrypoint": "index.ts",
+    "exports": [
+      "getSystemPrompt",
+      "getPromptLimits",
+      "getPaperSummaryRequirements",
+      "getModel",
+      "getModelConfig"
+    ]
+  },
+  "constraints": ["prompts.json", "models.json", "env overrides"],
+  "checks": ["pnpm vitest run src/server/llm"]
+}

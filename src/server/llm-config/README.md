@@ -14,10 +14,10 @@ This folder contains all LLM-related configuration: system/user prompts and mode
 ### Prompts
 
 ```typescript
-import { getSystemPrompt, getPromptLimits, getPaperSummaryRequirements } from '@/server/llm-config';
+import { getSystemPrompt, getPromptLimits, getPaperSummaryRequirements } from "@/server/llm-config";
 
 // Get a system prompt for a specific task
-const prompt = getSystemPrompt('paper_summary', personaPrompt);
+const prompt = getSystemPrompt("paper_summary", personaPrompt);
 
 // Get prompt limits
 const limits = getPromptLimits();
@@ -30,14 +30,14 @@ const requirements = getPaperSummaryRequirements();
 ### Models
 
 ```typescript
-import { getModel, getModelConfig } from '@/server/llm-config';
+import { getModel, getModelConfig } from "@/server/llm-config";
 
 // Get recommended model for a provider and task
-const model = getModel('openai', 'qa'); // Returns 'gpt-4o-mini'
-const anthropicModel = getModel('anthropic', 'paper_summary'); // Returns 'claude-3-haiku-20240307'
+const model = getModel("openai", "qa"); // Returns 'gpt-4o-mini'
+const anthropicModel = getModel("anthropic", "paper_summary"); // Returns 'claude-3-haiku-20240307'
 
 // Get full model configuration with rationale and pricing
-const config = getModelConfig('gemini', 'qa');
+const config = getModelConfig("gemini", "qa");
 console.log(config.model); // 'gemini-1.5-pro'
 console.log(config.rationale); // Explanation of why this model was chosen
 ```
@@ -51,6 +51,7 @@ console.log(config.rationale); // Explanation of why this model was chosen
 ## Model Selection Strategy
 
 Models are chosen based on:
+
 1. **Cost-effectiveness** - Lower cost for high-volume tasks (summarization)
 2. **Quality** - Better models for complex reasoning (Q&A)
 3. **Context window** - Sufficient tokens for paper-length content
@@ -58,21 +59,25 @@ Models are chosen based on:
 ### Default Models by Provider
 
 #### OpenAI
+
 - **Summarization**: `gpt-4o-mini` - Best cost/quality balance ($0.15/$0.6 per 1M tokens)
 - **Q&A**: `gpt-4o-mini` - Good reasoning at low cost
 - **Inline Summary**: `gpt-4o-mini` - Fast and efficient
 
 #### Anthropic
+
 - **Summarization**: `claude-3-haiku-20240307` - Most cost-effective ($0.25/$1.25 per 1M tokens)
 - **Q&A**: `claude-3-5-sonnet-20241022` - Superior reasoning for complex questions ($3/$15 per 1M tokens)
 - **Inline Summary**: `claude-3-haiku-20240307` - Ultra-fast and cheap
 
 #### Gemini
+
 - **Summarization**: `gemini-1.5-flash` - Best price ($0.075/$0.3 per 1M tokens), 1M context window
 - **Q&A**: `gemini-1.5-pro` - Better reasoning quality ($1.25/$5 per 1M tokens)
 - **Inline Summary**: `gemini-1.5-flash` - Fastest and cheapest
 
 #### OpenRouter (free tier)
+
 - **Summarization**: `deepseek/deepseek-chat-v3.1:free` - Long-context summaries with no per-token cost
 - **Q&A**: `meta-llama/llama-3.3-70b-instruct:free` - Strongest free reasoning model on OpenRouter
 - **Inline Summary**: `qwen/qwen3-235b-a22b:free` - Strong fluency for short summaries
@@ -132,6 +137,14 @@ OPENROUTER_X_TITLE=Readable
 1. **Prompts**: Edit `prompts.json` to modify system prompts or add new task types
 2. **Models**: Edit `models.json` to change recommended models or update pricing
 3. **Overrides**: Use environment variables for runtime model selection
+
+### Adding New Prompts
+
+Edit `prompts.json` to add new prompts or modify existing ones. The structure supports:
+
+- System prompts (base + persona merging)
+- User prompt requirements
+- Configuration limits (truncation, item counts, etc.)
 
 ## Adding New Providers
 

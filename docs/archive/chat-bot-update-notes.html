@@ -1,0 +1,2887 @@
+<!-- /autoplan restore point: /home/shoh/.gstack/projects/berdyh-readable/feat-chat-panel-resizer-autoplan-restore-20260615-212415.md -->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chat Bot Update Notes</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        line-height: 1.5;
+      }
+
+      body {
+        margin: 0;
+        background: Canvas;
+        color: CanvasText;
+      }
+
+      main {
+        max-width: 880px;
+        margin: 0 auto;
+        padding: 40px 24px 56px;
+      }
+
+      h1,
+      h2 {
+        line-height: 1.15;
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: 2rem;
+      }
+
+      h2 {
+        margin: 32px 0 12px;
+        font-size: 1.25rem;
+      }
+
+      p,
+      li {
+        max-width: 74ch;
+      }
+
+      .meta {
+        margin: 0 0 28px;
+        color: color-mix(in srgb, CanvasText 68%, Canvas 32%);
+      }
+
+      section {
+        border-top: 1px solid color-mix(in srgb, CanvasText 18%, Canvas 82%);
+        padding-top: 20px;
+      }
+
+      code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.95em;
+      }
+
+      table {
+        border-collapse: collapse;
+        margin: 16px 0;
+        width: 100%;
+      }
+
+      th,
+      td {
+        border: 1px solid color-mix(in srgb, CanvasText 18%, Canvas 82%);
+        padding: 8px 10px;
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        background: color-mix(in srgb, CanvasText 7%, Canvas 93%);
+      }
+
+      pre {
+        overflow-x: auto;
+        border: 1px solid color-mix(in srgb, CanvasText 18%, Canvas 82%);
+        padding: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Chat Bot Update Notes</h1>
+      <p class="meta">
+        Running notes for chatbot behavior, UI decisions, spec interpretation, and follow-up
+        questions.
+      </p>
+
+      <section>
+        <h2>Current Active Plan</h2>
+        <p>
+          The active plan is the
+          <a href="#autoplan-review">2026-06-15 /autoplan trust-first reader chat sidecar review</a
+          >. Older sections below are historical repair notes and verification evidence.
+        </p>
+        <ul>
+          <li>Target surface: <code>ChatIntegration</code> as the canonical paper-chat sidecar.</li>
+          <li>
+            Primary user moment: ask a paper question, see trust status, inspect proof, and land on
+            the cited evidence.
+          </li>
+          <li>
+            Required before implementation: answer trust contract, compact provenance strip,
+            source-click feedback, and degraded-state UI.
+          </li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>2026-05-25 Chatbot Repair Pass</h2>
+        <p>
+          The chatbot work builds on the Clerk-user data isolation branch. The chat APIs are
+          authenticated and persisted through Postgres, so the UI must make signed-in state explicit
+          instead of allowing anonymous requests that fail later.
+        </p>
+
+        <h2>Design Decisions</h2>
+        <ul>
+          <li>
+            Treat the block-editor side panel as the primary chatbot surface because it owns saved
+            sessions, tabbed history, source navigation, and editor insertion.
+          </li>
+          <li>
+            Keep the inline chat block as a lighter embedded surface that writes answers back into
+            the block content rather than duplicating session tabs.
+          </li>
+          <li>
+            Make the chatbot authenticated-only in the UI to match the server routes that now derive
+            the user from Clerk.
+          </li>
+          <li>
+            Treat the tab delete control as session deletion because the existing API exposes
+            <code>DELETE /api/chat/history</code> rather than a hide/archive state.
+          </li>
+          <li>
+            Keep a tab visible if session deletion fails, and disable new-chat/tab-delete controls
+            while an answer is being saved so the active session cannot be removed mid-request.
+          </li>
+          <li>
+            Insert assistant answers into the editor only when the user clicks
+            <code>Insert answer</code>; successful answers are no longer auto-inserted.
+          </li>
+        </ul>
+
+        <h2>Deviations</h2>
+        <ul>
+          <li>
+            The unfinished <code>@</code> mention flow is not being kept as a pseudo-context picker.
+            It currently turns arbitrary typed text into a selection payload, which is misleading.
+          </li>
+          <li>
+            The side panel now shows selected PDF text as explicit context instead of using the
+            removed mention query state.
+          </li>
+        </ul>
+
+        <h2>Tradeoffs</h2>
+        <ul>
+          <li>
+            I am prioritizing a reliable saved-chat flow over anonymous temporary chat. Guest mode
+            can be added later, but it needs a separate persistence and account-merge policy.
+          </li>
+          <li>
+            Failed assistant answers remain local error messages when the answer request fails after
+            a user message is saved. Persisting failures would make history more complete, but it
+            risks storing transient provider or quota errors as durable chat content.
+          </li>
+        </ul>
+
+        <h2>Open Questions</h2>
+        <ul>
+          <li>
+            Confirm whether closed chat tabs should permanently delete their saved session, or only
+            hide it from the current panel.
+          </li>
+        </ul>
+
+        <h2>Verification Notes</h2>
+        <ul>
+          <li>
+            <code>next build --webpack</code> passes with network access for Google font fetching.
+            The default Turbopack build hung locally before producing an actionable error, so I used
+            the supported webpack build path for verification.
+          </li>
+          <li>
+            The local dev server started on <code>localhost:3001</code> because port 3000 was
+            occupied. <code>/</code>, <code>/test-block-editor</code>, and
+            <code>/papers/test-paper</code> each returned HTTP 200 while signed out.
+          </li>
+          <li>
+            After <code>gstack browse</code> became available, the Vercel preview rendered the
+            signed-out paper route on desktop and mobile. Opening the research chat showed the
+            sign-in guard with <code>Sign in</code> and <code>Sign up</code> actions.
+          </li>
+          <li>
+            Browser QA exposed avoidable signed-out <code>401</code> console entries from
+            <code>/api/skills</code> and <code>/api/summarize</code>. I added Clerk-aware client
+            guards so those background personalized requests wait for a signed-in user while server
+            routes keep enforcing auth.
+          </li>
+          <li>
+            Final Vercel QA for deployment <code>dpl_7oqcnmJdEnBQeeQg2DkzvFPZ7rT5</code> verified
+            the signed-out desktop and mobile chat panels after the guard fix. Screenshots were
+            captured at <code>/tmp/readable-vercel-ea706f9-chat-open-desktop.png</code> and
+            <code>/tmp/readable-vercel-ea706f9-chat-open-mobile.png</code>.
+          </li>
+          <li>
+            Chatbot answers use the shared <code>/api/qa</code> path, so they inherit
+            <code>LLM_ALLOWED_PROVIDERS</code> provider fallback and
+            <code>OPENROUTER_FALLBACK_MODELS</code> as OpenRouter's native
+            <code>models</code> request-body fallback.
+          </li>
+          <li>
+            The research chat side panel now has a draggable and keyboard-accessible vertical
+            separator. Width is clamped to sensible viewport bounds and saved in local browser
+            storage.
+          </li>
+          <li>
+            Vercel deployment <code>dpl_BZtDi7yJX1HcGe2VFekmCHT4bJgk</code> for commit
+            <code>ee71829</code> reached <code>READY</code>. Browser QA used the temporary Vercel
+            share URL because the direct preview URL is protected.
+          </li>
+          <li>
+            <code>gstack browse</code> verified the deployed chat panel on
+            <code>/test-block-editor</code>: the separator appears in the opened panel, and keyboard
+            controls changed width from <code>460px</code> to <code>476px</code>, then clamped at
+            <code>360px</code> and <code>760px</code>. Screenshot:
+            <code>/tmp/readable-chat-resizer-preview.png</code>.
+          </li>
+          <li>
+            Local Clerk keyless mode created a <code>.clerk/</code> directory during dev-server
+            verification and shows Clerk's local setup prompt over the app. I kept the generated
+            <code>.gitignore</code> guard because that directory can contain local auth
+            configuration, and used Vercel preview as the screenshot QA source.
+          </li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>2026-05-26 Reader-Chat Layout and Local Agent Routing</h2>
+        <p>
+          The current local session updated the research chat from an overlay-style panel into a
+          normal part of the reading workspace. It also connected local chat/summary LLM calls to
+          coding-agent routing through the shared LLM provider layer.
+        </p>
+
+        <h2>Design Decisions</h2>
+        <ul>
+          <li>
+            Make the reader and chat share the page horizontally on desktop. The chat is now a
+            sibling section with a vertical divider between the reading page and chat section,
+            instead of a panel that sits on top of the page content.
+          </li>
+          <li>
+            Keep mobile as a vertical stack: reading content first, then the chat section below it,
+            so the layout remains usable on narrow screens.
+          </li>
+          <li>
+            Keep the chat's internal flow vertical: model responses appear in the conversation area,
+            while the human writes directly in the footer textarea below. The input area is no
+            longer styled as a separate colored message box.
+          </li>
+          <li>
+            Render user messages as plain right-aligned text instead of dark colored bubbles inside
+            the chat section.
+          </li>
+          <li>
+            Hide the right-side skills panel while the research chat is open so the desktop
+            workspace does not split into reader, chat, and skills columns at the same time.
+          </li>
+          <li>
+            Route local LLM calls through <code>LLM_PROVIDER=coding-agent</code>. Chatbot answers
+            still use the shared QA path, so they inherit the same local coding-agent routing as the
+            rest of the app.
+          </li>
+        </ul>
+
+        <h2>Deviations</h2>
+        <ul>
+          <li>
+            The old fixed overlay chat behavior was removed for the block-editor research chat. The
+            resize handle remains useful on desktop, but it now belongs to the in-page chat column.
+          </li>
+          <li>
+            Antigravity is listed in the local agent order but has no built-in default headless
+            invocation. It requires <code>LLM_AGENT_ANTIGRAVITY_ARGS_JSON</code> before it can be
+            used as a non-interactive backend.
+          </li>
+        </ul>
+
+        <h2>Tradeoffs</h2>
+        <ul>
+          <li>
+            Hiding skills while chat is open favors a readable two-column workspace over showing
+            every auxiliary panel at once.
+          </li>
+          <li>
+            Local coding-agent routing is best for development. Production can still use remote API
+            providers by changing <code>LLM_PROVIDER</code> and, for API fallback, optionally
+            <code>LLM_ALLOWED_PROVIDERS</code>.
+          </li>
+        </ul>
+
+        <h2>Verification Notes</h2>
+        <ul>
+          <li>
+            Browser QA on <code>/test-block-editor</code> verified desktop reader/chat split
+            geometry: reader content from roughly <code>0..820</code>, chat from
+            <code>820..1280</code>, sticky desktop chat positioning, and no horizontal overflow.
+          </li>
+          <li>
+            Browser QA on <code>/papers/test-paper</code> verified the reader from roughly
+            <code>84..736</code>, chat from <code>736..1196</code>, and the skills panel hidden
+            while chat is open.
+          </li>
+          <li>
+            Mobile browser QA verified the chat appears below the reading content with relative
+            positioning and no horizontal overflow.
+          </li>
+          <li>
+            Local-agent unit tests verified text routing to a configured executable, fallback from
+            one local agent to another, JSON normalization, and skipping auto-detected
+            network-backed <code>npx</code> wrappers.
+          </li>
+          <li>
+            The restarted dev server is currently serving <code>http://localhost:3000</code> with
+            the refreshed <code>.env.local</code> settings.
+          </li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>2026-05-28 Chatbot Browser QA</h2>
+        <p>
+          I opened the research chat on the locally ingested
+          <code>Attention Is All You Need</code> paper and verified the current signed-out browser
+          behavior.
+        </p>
+
+        <h2>Findings</h2>
+        <ul>
+          <li>
+            The chat opens as a right-side in-page section next to the reader, not as a content
+            overlay. Desktop measurement showed <code>body.scrollWidth</code> equal to viewport
+            width, so there was no horizontal overflow.
+          </li>
+          <li>
+            The signed-out chat state shows <code>Sign in to chat</code> with
+            <code>Sign in</code> and <code>Sign up</code> actions. No message textarea is available
+            until authentication succeeds.
+          </li>
+          <li>
+            A browser-originated <code>POST /api/qa</code> while signed out returned
+            <code>401</code> and the expected personalized-feature sign-in message.
+          </li>
+          <li>
+            I could not test a full authenticated chatbot response in browser because creating or
+            using a hosted Clerk account was not authorized in this pass.
+          </li>
+        </ul>
+
+        <h2>Verification Notes</h2>
+        <ul>
+          <li>
+            Screenshot evidence: <code>/tmp/readable-final-chat-qa.png</code> and responsive
+            captures at <code>/tmp/readable-responsive-chat-mobile.png</code>,
+            <code>/tmp/readable-responsive-chat-tablet.png</code>, and
+            <code>/tmp/readable-responsive-chat-desktop.png</code>.
+          </li>
+          <li>
+            The final console contained only the Clerk dev-key warning and the deliberate signed-out
+            <code>/api/qa</code> <code>401</code> probe.
+          </li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>2026-05-28 Chatbot Runtime Routing Follow-up</h2>
+        <ul>
+          <li>
+            Local chatbot LLM requests are now pinned to <code>codex-cli</code> through
+            <code>LLM_PROVIDER=coding-agent</code> and <code>LLM_LOCAL_AGENTS=codex-cli</code>.
+          </li>
+          <li>
+            The Codex runner now forwards <code>LLM_AGENT_CODEX_MODEL=gpt-5.5</code> and
+            <code>LLM_AGENT_CODEX_REASONING_EFFORT=xhigh</code> into <code>codex exec</code>.
+          </li>
+          <li>
+            Embeddings now default to OpenRouter with
+            <code>nvidia/llama-nemotron-embed-vl-1b-v2:free</code>; papers must be re-ingested after
+            switching providers so chatbot retrieval has vectors in the new collection.
+          </li>
+          <li>
+            The full ingest API was re-run for <code>1706.03762</code> after the env change, and
+            Qdrant now contains <code>60</code> OpenRouter vectors for <code>1706.03762v7</code>.
+          </li>
+          <li>
+            A Codex CLI smoke test confirmed <code>gpt-5.5</code> routing works. The non-hyphenated
+            <code>gpt5.5</code> string was rejected by this Codex account, so the runtime env uses
+            the working hyphenated model id.
+          </li>
+          <li>
+            Browser QA after restart still opens the chat as the right-side in-page section with no
+            horizontal overflow; signed-out users still receive the expected chat gate and
+            <code>/api/qa</code> sign-in error.
+          </li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>2026-05-29 Clerk Auth Testing Follow-up</h2>
+        <ul>
+          <li>
+            Tried the documented Clerk test-email pattern with
+            <code>readable+clerk_test@example.com</code>. Clerk test mode uses OTP
+            <code>424242</code> for these addresses.
+          </li>
+          <li>
+            <code>.env.local</code> now has Clerk dev keys configured, and the dev server was
+            restarted with those values. Secret values are intentionally not repeated here.
+          </li>
+          <li>
+            A Clerk Testing Token was minted through the Backend API. The hosted sign-up page still
+            stalled during automation, so the successful authenticated chatbot check used Clerk's
+            Backend API session-token flow.
+          </li>
+          <li>
+            Direct authenticated <code>POST /api/qa</code> returned HTTP <code>200</code> with an
+            answer and citations for <code>1706.03762v7</code>.
+          </li>
+          <li>
+            Browser-originated authenticated <code>fetch('/api/qa')</code> from the paper page also
+            returned HTTP <code>200</code>, an answer, and <code>3</code> citations.
+          </li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>2026-05-29 LLM Routing Review</h2>
+        <ul>
+          <li>
+            Reviewed the local chatbot routing path for the requested Codex-backed
+            <code>coding-agent</code> mode. The implementation deliberately treats Codex as a local
+            provider backend, not as a full OpenClaw <code>sessions_spawn</code> bridge.
+          </li>
+          <li>
+            Fixed stale API fallback handling so <code>LLM_PROVIDER=coding-agent</code> remains on
+            the local Codex path even when <code>LLM_ALLOWED_PROVIDERS</code> is still present from
+            an API-provider setup.
+          </li>
+          <li>
+            Updated the documented Codex pin to <code>LLM_AGENT_CODEX_MODEL=gpt-5.5</code> and
+            <code>LLM_AGENT_CODEX_REASONING_EFFORT=xhigh</code>.
+          </li>
+          <li>
+            Hardened the local coding-agent subprocess path: CLI calls now run from an isolated temp
+            directory and receive a minimal environment, with optional explicit additions through
+            <code>LLM_LOCAL_AGENT_ENV_ALLOWLIST</code>. App secrets are not forwarded by default.
+          </li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>2026-05-29 Worker C Reader and Chat UX Review</h2>
+        <ul>
+          <li>
+            The signed-out reader no longer treats the personalized-summary requirement as a red
+            editor error. It now shows a contextual sign-in notice while keeping public paper text
+            readable when HTML parsing is available.
+          </li>
+          <li>
+            The fallback signed-out editor placeholder now explains that signing in generates a
+            personalized summary instead of saying the summary is unavailable.
+          </li>
+          <li>
+            Embedded block chat now renders only the auth gate while signed out, so inactive
+            transcript and input controls are not shown beneath the sign-in prompt.
+          </li>
+          <li>
+            The research chat layout keeps the skills rail hidden while chat is open and lets the
+            main workspace expand to <code>max-w-7xl</code> for the two-column reader/chat split.
+          </li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>2026-05-30 Final Reader and Data-Path Review</h2>
+        <ul>
+          <li>
+            The inline arXiv HTML route is now intentionally public read-only so signed-out readers
+            can load paper text and figures. Chat, summaries, persisted ingest, and PDF upload
+            extraction remain Clerk-gated.
+          </li>
+          <li>
+            Figure images from arXiv HTML are now preserved in the right-side figure rail. Cards
+            with PDF page anchors still jump to the PDF; image-only cards open an image preview.
+          </li>
+          <li>
+            Re-ingest now replaces paper metadata, chunks, figures, and citations in a single
+            per-paper transaction, and stale Qdrant vectors are deleted before new embeddings are
+            generated.
+          </li>
+          <li>
+            Remote embedding payloads are validated before indexing so malformed OpenRouter/OpenAI
+            responses cannot write bad vectors into Qdrant.
+          </li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>2026-05-30 Final P1 Review Closure</h2>
+        <p>
+          The final review identified two remaining platform risks: same-paper ingest races across
+          Postgres and Qdrant, and unsafe default local coding-agent execution. Both are closed in
+          the current implementation.
+        </p>
+        <ul>
+          <li>
+            Same-paper ingest now holds one paper advisory lock through the DB replacement and the
+            post-commit vector replacement callback. This keeps older Qdrant vectors from
+            interleaving after newer DB rows commit.
+          </li>
+          <li>
+            <code>coding-agent</code> mode defaults to <code>codex-cli</code> only. Tool-capable
+            CLIs such as <code>gemini-cli</code> and <code>opencode</code> require an explicit local
+            unsafe opt-in or custom argv.
+          </li>
+          <li>
+            Local agent child processes use throwaway <code>HOME</code>, <code>TMPDIR</code>, and
+            <code>XDG_*</code> directories. App secrets and normal config locations are not
+            forwarded unless a narrow explicit auth file is configured for Codex.
+          </li>
+          <li>
+            The local agent bridge remains a prompt-response provider, not a full OpenClaw ACP
+            session runtime. That is safer for user-originated chatbot prompts and still supports
+            local Codex model/reasoning routing for development.
+          </li>
+          <li>
+            Verification passed: <code>pnpm exec tsc --noEmit</code>, <code>pnpm test</code> (<code
+              >158</code
+            >
+            tests), <code>pnpm lint</code> (<code>0</code> errors, <code>20</code> warnings),
+            <code>pnpm exec next build --webpack</code>, <code>pnpm test:stores</code>,
+            <code>pnpm embeddings:probe</code>, and runtime curl checks for health, signed-out auth
+            gates, and the public read-only arXiv parse route.
+          </li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>2026-05-30 Public Figure URL Review Closure</h2>
+        <p>
+          The public inline arXiv route now preserves figure image URLs for both ar5iv HTML and
+          fallback arXiv HTML pages.
+        </p>
+        <ul>
+          <li>
+            Inline ar5iv fetches pass the paper HTML URL into <code>parseAr5ivHtml</code>, so
+            relative images such as <code>figures/overview.svg</code> resolve under
+            <code>/html/&lt;arxivId&gt;/</code>.
+          </li>
+          <li>
+            The parser now uses <code>URL</code> resolution so root-relative ar5iv image paths do
+            not duplicate the paper path.
+          </li>
+          <li>
+            Focused tests for the inline ingest route and parser passed with <code>8</code> tests.
+          </li>
+        </ul>
+      </section>
+
+      <section id="autoplan-review">
+        <h2>2026-06-15 /autoplan Working Brief</h2>
+        <p>
+          This review uses the approved office-hours design document as the source of truth:
+          <code
+            >/home/shoh/.gstack/projects/berdyh-readable/shoh-feat-chat-panel-resizer-design-20260615-214149.md</code
+          >. The selected direction is the trust-first reader chat sidecar, not a resizer-only
+          polish slice.
+        </p>
+
+        <h2>Approved Premises</h2>
+        <ul>
+          <li>
+            Source-grounded reader/chat UX is the core product value. Layout and resizing only
+            matter when they make grounded reading easier.
+          </li>
+          <li>
+            The QA layer must return an explicit trust state:
+            <code>sourced</code>, <code>degraded_text_only</code>, <code>uncited</code>,
+            <code>source_unavailable</code>, <code>refused</code>, or <code>error</code>.
+          </li>
+          <li>
+            Answers must not appear fully sourced unless at least one current, navigable citation
+            can take the user back to a rendered chunk, figure, or PDF page.
+          </li>
+          <li>
+            Vector or embedding failure must degrade visibly to text-only retrieval instead of
+            becoming an empty-result path that looks like weak paper evidence.
+          </li>
+          <li>
+            Public arXiv text remains read-only, while summaries, saved chats, skill state, and
+            durable personalized routes stay Clerk-gated.
+          </li>
+          <li>
+            Local <code>coding-agent</code> mode remains an isolated prompt-response LLM backend
+            with Codex-only defaults unless an explicit unsafe or custom local opt-in is present.
+          </li>
+          <li>
+            Same-paper ingest replacement must serialize DB replacement and post-commit vector
+            replacement so stale chunks cannot look current after re-ingest.
+          </li>
+        </ul>
+
+        <h2>Phase 1 CEO Review</h2>
+        <p>
+          Mode: selective expansion. Base scope stays the trust-first sidecar because the user
+          confirmed those premises for <code>/autoplan</code>. The review does not silently expand
+          the branch into a corpus research product. It does flag one final-gate user challenge:
+          both outside voices argued that the stronger strategic frame is an auditable evidence
+          workflow with claim-level support, not only a single-paper chat sidecar.
+        </p>
+
+        <h2>CEO Dual Voices</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Dimension</th>
+              <th>Subagent</th>
+              <th>Codex</th>
+              <th>Consensus</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Premises valid?</td>
+              <td>Weakly proven</td>
+              <td>Weakly proven</td>
+              <td>Confirmed concern</td>
+            </tr>
+            <tr>
+              <td>Right problem?</td>
+              <td>Maybe too small</td>
+              <td>Maybe too small</td>
+              <td>User challenge</td>
+            </tr>
+            <tr>
+              <td>Scope calibration</td>
+              <td>Sidecar useful, broader workflow missing</td>
+              <td>Sidecar useful, moat missing</td>
+              <td>Confirmed concern</td>
+            </tr>
+            <tr>
+              <td>Alternatives explored?</td>
+              <td>Not enough</td>
+              <td>Not enough</td>
+              <td>Confirmed concern</td>
+            </tr>
+            <tr>
+              <td>Market risk covered?</td>
+              <td>No</td>
+              <td>No</td>
+              <td>Confirmed concern</td>
+            </tr>
+            <tr>
+              <td>6-month trajectory</td>
+              <td>Commodity RAG risk</td>
+              <td>Technically solid but low pull</td>
+              <td>Confirmed concern</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2>Step 0 Findings</h2>
+        <ul>
+          <li>
+            <strong>Premise challenge:</strong> source-grounded sidecar UX is a coherent near-term
+            product bet, but the plan does not prove the target user, retention loop, willingness to
+            pay, or why existing paper-chat tools fail this user. Keep the branch scope, but add
+            success metrics and kill criteria.
+          </li>
+          <li>
+            <strong>Existing leverage:</strong> reuse <code>ChatIntegration</code> for the paper
+            chat surface, <code>answerPaperQuestion</code> for QA,
+            <code>hybridPaperChunkSearch</code> for retrieval, <code>Sources</code> plus
+            <code>block-editor-navigate</code> for citation inspection,
+            <code>replacePaperIngestData</code> for serialized ingest, and the local coding-agent
+            provider for isolated development routing.
+          </li>
+          <li>
+            <strong>Dream state:</strong> current state is a reader with chat, vectors, citations,
+            and saved auth-gated sessions. This plan should make answer trust inspectable and
+            failure states visible. The 12-month ideal is an auditable research workspace where
+            every material claim, figure, table, note, and export points back to current paper
+            evidence.
+          </li>
+          <li>
+            <strong>Alternatives:</strong> resizer-only is rejected as too small for the branch
+            blast radius. Trust-first sidecar is the selected branch scope. Evidence dossier and
+            claim-level verification are stronger product directions, but they are final-gate user
+            challenges rather than silent scope expansion.
+          </li>
+          <li>
+            <strong>Temporal risk:</strong> hour 1 needs the answer-state type and API contract;
+            hours 2-3 need retrieval degradation plumbed without losing text search; hours 4-5 need
+            source-click feedback wired into the reader; hour 6+ needs tests, metrics, and browser
+            QA that prove uncited and degraded paths do not look sourced.
+          </li>
+        </ul>
+
+        <h2>CEO Architecture Diagram</h2>
+        <pre><code>ReaderWorkspace
+  -> ChatIntegration
+      -> /api/qa
+          -> answerPaperQuestion
+              -> loadQuestionEvidence
+                  -> hybridPaperChunkSearch
+                      -> Qdrant vector search
+                      -> Postgres text search
+              -> generateJson
+              -> AnswerResult trust state
+      -> Sources
+          -> block-editor-navigate
+              -> BlockEditor chunk, quote, page, figure, or unavailable state
+
+Ingest path:
+/api/editor/ingest/arxiv -> ingestArxivInline -> replacePaperIngestData
+  -> Postgres transaction -> afterCommit vector replacement under paper advisory lock</code></pre>
+
+        <h2>Section Review</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Section</th>
+              <th>Finding</th>
+              <th>Decision</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Architecture</td>
+              <td>
+                The plan's trust contract is not implemented yet: QA still returns only
+                <code>answer</code> and <code>cites</code>, and no backend trust state exists.
+              </td>
+              <td>Auto-accept: implement the minimum answer-state contract in this branch.</td>
+            </tr>
+            <tr>
+              <td>Errors</td>
+              <td>
+                <code>answerPaperQuestion</code> fabricates a first-hit citation when the model
+                returns no citations, and the test suite currently asserts that behavior.
+              </td>
+              <td>
+                Auto-accept: remove silent citation fabrication and rewrite tests around refusal or
+                warning states.
+              </td>
+            </tr>
+            <tr>
+              <td>Security</td>
+              <td>
+                Clerk-gated personalized routes and local-agent isolation are directionally sound,
+                but public arXiv parsing still needs launch-blocking request timeout, target
+                validation, and abuse controls.
+              </td>
+              <td>
+                Auto-accept basic public-route guardrails; defer broad production rate-limit
+                platform work.
+              </td>
+            </tr>
+            <tr>
+              <td>Data and UX</td>
+              <td>
+                Hybrid search catches embedding and Qdrant failures, logs them, and returns empty
+                vector hits. QA cannot tell the UI whether retrieval degraded.
+              </td>
+              <td>
+                Auto-accept: propagate <code>retrievalMode</code> and <code>degradedReason</code>.
+              </td>
+            </tr>
+            <tr>
+              <td>Code quality</td>
+              <td>
+                <code>ChatPanel</code> and <code>ChatIntegration</code> remain parallel chat
+                surfaces. The plan must name <code>ChatIntegration</code> as canonical for paper QA
+                or require source-state parity.
+              </td>
+              <td>Auto-accept: keep <code>ChatIntegration</code> canonical for paper chat.</td>
+            </tr>
+            <tr>
+              <td>Tests</td>
+              <td>
+                Existing QA tests cover model citations and fallback fabrication, but not uncited
+                warning, refusal with no evidence, degraded vector search, or source-unavailable
+                navigation.
+              </td>
+              <td>Auto-accept: add focused unit tests plus browser QA for source navigation.</td>
+            </tr>
+            <tr>
+              <td>Performance</td>
+              <td>
+                Same-paper ingest serialization is covered. Public arXiv parsing can still burn
+                request time and upstream quota without explicit timeout and rate-limit behavior.
+              </td>
+              <td>Auto-accept timeout and input guardrails; defer broader quota architecture.</td>
+            </tr>
+            <tr>
+              <td>Observability</td>
+              <td>
+                The product has no day-1 metric for whether trust is working: trust-state mix,
+                source-click success, uncited/refused rate, and retrieval degradation are not named.
+              </td>
+              <td>Auto-accept lightweight structured logs or counters and define kill criteria.</td>
+            </tr>
+            <tr>
+              <td>Deployment</td>
+              <td>
+                Changing the QA response shape affects routes, saved chat messages, and UI
+                renderers. The plan needs backward-compatible parsing for older saved messages.
+              </td>
+              <td>Auto-accept compatibility handling and a post-deploy smoke checklist.</td>
+            </tr>
+            <tr>
+              <td>Future</td>
+              <td>
+                A sidecar with labeled citations is a two-way door technically, but strategically
+                weak unless it becomes an evidence workflow or local/private research wedge.
+              </td>
+              <td>
+                User challenge: keep sidecar scope now, decide later whether to reframe bigger.
+              </td>
+            </tr>
+            <tr>
+              <td>Design</td>
+              <td>
+                Sources are still hidden behind <code>defaultVisible=false</code>, and source-click
+                failure currently has no visible unavailable state.
+              </td>
+              <td>Auto-accept visible provenance summary and non-silent unavailable feedback.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2>Error and Rescue Registry</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Codepath</th>
+              <th>Failure</th>
+              <th>Current behavior</th>
+              <th>Plan requirement</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>answerPaperQuestion</code></td>
+              <td>LLM returns invalid JSON or no answer</td>
+              <td>Throws; route maps most failures to HTTP 502.</td>
+              <td>Return <code>error</code> state with actionable copy.</td>
+            </tr>
+            <tr>
+              <td><code>answerPaperQuestion</code></td>
+              <td>LLM returns answer with no valid citations</td>
+              <td>Falls back to first hit if evidence exists.</td>
+              <td>No fabricated source. Use <code>uncited</code> or <code>refused</code>.</td>
+            </tr>
+            <tr>
+              <td><code>hybridPaperChunkSearch</code></td>
+              <td>Embedding or Qdrant failure</td>
+              <td>Logs warning and returns empty vector hits.</td>
+              <td>Propagate <code>text_only</code> retrieval mode and reason.</td>
+            </tr>
+            <tr>
+              <td><code>Sources</code> -> <code>BlockEditor</code></td>
+              <td>No chunk, quote, page, or figure match</td>
+              <td>No user-visible failure after click.</td>
+              <td>Show source unavailable with identifier and reason.</td>
+            </tr>
+            <tr>
+              <td><code>/api/editor/ingest/arxiv</code></td>
+              <td>Bad target, slow upstream, repeated abuse</td>
+              <td>Validates only presence and returns 502 on ingest failure.</td>
+              <td>Validate target shape, enforce timeout, document 429 follow-up.</td>
+            </tr>
+            <tr>
+              <td><code>replacePaperIngestData</code></td>
+              <td>Concurrent same-paper ingest</td>
+              <td>Advisory lock spans DB transaction and vector callback.</td>
+              <td>Keep as-is and retain tests.</td>
+            </tr>
+            <tr>
+              <td><code>LocalCodingAgentProvider</code></td>
+              <td>Unsafe tool-capable local agent or secret exposure</td>
+              <td>Codex default, read-only args, temp HOME/XDG, explicit auth file.</td>
+              <td>Keep as-is and document local-only unsafe opt-ins.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2>Failure Modes Registry</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Failure mode</th>
+              <th>Rescued?</th>
+              <th>Test?</th>
+              <th>User sees?</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Model answer has no valid citations but evidence exists</td>
+              <td>No</td>
+              <td>Wrong behavior asserted</td>
+              <td>Looks sourced via fabricated first hit</td>
+              <td>Critical gap</td>
+            </tr>
+            <tr>
+              <td>No evidence retrieved</td>
+              <td>Partial</td>
+              <td>Missing</td>
+              <td>No explicit trust state</td>
+              <td>Critical gap</td>
+            </tr>
+            <tr>
+              <td>Vector search unavailable, text search works</td>
+              <td>Backend logs only</td>
+              <td>Missing</td>
+              <td>No degraded label</td>
+              <td>Critical gap</td>
+            </tr>
+            <tr>
+              <td>Source click cannot navigate</td>
+              <td>No</td>
+              <td>Missing browser case</td>
+              <td>Silent no-op</td>
+              <td>Critical gap</td>
+            </tr>
+            <tr>
+              <td>Same-paper re-ingest races vectors</td>
+              <td>Yes</td>
+              <td>Present</td>
+              <td>No stale source trail expected</td>
+              <td>OK</td>
+            </tr>
+            <tr>
+              <td>Local coding-agent exposes app secrets</td>
+              <td>Yes</td>
+              <td>Present</td>
+              <td>No user-visible leak</td>
+              <td>OK</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2>Not in Scope</h2>
+        <ul>
+          <li>
+            Full cross-paper evidence dossier, systematic-review table, claim graph, Zotero,
+            Overleaf, browser extension, or lab-collaboration workflow. This is a final-gate user
+            challenge, not an auto-expanded branch scope.
+          </li>
+          <li>
+            Full claim-level verification for every answer sentence. The branch should avoid
+            fabricated answer-level citations now; claim-level proof is larger unless explicitly
+            accepted.
+          </li>
+          <li>Anonymous saved chat and account-merge policy.</li>
+          <li>OpenClaw ACP session spawning from user prompts.</li>
+          <li>Broad unsafe local-agent support beyond explicit local env overrides.</li>
+          <li>
+            Production-grade public arXiv quota platform beyond timeout, validation, and 429
+            follow-up.
+          </li>
+        </ul>
+
+        <h2>What Already Exists</h2>
+        <ul>
+          <li>
+            <code>ChatIntegration</code> owns the paper chat sidecar, saved tabs, resize behavior,
+            and citations.
+          </li>
+          <li>
+            <code>Sources</code> dispatches source navigation events;
+            <code>BlockEditor</code> handles chunk, quote, and page fallback.
+          </li>
+          <li>
+            <code>answerPaperQuestion</code> loads evidence, calls the LLM, enriches citations, and
+            persists persona signals.
+          </li>
+          <li>
+            <code>hybridPaperChunkSearch</code> already fuses vector and text search; it needs
+            degradation metadata.
+          </li>
+          <li>
+            <code>replacePaperIngestData</code> already serializes same-paper DB and vector
+            replacement under an advisory lock.
+          </li>
+          <li>
+            <code>LocalCodingAgentProvider</code> already defaults to Codex and isolates local child
+            process state.
+          </li>
+        </ul>
+
+        <h2>Dream State Delta</h2>
+        <pre><code>CURRENT
+  Reader/chat can answer with citations, but uncited and degraded paths can look trustworthy.
+
+THIS PLAN
+  Every answer carries explicit trust state, visible provenance, non-silent source navigation,
+  and same-paper ingest/vector correctness.
+
+12-MONTH IDEAL
+  Readable is an auditable evidence workspace: material claims map to current paper evidence,
+  contradictions are visible, figure/table grounding works, and exports preserve provenance.</code></pre>
+
+        <h2>CEO Implementation Tasks</h2>
+        <ul>
+          <li>
+            <strong>T1 (P1, human: ~2h / CC: ~20min) - QA trust contract:</strong>
+            replace fallback citation fabrication with <code>trustState</code>,
+            <code>retrievalMode</code>, and <code>degradedReason</code> semantics. Files:
+            <code>src/server/qa/index.ts</code>, <code>src/server/qa/types.ts</code>,
+            <code>src/server/qa/__tests__/index.test.ts</code>.
+          </li>
+          <li>
+            <strong>T2 (P1, human: ~2h / CC: ~20min) - retrieval degradation:</strong>
+            propagate embedding and Qdrant failures from hybrid search into QA/UI metadata instead
+            of hiding them inside empty vector hits. Files:
+            <code>src/server/search/hybrid.ts</code>, <code>src/server/qa/context.ts</code>.
+          </li>
+          <li>
+            <strong
+              >T3 (P1, human: ~3h / CC: ~30min) - source visibility and unavailable state:</strong
+            >
+            make provenance visible by default or always summarized, and show a clear unavailable
+            message when navigation cannot find a chunk, quote, page, or figure. Files:
+            <code>src/app/components/ai-chatbot/sources.tsx</code>,
+            <code>src/app/components/block-editor/BlockEditor.tsx</code>,
+            <code>src/app/components/block-editor/ChatIntegration.tsx</code>.
+          </li>
+          <li>
+            <strong>T4 (P2, human: ~2h / CC: ~20min) - public arXiv guardrails:</strong>
+            add target-shape validation, request timeout behavior, and a documented 429/rate-limit
+            follow-up for the public inline route. Files:
+            <code>src/app/api/editor/ingest/arxiv/route.ts</code>,
+            <code>src/server/editor/ingest.ts</code>.
+          </li>
+          <li>
+            <strong>T5 (P2, human: ~1h / CC: ~15min) - success metrics and kill criteria:</strong>
+            define trust-state mix, degraded-rate, uncited/refused rate, source-click success, and
+            repeat-use metrics in the plan and lightweight logs.
+          </li>
+        </ul>
+
+        <h2>CEO Completion Summary</h2>
+        <table>
+          <tbody>
+            <tr>
+              <th>Mode</th>
+              <td>Selective expansion, trust-first sidecar scope preserved</td>
+            </tr>
+            <tr>
+              <th>Dual voices</th>
+              <td>Codex 10 concerns; subagent 8 issues; 6/6 consensus concerns</td>
+            </tr>
+            <tr>
+              <th>Architecture</th>
+              <td>3 issues found</td>
+            </tr>
+            <tr>
+              <th>Errors</th>
+              <td>7 codepaths mapped, 4 critical gaps</td>
+            </tr>
+            <tr>
+              <th>Security</th>
+              <td>2 issues found, 1 high severity public-route guardrail gap</td>
+            </tr>
+            <tr>
+              <th>Data and UX</th>
+              <td>6 edge cases mapped, 3 unhandled</td>
+            </tr>
+            <tr>
+              <th>Quality</th>
+              <td>2 issues found</td>
+            </tr>
+            <tr>
+              <th>Tests</th>
+              <td>Test diagram produced, 4 gaps</td>
+            </tr>
+            <tr>
+              <th>Performance</th>
+              <td>1 issue found</td>
+            </tr>
+            <tr>
+              <th>Observability</th>
+              <td>4 gaps found</td>
+            </tr>
+            <tr>
+              <th>Deployment</th>
+              <td>2 risks flagged</td>
+            </tr>
+            <tr>
+              <th>Future</th>
+              <td>Reversibility 4/5, strategic debt flagged</td>
+            </tr>
+            <tr>
+              <th>Design</th>
+              <td>2 issues found</td>
+            </tr>
+            <tr>
+              <th>Unresolved decisions</th>
+              <td>1 user challenge deferred to final gate</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2>Phase 2 Design Review</h2>
+        <p>
+          UI scope detected. The design binary is installed, but mockup generation could not run
+          because no OpenAI image-generation key is configured for <code>gstack design</code>. This
+          phase is therefore text-only. Both design voices agreed the plan was too
+          developer-centered and needed a user-facing answer anatomy before implementation.
+        </p>
+
+        <h2>Design Dual Voices</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Check</th>
+              <th>Subagent</th>
+              <th>Codex</th>
+              <th>Consensus</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Information hierarchy</td>
+              <td>Active plan is buried; answer hierarchy undefined</td>
+              <td>Plan serves developer more than reader</td>
+              <td>Confirmed issue</td>
+            </tr>
+            <tr>
+              <td>Interaction states</td>
+              <td>Backend states lack visible UI copy and placement</td>
+              <td>Loading, empty, partial, degraded, refused, error under-specified</td>
+              <td>Confirmed issue</td>
+            </tr>
+            <tr>
+              <td>Proof moment</td>
+              <td>Citation inspection can still break emotionally</td>
+              <td>Source-click proof loop not defined</td>
+              <td>Confirmed issue</td>
+            </tr>
+            <tr>
+              <td>Responsive strategy</td>
+              <td>Mobile source inspection missing</td>
+              <td>Prior layout QA exists; trust UI mobile behavior missing</td>
+              <td>Confirmed issue</td>
+            </tr>
+            <tr>
+              <td>Accessibility</td>
+              <td>Not specified</td>
+              <td>Aspirational; missing focus, aria-live, non-color cues</td>
+              <td>Confirmed issue</td>
+            </tr>
+            <tr>
+              <td>Specificity</td>
+              <td>Too generic</td>
+              <td>Too generic</td>
+              <td>Confirmed issue</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2>Answer Card Anatomy</h2>
+        <ol>
+          <li>
+            <strong>Trust strip:</strong> a one-line status above every assistant answer. It shows a
+            text label, an icon, source count, retrieval mode, and a short reason. It is always
+            visible; source details expand below it.
+          </li>
+          <li>
+            <strong>Answer body:</strong> the assistant response. It never carries source styling
+            unless the trust strip says the answer is sourced or degraded with evidence.
+          </li>
+          <li>
+            <strong>Provenance strip:</strong> compact default row, for example
+            <code>3 sources - hybrid retrieval - all navigable</code>. This is the chosen default,
+            replacing the previous ambiguous "visible by default or summarized" decision.
+          </li>
+          <li>
+            <strong>Source details:</strong> expandable rows under the answer. Each row shows
+            chunk/page/figure id, quote preview, navigation status, and a button label such as
+            <code>Open chunk</code>, <code>Open page</code>, <code>Open figure</code>, or
+            <code>Source unavailable</code>.
+          </li>
+          <li>
+            <strong>Recovery action:</strong> degraded, uncited, refused, unavailable, and error
+            states include a next action: retry, ask with selected text, open paper page, or sign
+            in.
+          </li>
+        </ol>
+
+        <h2>UI State Matrix</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>State</th>
+              <th>Trust strip label</th>
+              <th>User sees</th>
+              <th>Allowed actions</th>
+              <th>Saved history</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Empty chat</td>
+              <td>No answer yet</td>
+              <td>Input with paper-context hint: <code>Ask about this paper</code>.</td>
+              <td>Ask question; use selected text if present.</td>
+              <td>No message saved.</td>
+            </tr>
+            <tr>
+              <td>Loading retrieval</td>
+              <td>Finding evidence</td>
+              <td>
+                Compact skeleton under the pending user question; controls disabled except cancel.
+              </td>
+              <td>Cancel if supported; wait.</td>
+              <td>User message may persist; assistant message not yet saved.</td>
+            </tr>
+            <tr>
+              <td><code>sourced</code></td>
+              <td>Sourced</td>
+              <td>
+                Answer plus compact provenance strip, e.g. <code>3 sources - all navigable</code>.
+              </td>
+              <td>Expand sources; click a source; insert answer.</td>
+              <td>Save answer, citations, trust state, retrieval mode.</td>
+            </tr>
+            <tr>
+              <td>Mixed source rows</td>
+              <td>Some sources need review</td>
+              <td>
+                Use this UI when an answer has at least one navigable source and at least one
+                unavailable or weak source. Do not add a new backend enum unless engineering review
+                accepts it.
+              </td>
+              <td>Open available sources; view unavailable reason.</td>
+              <td>Save row-level source status.</td>
+            </tr>
+            <tr>
+              <td><code>degraded_text_only</code></td>
+              <td>Text search only</td>
+              <td>
+                Answer is warning-labeled:
+                <code>Vector search was unavailable; answer uses text matches only.</code>
+              </td>
+              <td>Expand text sources; retry vector search if available.</td>
+              <td>Save degradation reason.</td>
+            </tr>
+            <tr>
+              <td><code>uncited</code></td>
+              <td>Uncited answer</td>
+              <td>
+                Warning-labeled answer only when retrieved evidence exists but model citations were
+                invalid. No fabricated source row.
+              </td>
+              <td>Ask a narrower question; use selected text; retry.</td>
+              <td>Save as uncited only if product keeps audit history.</td>
+            </tr>
+            <tr>
+              <td><code>source_unavailable</code></td>
+              <td>Source not visible</td>
+              <td>
+                Source row stays visible with identifier and message:
+                <code>Source not visible in the current reader view.</code>
+              </td>
+              <td>Open page/PDF fallback if known; keep row expanded.</td>
+              <td>Save unavailable metadata if returned by backend.</td>
+            </tr>
+            <tr>
+              <td><code>refused</code></td>
+              <td>Not enough paper evidence</td>
+              <td>Short refusal that says the paper evidence was insufficient.</td>
+              <td>Ask with selected passage; broaden or rephrase question.</td>
+              <td>Do not save as a normal sourced assistant answer.</td>
+            </tr>
+            <tr>
+              <td><code>error</code></td>
+              <td>Answer failed</td>
+              <td>
+                Problem, likely cause, and fix. Example: <code>Provider timed out. Try again.</code>
+              </td>
+              <td>Retry; keep draft question; sign in if auth failed.</td>
+              <td>Do not save failed assistant content as a sourced answer.</td>
+            </tr>
+            <tr>
+              <td>Legacy saved answer</td>
+              <td>Source status unavailable</td>
+              <td>
+                Existing saved messages without <code>trustState</code> show:
+                <code>Older answer - source status unavailable.</code>
+              </td>
+              <td>Preserve old citations if present; never relabel as sourced.</td>
+              <td>Keep original data unchanged.</td>
+            </tr>
+            <tr>
+              <td>Signed out</td>
+              <td>Sign in to ask</td>
+              <td>Public paper remains readable; chat input is replaced by sign-in CTA.</td>
+              <td>Sign in; return to same paper and reopen chat.</td>
+              <td>No personalized chat state.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2>Proof Moment Flow</h2>
+        <pre><code>User asks question
+  -> sidecar shows "Finding evidence"
+  -> answer appears with trust strip
+  -> provenance strip shows source count and retrieval mode
+  -> user expands source rows
+  -> source click scrolls/highlights reader target
+  -> if no target exists, source row stays expanded with unavailable reason</code></pre>
+
+        <h2>Responsive and Accessibility Requirements</h2>
+        <ul>
+          <li>
+            Desktop: reader and chat remain side-by-side. The provenance strip stays directly below
+            the answer, not in the hidden right rail.
+          </li>
+          <li>
+            Mobile: reader stacks above chat. Expanded source rows stay inside the chat flow; source
+            clicks scroll the reader target into view and return focus to the source row if no
+            target is found.
+          </li>
+          <li>
+            Source rows, trust strip controls, retry buttons, and sign-in actions must have at least
+            44px touch targets.
+          </li>
+          <li>
+            Trust states must not rely on color alone. Use label text plus icon. Warning and error
+            colors must meet body-text contrast.
+          </li>
+          <li>
+            Loading, degraded, refused, unavailable, and error status changes use appropriate
+            <code>aria-live</code> announcements.
+          </li>
+          <li>
+            Keyboard order: input -> answer actions -> provenance strip -> source rows -> insert
+            answer. Source click success moves focus to the highlighted reader block when possible.
+          </li>
+        </ul>
+
+        <h2>Design Scores</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Pass</th>
+              <th>Before</th>
+              <th>After plan edits</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Information architecture</td>
+              <td>5/10</td>
+              <td>8/10</td>
+              <td>Answer anatomy added; active plan linked at top.</td>
+            </tr>
+            <tr>
+              <td>Interaction states</td>
+              <td>4/10</td>
+              <td>8/10</td>
+              <td>UI state matrix added.</td>
+            </tr>
+            <tr>
+              <td>User journey</td>
+              <td>5/10</td>
+              <td>8/10</td>
+              <td>Proof moment flow added.</td>
+            </tr>
+            <tr>
+              <td>AI slop risk</td>
+              <td>8/10</td>
+              <td>8/10</td>
+              <td>App UI direction is calm and utility-first; mockups unavailable.</td>
+            </tr>
+            <tr>
+              <td>Design system alignment</td>
+              <td>6/10</td>
+              <td>7/10</td>
+              <td>No repo <code>DESIGN.md</code>; reuse existing chat/source components.</td>
+            </tr>
+            <tr>
+              <td>Responsive and accessibility</td>
+              <td>5/10</td>
+              <td>8/10</td>
+              <td>Viewport and a11y rules added.</td>
+            </tr>
+            <tr>
+              <td>Unresolved decisions</td>
+              <td>4 open</td>
+              <td>1 deferred</td>
+              <td>Claim-level proof remains final-gate challenge.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2>Design Implementation Tasks</h2>
+        <ul>
+          <li>
+            <strong>D1 (P1, human: ~2h / CC: ~20min) - answer-card anatomy:</strong>
+            implement the trust strip, compact provenance strip, expandable source rows, and
+            recovery action placement in <code>ChatIntegration</code> and <code>Sources</code>.
+          </li>
+          <li>
+            <strong>D2 (P1, human: ~2h / CC: ~20min) - UI state matrix:</strong>
+            render empty, loading, sourced, degraded, uncited, source-unavailable, refused, error,
+            signed-out, and legacy saved-message states with the labels above.
+          </li>
+          <li>
+            <strong>D3 (P1, human: ~1h / CC: ~15min) - source-click feedback:</strong>
+            make success and failure visible through highlight, focus movement, and persistent
+            unavailable source-row copy.
+          </li>
+          <li>
+            <strong>D4 (P2, human: ~1h / CC: ~15min) - responsive/a11y acceptance:</strong>
+            add browser QA cases for mobile source inspection, keyboard navigation, focus, and
+            non-color-only trust indicators.
+          </li>
+        </ul>
+
+        <h2>Design Completion Summary</h2>
+        <table>
+          <tbody>
+            <tr>
+              <th>System audit</th>
+              <td>
+                No repo DESIGN.md; UI scope confirmed; gstack design mockups unavailable due missing
+                image-generation key.
+              </td>
+            </tr>
+            <tr>
+              <th>Step 0</th>
+              <td>
+                Initial design completeness 5/10; focus areas: answer anatomy, trust states, source
+                proof, mobile/a11y.
+              </td>
+            </tr>
+            <tr>
+              <th>Dual voices</th>
+              <td>
+                Codex and subagent both flagged developer-centered hierarchy and missing UI state
+                model.
+              </td>
+            </tr>
+            <tr>
+              <th>Overall score</th>
+              <td>5/10 -> 8/10 after plan edits.</td>
+            </tr>
+            <tr>
+              <th>Mockups</th>
+              <td>0 generated; credential missing for design CLI.</td>
+            </tr>
+            <tr>
+              <th>Unresolved design decisions</th>
+              <td>
+                1: claim-level proof or evidence-dossier reframe remains final-gate user challenge.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2>Phase 3 Eng Review</h2>
+        <p>
+          Phase 3 reviewed the plan against the current implementation, not just the desired
+          trust-first sidecar behavior. The review accepts the branch scope but tightens the
+          implementation contract: source trust must be grounded in the same persisted evidence
+          identity that the reader can render and navigate.
+        </p>
+
+        <h2>Scope Challenge and Code Findings</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Area</th>
+              <th>Current code evidence</th>
+              <th>Decision</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>QA response contract</td>
+              <td>
+                <code>answerPaperQuestion</code> returns only <code>answer</code> and
+                <code>cites</code>, while fallback citation fabrication still exists in
+                <code>src/server/qa/index.ts:309</code>-<code>321</code>.
+              </td>
+              <td>
+                Replace with a typed answer union that distinguishes answered, refused, and failed
+                states, and never invent a citation.
+              </td>
+            </tr>
+            <tr>
+              <td>Citation validity</td>
+              <td>
+                <code>enrichCitationsWithChunkData</code> keeps LLM chunk IDs even when no current
+                evidence chunk matches them (<code>src/server/qa/index.ts:140</code>).
+              </td>
+              <td>
+                Only answer-level <code>sourced</code> state is allowed when at least one citation
+                resolves to current evidence; unknown citations become row-level unavailable data or
+                are dropped from proof.
+              </td>
+            </tr>
+            <tr>
+              <td>Retrieval degradation</td>
+              <td>
+                <code>runVectorSearch</code> returns <code>[]</code> for embedding failure, Qdrant
+                failure, empty vector, and legitimate zero vector hits
+                (<code>src/server/search/hybrid.ts:110</code>-<code>140</code>).
+              </td>
+              <td>
+                Return sanitized retrieval diagnostics from hybrid search and map them into QA trust
+                metadata.
+              </td>
+            </tr>
+            <tr>
+              <td>Rendered evidence identity</td>
+              <td>
+                Public arXiv-rendered blocks are generated with UUID block IDs and section metadata
+                only (<code>src/app/components/block-editor/parsers.ts:406</code>-<code>427</code>).
+              </td>
+              <td>
+                Add a chunkId-to-rendered-block resolution path, or make unresolved source rows
+                explicitly unavailable.
+              </td>
+            </tr>
+            <tr>
+              <td>Saved chat compatibility</td>
+              <td>
+                <code>chat_messages</code> stores <code>content</code>, <code>citations</code>, and
+                <code>reasoning</code> only
+                (<code>src/server/db/schema.sql:105</code>-<code>114</code>); the history route
+                strips unknown metadata.
+              </td>
+              <td>
+                Add versioned answer-card metadata persistence and render legacy messages as source
+                status unavailable.
+              </td>
+            </tr>
+            <tr>
+              <td>All <code>/api/qa</code> consumers</td>
+              <td>
+                <code>ChatIntegration</code> and the older <code>ChatPanel</code> both fetch
+                <code>/api/qa</code>; <code>ChatMessageBlock</code> embeds <code>ChatPanel</code>.
+              </td>
+              <td>
+                Share the answer-card parser/renderer across live consumers or explicitly disable
+                the older embedded paper-QA path before changing the API contract.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2>Eng Dual Voices</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Dimension</th>
+              <th>Claude subagent</th>
+              <th>Codex</th>
+              <th>Consensus</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Architecture sound?</td>
+              <td>Needs evidence identity and persistence contract before implementation.</td>
+              <td>Source navigation is not anchored to QA evidence.</td>
+              <td>Confirmed blocker.</td>
+            </tr>
+            <tr>
+              <td>Test coverage sufficient?</td>
+              <td>Missing source, history, retrieval, and refusal cases.</td>
+              <td>No component/browser coverage for the proof moment.</td>
+              <td>Confirmed blocker.</td>
+            </tr>
+            <tr>
+              <td>Performance risks addressed?</td>
+              <td>Public arXiv route needs guardrails; broader quota can wait.</td>
+              <td>
+                Timeouts exist lower down, but route validation and response mapping are weak.
+              </td>
+              <td>Confirmed P2.</td>
+            </tr>
+            <tr>
+              <td>Security threats covered?</td>
+              <td>Metrics must avoid raw prompts, quotes, answers, and identifiers.</td>
+              <td>Public route accepts malformed non-empty targets before network work.</td>
+              <td>Confirmed guardrails.</td>
+            </tr>
+            <tr>
+              <td>Error paths handled?</td>
+              <td>Error/refusal semantics are ambiguous between non-200 and saved messages.</td>
+              <td>Need answered/refused/failed response union and persistence rules.</td>
+              <td>Confirmed blocker.</td>
+            </tr>
+            <tr>
+              <td>Deployment risk manageable?</td>
+              <td>Only if legacy saved messages and older QA consumer are handled.</td>
+              <td>API response change can silently degrade the embedded chat surface.</td>
+              <td>Confirmed blocker.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2>Eng Architecture Diagram</h2>
+        <pre><code>User question
+  -> ChatIntegration / ChatPanel
+  -> /api/qa
+  -> answerPaperQuestion
+     -> loadQuestionEvidence
+        -> hybridPaperChunkSearch
+           -> vector search + text search + retrieval diagnostics
+     -> LLM JSON answer
+     -> citation validation against current evidence map
+     -> AnswerResult union: answered | refused | failed
+        -> trustState + retrieval + source rows
+  -> answer-card renderer
+     -> compact provenance strip
+     -> source row click
+        -> block-editor navigation request with requestId
+        -> source resolution index: chunkId -> rendered block
+        -> success highlight OR unavailable feedback
+  -> /api/chat/history
+     -> versioned metadata persistence
+     -> legacy messages: source status unavailable</code></pre>
+
+        <h2>Test Coverage Diagram</h2>
+        <pre><code>CODE PATHS                                             USER FLOWS
+[+] src/server/qa/index.ts                             [+] Ask paper question
+  ├── [★★ TESTED] model cites valid chunk                ├── [GAP] [->E2E] sourced answer -> source click -> highlighted evidence
+  ├── [GAP] no citation, no fabricated fallback          ├── [GAP] [->E2E] uncited answer keeps sources absent/marked
+  ├── [GAP] unknown/stale chunk_id                       ├── [GAP] [->E2E] refusal persists and reloads correctly
+  └── [GAP] answered | refused | failed union            └── [GAP] [->E2E] provider failure is actionable, not saved as proof
+
+[+] src/server/search/hybrid.ts                         [+] Degraded retrieval
+  ├── [GAP] embedding failure -> text_only               ├── [GAP] text-only banner visible
+  ├── [GAP] Qdrant failure -> text_only                  └── [GAP] no raw backend error leaked
+  ├── [GAP] vector zero hits, not failure
+  └── [GAP] text failure / empty corpus
+
+[+] src/app/components/ai-chatbot/sources.tsx           [+] Proof inspection
+[+] src/app/components/block-editor/BlockEditor.tsx       ├── [GAP] chunkId resolves to block
+  ├── [GAP] navigation ack success                       ├── [GAP] stale source unavailable
+  ├── [GAP] no target / wrong paper / missing element    └── [GAP] mobile + keyboard + screen-reader path
+  └── [GAP] mixed source row availability
+
+[+] src/app/api/chat/history/route.ts                   [+] Saved chat reload
+[+] src/server/db/chat.ts                                 ├── [GAP] new trust metadata round-trip
+  ├── [★ TESTED] citation sanitization                   └── [GAP] legacy citation-only answer is source-status unavailable
+  └── [GAP] answer metadata persistence
+
+[+] src/app/components/chat/ChatPanel.tsx                [+] Embedded chat block
+  └── [GAP] old /api/qa consumer parity                  └── [GAP] shared renderer or explicit disabled state
+
+[+] /api/editor/ingest/arxiv                            [+] Public arXiv ingest
+  ├── [★ TESTED] empty target -> 400                      ├── [GAP] malformed non-empty target -> 400 before network
+  └── [GAP] length, timeout, 429 mapping                  └── [GAP] timeout/rate-limit copy
+
+COVERAGE: 3/28 paths tested or partially tested (11%)
+QUALITY: ★★★:0 ★★:1 ★:2 | GAPS: 25 (12 E2E/browser-worthy, 0 eval-specific)</code></pre>
+        <p>
+          Test plan artifact:
+          <code
+            >/home/shoh/.gstack/projects/berdyh-readable/shoh-feat-chat-panel-resizer-eng-review-test-plan-20260615-233057.md</code
+          >.
+        </p>
+
+        <h2>Eng Failure Modes Registry</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Failure mode</th>
+              <th>Test?</th>
+              <th>Error handling?</th>
+              <th>User sees?</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>LLM cites a chunk outside current evidence.</td>
+              <td>Missing</td>
+              <td>No; it survives with undefined page.</td>
+              <td>May look navigable or sourced.</td>
+              <td>Critical gap.</td>
+            </tr>
+            <tr>
+              <td>Rendered blocks lack QA chunk IDs.</td>
+              <td>Missing</td>
+              <td>Quote/page/section fuzzy fallback only.</td>
+              <td>Silent miss or wrong highlight.</td>
+              <td>Critical gap.</td>
+            </tr>
+            <tr>
+              <td>New answer trust metadata is saved.</td>
+              <td>Missing</td>
+              <td>Route currently strips unknown fields.</td>
+              <td>Trust state disappears on reload.</td>
+              <td>Critical gap.</td>
+            </tr>
+            <tr>
+              <td>Embedding or Qdrant fails while text works.</td>
+              <td>Missing</td>
+              <td>Server warning only.</td>
+              <td>No degraded label.</td>
+              <td>Critical gap.</td>
+            </tr>
+            <tr>
+              <td>Old embedded chat receives new response union.</td>
+              <td>Missing</td>
+              <td>Old renderer expects <code>answer</code>/<code>cites</code>.</td>
+              <td>Broken or misleading citation chips.</td>
+              <td>Critical gap.</td>
+            </tr>
+            <tr>
+              <td>Malformed public arXiv target is non-empty.</td>
+              <td>Missing</td>
+              <td>Lower layers may attempt fetch; route returns 502.</td>
+              <td>Ambiguous ingest failure.</td>
+              <td>P2 before public-route release.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2>Eng Not in Scope</h2>
+        <ul>
+          <li>
+            Full claim-level proof graph. The implementation must validate answer-level citations
+            first.
+          </li>
+          <li>
+            New quota/rate-limit infrastructure for all public routes. This branch only needs
+            route-level validation, timeout mapping, and a concrete 429 follow-up hook.
+          </li>
+          <li>
+            Retrofitting all historical chat rows with inferred trust. Legacy rows should render as
+            source status unavailable.
+          </li>
+          <li>
+            Replacing the entire reader rendering pipeline. Add chunk identity mapping where needed;
+            avoid a broad editor rewrite.
+          </li>
+          <li>
+            Raw analytics event capture. Metrics must be aggregate counters or privacy-safe hashed
+            identifiers only.
+          </li>
+        </ul>
+
+        <h2>Eng What Already Exists</h2>
+        <ul>
+          <li>
+            <code>answerPaperQuestion</code> already centralizes QA generation and persona-signal
+            recording; reuse it for the new response union.
+          </li>
+          <li>
+            <code>hybridPaperChunkSearch</code> already combines vector and text search; extend its
+            return contract rather than adding a separate retrieval path.
+          </li>
+          <li>
+            <code>Sources</code> and <code>BlockEditor</code> already have a navigation event path;
+            add request acknowledgement and unavailable states there.
+          </li>
+          <li>
+            <code>/api/chat/history</code> already sanitizes citation metadata; extend that parser
+            for versioned answer metadata.
+          </li>
+          <li>
+            Route tests already exist for chat history and public arXiv ingest; add edge cases
+            instead of creating a parallel harness.
+          </li>
+          <li>
+            Same-paper ingest locking and local coding-agent isolation are already covered and do
+            not need redesign in this branch.
+          </li>
+        </ul>
+
+        <h2>Performance and Security Review</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Topic</th>
+              <th>Finding</th>
+              <th>Plan requirement</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>N+1/data access</td>
+              <td>
+                No new N+1 risk from trust metadata itself; source resolution should build one
+                in-memory map from rendered blocks.
+              </td>
+              <td>Do not query per source row on click.</td>
+            </tr>
+            <tr>
+              <td>Memory</td>
+              <td>Chunk-to-block map size is bounded by rendered blocks for one paper.</td>
+              <td>Memoize per rendered block list and clear on paper change.</td>
+            </tr>
+            <tr>
+              <td>Public ingest</td>
+              <td>
+                Fetch timeouts exist, but invalid non-empty targets can still enter the ingest path.
+              </td>
+              <td>
+                Validate shape and length before network; map timeout separately from bad target.
+              </td>
+            </tr>
+            <tr>
+              <td>Privacy</td>
+              <td>
+                Trust/source metrics risk logging questions, quotes, answers, or selected text.
+              </td>
+              <td>
+                Counters only: trust-state mix, degraded rate, source-click success/failure reason,
+                no raw content.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2>Worktree Parallelization</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Lane</th>
+              <th>Workstream</th>
+              <th>Modules touched</th>
+              <th>Depends on</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>A</td>
+              <td>QA response union, citation validation, retrieval diagnostics</td>
+              <td>
+                <code>src/server/qa</code>, <code>src/server/search</code>,
+                <code>src/app/api/qa</code>
+              </td>
+              <td>None</td>
+            </tr>
+            <tr>
+              <td>B</td>
+              <td>Chat persistence metadata and history compatibility</td>
+              <td><code>src/server/db</code>, <code>src/app/api/chat/history</code></td>
+              <td>Answer metadata shape from Lane A</td>
+            </tr>
+            <tr>
+              <td>C</td>
+              <td>
+                Answer card, source rows, navigation acknowledgement, older QA consumer parity
+              </td>
+              <td><code>src/app/components</code></td>
+              <td>Answer metadata shape from Lane A</td>
+            </tr>
+            <tr>
+              <td>D</td>
+              <td>Public arXiv guardrails</td>
+              <td><code>src/app/api/editor/ingest</code>, <code>src/server/editor</code></td>
+              <td>None</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>
+          Launch Lane A and D independently. Lane B and C can start once Lane A fixes the response
+          shape; keep B and C coordinated because both touch message metadata names.
+        </p>
+
+        <h2>Eng Implementation Tasks</h2>
+        <ul>
+          <li>
+            <strong>T1 (P1, human: ~2.5h / CC: ~25min)</strong> - QA contract - replace fabricated
+            citations with a typed trust-state response union.
+          </li>
+          <li>
+            <strong>T2 (P1, human: ~2h / CC: ~20min)</strong> - Retrieval - return sanitized
+            retrieval diagnostics from hybrid search.
+          </li>
+          <li>
+            <strong>T3 (P1, human: ~3h / CC: ~30min)</strong> - Evidence identity - map QA chunk IDs
+            to rendered reader blocks or explicit unavailable state.
+          </li>
+          <li>
+            <strong>T4 (P1, human: ~3h / CC: ~30min)</strong> - Chat persistence - persist versioned
+            answer-card metadata and legacy unavailable status.
+          </li>
+          <li>
+            <strong>T5 (P1, human: ~2.5h / CC: ~25min)</strong> - Chat UI - share the answer-card
+            renderer across all live QA consumers.
+          </li>
+          <li>
+            <strong>T6 (P1, human: ~2h / CC: ~20min)</strong> - Source UX - add source navigation
+            acknowledgement and accessible unavailable feedback.
+          </li>
+          <li>
+            <strong>T7 (P2, human: ~1.5h / CC: ~15min)</strong> - Public ingest - validate arXiv
+            targets before network and map timeout/rate-limit responses.
+          </li>
+          <li>
+            <strong>T8 (P2, human: ~1h / CC: ~10min)</strong> - Observability - emit privacy-safe
+            trust and source-click counters only.
+          </li>
+          <li>
+            <strong>T9 (P3, human: ~45min / CC: ~8min)</strong> - Product metrics - define
+            thresholds, owner, and review date for sidecar kill criteria.
+          </li>
+        </ul>
+        <p>
+          JSONL artifact:
+          <code
+            >/home/shoh/.gstack/projects/berdyh-readable/tasks-eng-review-20260615-233057.jsonl</code
+          >.
+        </p>
+
+        <h2>Eng Completion Summary</h2>
+        <table>
+          <tbody>
+            <tr>
+              <th>Step 0 Scope Challenge</th>
+              <td>
+                Scope accepted, but implementation contract tightened around evidence identity and
+                persistence.
+              </td>
+            </tr>
+            <tr>
+              <th>Architecture Review</th>
+              <td>
+                3 blocking issues: source identity, chat metadata persistence, all QA consumers.
+              </td>
+            </tr>
+            <tr>
+              <th>Code Quality Review</th>
+              <td>2 issues: duplicate QA renderers and ambiguous source-unavailable ownership.</td>
+            </tr>
+            <tr>
+              <th>Test Review</th>
+              <td>Diagram produced; 25 gaps identified; test-plan artifact written.</td>
+            </tr>
+            <tr>
+              <th>Performance Review</th>
+              <td>
+                1 issue: public route guardrails; no new N+1 risk if source resolution stays
+                in-memory.
+              </td>
+            </tr>
+            <tr>
+              <th>Security/Privacy</th>
+              <td>2 issues: public input validation and privacy-safe metrics.</td>
+            </tr>
+            <tr>
+              <th>Failure modes</th>
+              <td>5 critical gaps flagged.</td>
+            </tr>
+            <tr>
+              <th>Outside voices</th>
+              <td>
+                Claude subagent: 9 findings. Codex: 7 findings. Consensus: 6/6 dimensions confirmed.
+              </td>
+            </tr>
+            <tr>
+              <th>Parallelization</th>
+              <td>4 lanes; A+D can start independently, B+C wait on response shape.</td>
+            </tr>
+            <tr>
+              <th>Lake Score</th>
+              <td>9/9 engineering recommendations choose the complete option.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2>Phase 3.5 DX Review</h2>
+        <p>
+          Phase 3.5 treats the developer as the repo contributor implementing and verifying the
+          trust-first sidecar. The product is not a public SDK, so the developer experience bar is
+          local setup, authenticated proof loop, migration safety, deterministic tests, and clear
+          debugging.
+        </p>
+
+        <h2>Developer Persona Card</h2>
+        <table>
+          <tbody>
+            <tr>
+              <th>Who</th>
+              <td>Repo contributor or coding agent shipping the trust-sidecar branch.</td>
+            </tr>
+            <tr>
+              <th>Context</th>
+              <td>
+                They must change API contracts, persistence, retrieval, UI source navigation, and
+                public ingest guardrails without regressing existing chat/session behavior.
+              </td>
+            </tr>
+            <tr>
+              <th>Tolerance</th>
+              <td>
+                10 minutes to a local proof loop before confidence drops; 30 minutes before they
+                start guessing or skipping browser QA.
+              </td>
+            </tr>
+            <tr>
+              <th>Expects</th>
+              <td>
+                One setup path, no fake credentials, deterministic tests, a known paper, and
+                commands that separate offline checks from live LLM/store checks.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2>Developer Empathy Narrative</h2>
+        <p>
+          I clone the repo and open the README. It explains the app well, but the first setup path
+          asks me to install dependencies, start Docker, copy
+          <code>.env.local.example</code>, choose providers, migrate Postgres, run setup, then start
+          the app. I copy the env file and see active placeholder API keys such as
+          <code>sk-...</code> and <code>sk-or-v1-...</code>; I cannot tell whether setup will treat
+          them as real. I run <code>pnpm setup</code>, but provider detection only checks for
+          non-empty strings, so fake keys can create false confidence. I then discover the chat
+          proof path is behind Clerk auth, but the plan does not give me a local test account, test
+          token, or seed paper that proves answer trust, source navigation, and saved metadata
+          together. I can run <code>pnpm test</code>, but there is no single
+          <code>pnpm verify</code> or browser/a11y command for the proof moment. At that point I
+          either skip verification or spend time reverse-engineering the app instead of shipping the
+          trust contract.
+        </p>
+
+        <h2>Competitive DX Benchmark</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Tool/path</th>
+              <th>TTHW</th>
+              <th>Relevant DX choice</th>
+              <th>Readable target</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Next.js app local dev</td>
+              <td>2-5 min</td>
+              <td>Install, run, see localhost quickly.</td>
+              <td>Contributor reaches app shell quickly.</td>
+            </tr>
+            <tr>
+              <td>Docker-backed app</td>
+              <td>5-10 min</td>
+              <td>Compose services plus health checks.</td>
+              <td><code>pnpm test:stores</code> must be explicit and useful.</td>
+            </tr>
+            <tr>
+              <td>Auth-backed product</td>
+              <td>5-10 min</td>
+              <td>Dev keys and test-user path are documented.</td>
+              <td>Local Clerk proof path required.</td>
+            </tr>
+            <tr>
+              <td>Readable current path</td>
+              <td>15-30 min</td>
+              <td>Many separate prerequisites and no seeded trust proof loop.</td>
+              <td>Target under 10 min for this branch; under 5 min later.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2>Magical Moment Specification</h2>
+        <p>
+          The developer magical moment is a local proof loop: ask a known paper question, see the
+          answer-card trust strip, click a source, watch the editor focus the exact evidence,
+          reload, and see the same trust metadata preserved from chat history. Delivery vehicle: a
+          documented seeded/manual flow now, with a future
+          <code>pnpm demo:trust-chat</code> or Playwright flow when browser automation is added.
+        </p>
+
+        <h2>Developer Journey Map</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Stage</th>
+              <th>Developer does</th>
+              <th>Friction</th>
+              <th>Plan resolution</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Discover</td>
+              <td>Reads README and active plan.</td>
+              <td>Plan is detailed but implementation order is scattered across phases.</td>
+              <td>Use aggregated task list and phase lanes.</td>
+            </tr>
+            <tr>
+              <td>Install</td>
+              <td>Runs <code>pnpm install</code>.</td>
+              <td>README says Node 18.18+, while locked Next 16 needs Node &gt;=20.9.0.</td>
+              <td>Fix Node docs, add engines/Corepack guidance.</td>
+            </tr>
+            <tr>
+              <td>Configure</td>
+              <td>Copies <code>.env.local.example</code> and runs <code>pnpm setup</code>.</td>
+              <td>Active placeholder keys can be detected as credentials.</td>
+              <td>Comment placeholders and reject sentinel values in setup/runtime.</td>
+            </tr>
+            <tr>
+              <td>Stores</td>
+              <td>Starts Docker and runs <code>pnpm test:stores</code>.</td>
+              <td>Store checks exist but are separate from the full branch proof path.</td>
+              <td>
+                Keep store check, include it in <code>pnpm verify</code> or documented live checks.
+              </td>
+            </tr>
+            <tr>
+              <td>Hello world</td>
+              <td>Starts app and opens paper route.</td>
+              <td>Clerk auth blocks QA without a clear local test-user path.</td>
+              <td>Document local Clerk/dev-auth path for the trust proof loop.</td>
+            </tr>
+            <tr>
+              <td>Real usage</td>
+              <td>Asks a question, clicks source, reloads history.</td>
+              <td>No seeded known paper or single proof script/checklist.</td>
+              <td>Add local trust proof loop with expected states and screenshots.</td>
+            </tr>
+            <tr>
+              <td>Debug</td>
+              <td>Investigates provider, Qdrant, local agent, and QA errors.</td>
+              <td><code>/api/qa</code> error mapping is OpenAI-specific and generic.</td>
+              <td>Add provider-aware, user-safe error taxonomy tests.</td>
+            </tr>
+            <tr>
+              <td>Upgrade</td>
+              <td>Adds answer metadata migration.</td>
+              <td>Migration/backward compatibility is under-specified.</td>
+              <td>Define additive migration, metadata version, no-backfill, rollback policy.</td>
+            </tr>
+            <tr>
+              <td>Verify</td>
+              <td>Runs tests and browser QA.</td>
+              <td>No one-command verification or runnable browser/a11y proof.</td>
+              <td>
+                Add <code>pnpm verify</code>, CI parity, and Playwright or strict manual QA
+                template.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2>First-Time Developer Confusion Report</h2>
+        <pre><code>T+0:00  I open README. The app purpose is clear, but setup begins with several prerequisites.
+T+1:30  I copy .env.local.example and see active fake API keys. I do not know if setup will ignore them.
+T+3:00  I run setup. Provider detection can treat any non-empty env string as configured.
+T+5:00  I start Docker and can run store checks, but I still have no known paper/authenticated QA proof.
+T+8:00  I learn /api/qa and chat sessions require Clerk auth. No local test-user path is in the plan.
+T+12:00 I can run unit tests, but source navigation and saved trust metadata need browser/history proof.
+T+18:00 I either skip the proof moment or start inventing ad hoc browser QA.</code></pre>
+
+        <h2>DX Dual Voices</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Dimension</th>
+              <th>Claude subagent</th>
+              <th>Codex</th>
+              <th>Consensus</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Getting started &lt; 5 min?</td>
+              <td>No; env placeholders, Node mismatch, auth path, and stores push TTHW higher.</td>
+              <td>Aborted during interruption.</td>
+              <td>Single-model finding; treated as P1 because repo evidence confirms it.</td>
+            </tr>
+            <tr>
+              <td>API/CLI naming guessable?</td>
+              <td>
+                Scripts exist but no <code>verify</code>, offline/live split, or trust demo command.
+              </td>
+              <td>Aborted.</td>
+              <td>Needs one-command verification contract.</td>
+            </tr>
+            <tr>
+              <td>Error messages actionable?</td>
+              <td>Provider error taxonomy is stale and OpenAI-specific.</td>
+              <td>Aborted.</td>
+              <td>Needs provider-aware copy and tests.</td>
+            </tr>
+            <tr>
+              <td>Docs findable and complete?</td>
+              <td>README is detailed; API testing docs are stale around chat persistence.</td>
+              <td>Aborted.</td>
+              <td>Fix stale docs before implementation handoff.</td>
+            </tr>
+            <tr>
+              <td>Upgrade path safe?</td>
+              <td>Answer metadata migration needs explicit version/rollback/no-backfill policy.</td>
+              <td>Aborted.</td>
+              <td>Confirmed by Phase 3 eng findings.</td>
+            </tr>
+            <tr>
+              <td>Dev environment friction-free?</td>
+              <td>No; auth, stores, provider choice, and browser QA are not tied together.</td>
+              <td>Aborted.</td>
+              <td>Needs local proof loop and verification harness.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2>DX Scorecard</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Dimension</th>
+              <th>Current</th>
+              <th>Target after plan</th>
+              <th>Key fix</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Getting Started</td>
+              <td>4/10</td>
+              <td>7/10</td>
+              <td>Fix Node/env prerequisites and document local proof loop.</td>
+            </tr>
+            <tr>
+              <td>API/CLI/SDK</td>
+              <td>5/10</td>
+              <td>7/10</td>
+              <td>Add <code>pnpm verify</code>, offline/live API test split.</td>
+            </tr>
+            <tr>
+              <td>Error Messages</td>
+              <td>5/10</td>
+              <td>8/10</td>
+              <td>Provider-aware QA and retrieval degradation errors.</td>
+            </tr>
+            <tr>
+              <td>Documentation</td>
+              <td>6/10</td>
+              <td>8/10</td>
+              <td>Update API testing, auth proof loop, migration notes.</td>
+            </tr>
+            <tr>
+              <td>Upgrade Path</td>
+              <td>4/10</td>
+              <td>8/10</td>
+              <td>Add additive metadata migration and rollback/no-backfill policy.</td>
+            </tr>
+            <tr>
+              <td>Dev Environment</td>
+              <td>5/10</td>
+              <td>7/10</td>
+              <td>Bind Docker, Clerk, known paper, and browser QA into one branch flow.</td>
+            </tr>
+            <tr>
+              <td>Community/Ecosystem</td>
+              <td>5/10</td>
+              <td>6/10</td>
+              <td>Not central for this branch; keep repo docs accurate.</td>
+            </tr>
+            <tr>
+              <td>DX Measurement</td>
+              <td>3/10</td>
+              <td>7/10</td>
+              <td>Track TTHW and proof-loop completion after implementation.</td>
+            </tr>
+            <tr>
+              <th>Overall DX</th>
+              <td>4.6/10</td>
+              <td>7.3/10</td>
+              <td>Competitive for a repo contributor, not yet public-SDK tier.</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>
+          TTHW: current 15-30 minutes; target under 10 minutes for this branch. Product type:
+          internal app/contributor workflow. Mode: DX Polish. Competitive tier: Needs Work now,
+          Competitive after the planned fixes.
+        </p>
+
+        <h2>DX Implementation Checklist</h2>
+        <ul>
+          <li>Time to local trust proof loop under 10 minutes.</li>
+          <li>Node prerequisite matches Next 16 and package metadata enforces it.</li>
+          <li>Copied env file contains no active fake provider credentials.</li>
+          <li><code>pnpm setup</code> rejects sentinel placeholder values.</li>
+          <li>Authenticated local Clerk/dev-user path is documented.</li>
+          <li>Known paper and expected trust/source states are documented.</li>
+          <li>Every QA error message includes problem, cause, fix, and safe detail.</li>
+          <li>
+            <code>pnpm verify</code> or equivalent runs typecheck, lint, unit tests, and build.
+          </li>
+          <li>Offline API route checks are separate from live LLM/store/ingest checks.</li>
+          <li>Browser/a11y proof covers desktop, mobile, keyboard, and unavailable source rows.</li>
+          <li>Answer metadata migration has version, rollback, and legacy-row behavior.</li>
+          <li>DX boomerang measures whether the contributor proof loop met the TTHW target.</li>
+        </ul>
+
+        <h2>DX Not in Scope</h2>
+        <ul>
+          <li>
+            Public SDK-style documentation, playground, or hosted sandbox. This branch is a repo
+            contributor flow.
+          </li>
+          <li>
+            Full CI service-container rollout if the project is not ready for GitHub Actions yet; a
+            local <code>pnpm verify</code> remains required.
+          </li>
+          <li>
+            Production analytics pipeline for DX measurement. Record the target now and measure
+            manually after implementation if needed.
+          </li>
+          <li>Replacing Clerk for easier local auth. Document the current auth path instead.</li>
+        </ul>
+
+        <h2>DX What Already Exists</h2>
+        <ul>
+          <li>README already explains app architecture, stores, providers, and useful scripts.</li>
+          <li>
+            <code>pnpm setup</code> already detects provider credentials and writes LLM routing env
+            values.
+          </li>
+          <li>
+            <code>pnpm test:stores</code> checks Postgres, schema, Qdrant, and vector collection
+            readiness.
+          </li>
+          <li><code>pnpm embeddings:probe</code> gives concrete embedding-provider diagnostics.</li>
+          <li>
+            Route tests exist for chat history and public arXiv ingest; expand them rather than
+            creating a parallel framework.
+          </li>
+          <li>
+            The Phase 3 test-plan artifact already names the trust proof paths; DX needs to make
+            them runnable.
+          </li>
+        </ul>
+
+        <h2>DX Implementation Tasks</h2>
+        <ul>
+          <li>
+            <strong>DX1 (P1, human: ~1.5h / CC: ~15min)</strong> - Bootstrap - fix env and runtime
+            prerequisites before trust work.
+          </li>
+          <li>
+            <strong>DX2 (P1, human: ~2h / CC: ~20min)</strong> - Local proof loop - document one
+            authenticated local trust-sidecar proof path.
+          </li>
+          <li>
+            <strong>DX3 (P1, human: ~1.5h / CC: ~15min)</strong> - Migration safety - define
+            additive metadata migration, versioning, and rollback policy.
+          </li>
+          <li>
+            <strong>DX4 (P2, human: ~1h / CC: ~10min)</strong> - API docs - split offline route
+            checks from live external-service API tests.
+          </li>
+          <li>
+            <strong>DX5 (P2, human: ~1.5h / CC: ~15min)</strong> - Verification harness - add one
+            command for contributor verification and CI parity.
+          </li>
+          <li>
+            <strong>DX6 (P2, human: ~2h / CC: ~20min)</strong> - Browser QA - make source-click
+            accessibility QA runnable or checklist-driven.
+          </li>
+          <li>
+            <strong>DX7 (P2, human: ~1h / CC: ~10min)</strong> - Error taxonomy - make QA error
+            messages provider-aware and user-safe.
+          </li>
+          <li>
+            <strong>DX8 (P3, human: ~45min / CC: ~8min)</strong> - DX measurement - track TTHW and
+            proof-loop completion after implementation.
+          </li>
+        </ul>
+        <p>
+          JSONL artifact:
+          <code
+            >/home/shoh/.gstack/projects/berdyh-readable/tasks-devex-review-20260615-235129.jsonl</code
+          >.
+        </p>
+
+        <h2>Phase 3.5 Completion Summary</h2>
+        <table>
+          <tbody>
+            <tr>
+              <th>Product type</th>
+              <td>Repo contributor workflow for a Next.js research app.</td>
+            </tr>
+            <tr>
+              <th>Persona</th>
+              <td>Contributor or coding agent implementing trust-sidecar changes.</td>
+            </tr>
+            <tr>
+              <th>TTHW</th>
+              <td>15-30 min current -> under 10 min target.</td>
+            </tr>
+            <tr>
+              <th>DX overall</th>
+              <td>4.6/10 current -> 7.3/10 with plan fixes.</td>
+            </tr>
+            <tr>
+              <th>Subagent voice</th>
+              <td>8 findings, 4 blocking for implementation confidence.</td>
+            </tr>
+            <tr>
+              <th>Codex voice</th>
+              <td>Started but interrupted; process was stopped and marked unavailable for DX.</td>
+            </tr>
+            <tr>
+              <th>Consensus</th>
+              <td>Single-model DX plus local evidence; no cross-model DX consensus claimed.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2>Cross-Phase Themes</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Theme</th>
+              <th>Phases</th>
+              <th>Signal</th>
+              <th>Implementation implication</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Trust is an evidence identity problem, not a badge.</td>
+              <td>CEO, Design, Eng</td>
+              <td>Fabricated or non-navigable citations destroy the product promise.</td>
+              <td>
+                Do not ship answer trust until citation IDs resolve to current evidence or show
+                unavailable explicitly.
+              </td>
+            </tr>
+            <tr>
+              <td>Saved history must preserve trust semantics.</td>
+              <td>Design, Eng, DX</td>
+              <td>Legacy and new messages need clear source status after reload.</td>
+              <td>Add versioned metadata and render legacy rows as source status unavailable.</td>
+            </tr>
+            <tr>
+              <td>The proof moment must be testable locally.</td>
+              <td>Design, Eng, DX</td>
+              <td>
+                Source-click focus, unavailable feedback, mobile, and keyboard behavior are core,
+                not polish.
+              </td>
+              <td>
+                Create a local authenticated proof loop and browser/a11y checklist or automation.
+              </td>
+            </tr>
+            <tr>
+              <td>Degraded retrieval is product state.</td>
+              <td>CEO, Eng, DX</td>
+              <td>
+                Vector failure, text-only fallback, and no evidence must not collapse into generic
+                errors.
+              </td>
+              <td>Return retrieval diagnostics and map them into user-safe answer states.</td>
+            </tr>
+            <tr>
+              <td>The sidecar scope is accepted but strategically incomplete.</td>
+              <td>CEO, Eng</td>
+              <td>
+                Both strategy voices flagged broader evidence-dossier or claim-level workflows as a
+                likely stronger product direction.
+              </td>
+              <td>Keep this branch scoped, but leave the final gate user challenge visible.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2>/autoplan Approval</h2>
+        <p>
+          Status: <strong>APPROVED as-is</strong> on 2026-06-16T09:11:04Z. The final approval gate
+          accepted the reviewed scope, taste recommendations, user challenge default, and aggregated
+          implementation tasks without overrides.
+        </p>
+
+        <h2>Decision Audit Trail</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Phase</th>
+              <th>Decision</th>
+              <th>Classification</th>
+              <th>Principle</th>
+              <th>Rationale</th>
+              <th>Rejected</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>1</td>
+              <td>Phase 1</td>
+              <td>Use approved trust-first sidecar premises as the review basis.</td>
+              <td>User-confirmed premise gate</td>
+              <td>P6, cross-check agreement</td>
+              <td>
+                The user approved the office-hours design doc and confirmed these premises for
+                <code>/autoplan</code>.
+              </td>
+              <td>Layout-only review; premise rewrite before review.</td>
+            </tr>
+            <tr>
+              <td>2</td>
+              <td>Phase 1</td>
+              <td>
+                Keep trust-first sidecar as branch scope; surface evidence-dossier reframe as a user
+                challenge.
+              </td>
+              <td>User challenge, not auto-applied</td>
+              <td>P3, P6</td>
+              <td>
+                Both CEO voices agreed the larger workflow may be stronger, but it changes the
+                user's stated direction.
+              </td>
+              <td>Silently expanding the branch into a cross-paper research product.</td>
+            </tr>
+            <tr>
+              <td>3</td>
+              <td>Phase 1</td>
+              <td>Remove first-hit citation fabrication from QA.</td>
+              <td>Auto-decided</td>
+              <td>P1, P5</td>
+              <td>
+                The current behavior makes unsupported answers look sourced and conflicts with the
+                approved trust contract.
+              </td>
+              <td>Keep fallback citations and label them later in UI only.</td>
+            </tr>
+            <tr>
+              <td>4</td>
+              <td>Phase 1</td>
+              <td>Propagate retrieval degradation metadata from hybrid search into QA.</td>
+              <td>Auto-decided</td>
+              <td>P1, P5</td>
+              <td>Vector failure currently becomes invisible to the answer-state contract.</td>
+              <td>Continue logging vector failure server-side only.</td>
+            </tr>
+            <tr>
+              <td>5</td>
+              <td>Phase 1</td>
+              <td>Make sources/provenance visible and source-click failure explicit.</td>
+              <td>Auto-decided</td>
+              <td>P1</td>
+              <td>
+                Trust cannot depend on a hidden source affordance or a silent navigation no-op.
+              </td>
+              <td>Leave sources collapsed and rely on browser scroll success.</td>
+            </tr>
+            <tr>
+              <td>6</td>
+              <td>Phase 1</td>
+              <td>Add public arXiv timeout, validation, and 429 follow-up guardrails.</td>
+              <td>Auto-decided</td>
+              <td>P2, P3</td>
+              <td>
+                Basic abuse controls are inside the public-route blast radius; full quota platform
+                can wait.
+              </td>
+              <td>Ship public inline parsing with only required-field validation.</td>
+            </tr>
+            <tr>
+              <td>7</td>
+              <td>Phase 1</td>
+              <td>Define trust metrics and kill criteria for the sidecar direction.</td>
+              <td>Auto-decided</td>
+              <td>P1, P6</td>
+              <td>
+                Both CEO voices flagged that implementation correctness alone does not prove product
+                pull.
+              </td>
+              <td>Measure only test pass/fail and deploy health.</td>
+            </tr>
+            <tr>
+              <td>8</td>
+              <td>Phase 2</td>
+              <td>Use a compact always-visible provenance strip with expandable source rows.</td>
+              <td>Auto-decided</td>
+              <td>P5</td>
+              <td>
+                Both design voices flagged the previous "visible or summarized" wording as
+                ambiguous.
+              </td>
+              <td>Keep sources hidden by default; fully expand every source list by default.</td>
+            </tr>
+            <tr>
+              <td>9</td>
+              <td>Phase 2</td>
+              <td>
+                Add a user-facing UI state matrix for trust, loading, auth, legacy, and error
+                states.
+              </td>
+              <td>Auto-decided</td>
+              <td>P1</td>
+              <td>
+                Backend trust states are insufficient without copy, placement, actions, and
+                persistence behavior.
+              </td>
+              <td>Let implementer invent UI behavior from backend enum names.</td>
+            </tr>
+            <tr>
+              <td>10</td>
+              <td>Phase 2</td>
+              <td>
+                Treat mixed source availability as UI row-level status, not a new backend enum for
+                this branch.
+              </td>
+              <td>Taste decision</td>
+              <td>P3, P5</td>
+              <td>
+                Partial claim verification is valuable but would expand the answer contract beyond
+                the approved branch scope.
+              </td>
+              <td>Add <code>partially_sourced</code> as a new backend trust state now.</td>
+            </tr>
+            <tr>
+              <td>11</td>
+              <td>Phase 2</td>
+              <td>Render old saved answers as <code>Source status unavailable</code>.</td>
+              <td>Auto-decided</td>
+              <td>P1, P5</td>
+              <td>
+                Saved messages without <code>trustState</code> must not be retroactively presented
+                as sourced.
+              </td>
+              <td>Backfill or infer old trust states client-side.</td>
+            </tr>
+            <tr>
+              <td>12</td>
+              <td>Phase 2</td>
+              <td>
+                Require source-click focus, highlight, unavailable feedback, and non-color-only
+                trust indicators.
+              </td>
+              <td>Auto-decided</td>
+              <td>P1</td>
+              <td>
+                The proof moment fails if users cannot perceive source-click success or failure
+                accessibly.
+              </td>
+              <td>Only scroll visually and rely on color-coded badges.</td>
+            </tr>
+            <tr>
+              <td>13</td>
+              <td>Phase 3</td>
+              <td>
+                Use an answered/refused/failed QA response union with answer-level trust state.
+              </td>
+              <td>Auto-decided</td>
+              <td>P5, P1</td>
+              <td>
+                Current non-200 failure semantics and answer-only payload are too ambiguous for
+                save/reload and refusal states.
+              </td>
+              <td>
+                Patch UI copy around the existing <code>answer</code>/<code>cites</code> response.
+              </td>
+            </tr>
+            <tr>
+              <td>14</td>
+              <td>Phase 3</td>
+              <td>
+                Validate citations against current evidence and remove unknown chunk IDs from
+                sourced proof.
+              </td>
+              <td>Auto-decided</td>
+              <td>P1, P5</td>
+              <td>Both eng voices flagged unknown LLM chunk IDs as a trust blocker.</td>
+              <td>Trust all LLM-provided chunk IDs after enrichment.</td>
+            </tr>
+            <tr>
+              <td>15</td>
+              <td>Phase 3</td>
+              <td>Make retrieval diagnostics explicit in the hybrid search return contract.</td>
+              <td>Auto-decided</td>
+              <td>P1, P5</td>
+              <td>
+                Vector failure, vector miss, and text-only fallback currently collapse into
+                indistinguishable empty arrays.
+              </td>
+              <td>Infer degraded state from empty vector hits.</td>
+            </tr>
+            <tr>
+              <td>16</td>
+              <td>Phase 3</td>
+              <td>Add chunkId-to-rendered-block resolution or explicit unavailable source rows.</td>
+              <td>Auto-decided</td>
+              <td>P1</td>
+              <td>
+                QA citations use persisted chunk IDs while rendered blocks can be UUID-only
+                HTML-derived blocks.
+              </td>
+              <td>Rely on quote/page fuzzy matching as proof navigation.</td>
+            </tr>
+            <tr>
+              <td>17</td>
+              <td>Phase 3</td>
+              <td>
+                Persist versioned answer metadata for trust state, retrieval state, and source rows.
+              </td>
+              <td>Auto-decided</td>
+              <td>P1, P5</td>
+              <td>
+                Saved chat currently cannot round-trip the new trust contract and would make old
+                messages look more certain than they are.
+              </td>
+              <td>Keep trust metadata client-local only.</td>
+            </tr>
+            <tr>
+              <td>18</td>
+              <td>Phase 3</td>
+              <td>
+                Update or disable every live <code>/api/qa</code> consumer, including embedded
+                <code>ChatPanel</code>.
+              </td>
+              <td>Auto-decided</td>
+              <td>P2, P4</td>
+              <td>
+                Changing the API for only <code>ChatIntegration</code> would leave a stale duplicate
+                QA surface.
+              </td>
+              <td>
+                Declare <code>ChatIntegration</code> canonical but leave the old consumer unchanged.
+              </td>
+            </tr>
+            <tr>
+              <td>19</td>
+              <td>Phase 3</td>
+              <td>
+                Keep <code>source_unavailable</code> as row-level UI state, not a new backend answer
+                enum.
+              </td>
+              <td>Taste decision</td>
+              <td>P5, P3</td>
+              <td>
+                Codex agreed with the Phase 2 design call: backend proves evidence resolution; UI
+                reports current render navigability.
+              </td>
+              <td>
+                Add another answer-level enum that mixes proof validity with viewport availability.
+              </td>
+            </tr>
+            <tr>
+              <td>20</td>
+              <td>Phase 3</td>
+              <td>
+                Add route-level public arXiv validation and timeout/rate-limit response mapping.
+              </td>
+              <td>Auto-decided</td>
+              <td>P2, P3</td>
+              <td>
+                Fetch timeouts exist lower down, but malformed non-empty targets still enter the
+                public ingest path.
+              </td>
+              <td>Leave all failures as generic 502.</td>
+            </tr>
+            <tr>
+              <td>21</td>
+              <td>Phase 3</td>
+              <td>Restrict metrics to aggregate privacy-safe trust and source-click counters.</td>
+              <td>Auto-decided</td>
+              <td>P1</td>
+              <td>
+                Observability is needed, but raw prompt, quote, answer, or selected-text logging
+                would be the wrong default.
+              </td>
+              <td>Log full answer-card payloads for easier debugging.</td>
+            </tr>
+            <tr>
+              <td>22</td>
+              <td>Phase 3.5</td>
+              <td>
+                Fix bootstrap hygiene before implementation: Node version, active fake env keys, and
+                placeholder rejection.
+              </td>
+              <td>Auto-decided</td>
+              <td>P1, P5</td>
+              <td>
+                Contributors can lose the first run to false-positive provider detection or
+                unsupported Node.
+              </td>
+              <td>Leave README/env placeholders as-is and debug failures ad hoc.</td>
+            </tr>
+            <tr>
+              <td>23</td>
+              <td>Phase 3.5</td>
+              <td>Add a documented authenticated local trust proof loop.</td>
+              <td>Auto-decided</td>
+              <td>P1</td>
+              <td>
+                The implementation cannot be trusted without a repeatable local path through auth,
+                answer trust, source click, and saved history.
+              </td>
+              <td>Rely on unit tests and manual exploration only.</td>
+            </tr>
+            <tr>
+              <td>24</td>
+              <td>Phase 3.5</td>
+              <td>
+                Define additive answer-metadata migration and rollback/no-backfill policy before
+                Lane B.
+              </td>
+              <td>Auto-decided</td>
+              <td>P1, P5</td>
+              <td>Saved trust metadata is a persistent contract, not just a UI shape.</td>
+              <td>Add fields opportunistically without a version policy.</td>
+            </tr>
+            <tr>
+              <td>25</td>
+              <td>Phase 3.5</td>
+              <td>
+                Split offline route-shape checks from live LLM/store/ingest checks and update stale
+                API docs.
+              </td>
+              <td>Auto-decided</td>
+              <td>P5</td>
+              <td>
+                The current API testing docs still describe chat history as in-memory and mix
+                unrelated live dependencies.
+              </td>
+              <td>Keep one non-deterministic API test script.</td>
+            </tr>
+            <tr>
+              <td>26</td>
+              <td>Phase 3.5</td>
+              <td>
+                Add a one-command verification contract, with browser/a11y proof either automated or
+                strictly templated.
+              </td>
+              <td>Auto-decided</td>
+              <td>P1, P6</td>
+              <td>The proof moment depends on browser behavior, not only server unit tests.</td>
+              <td>Keep browser QA as an informal final manual note.</td>
+            </tr>
+            <tr>
+              <td>27</td>
+              <td>Phase 3.5</td>
+              <td>
+                Make QA error messages provider-aware and safe for OpenRouter, local agents, Qdrant,
+                and text-only degradation.
+              </td>
+              <td>Auto-decided</td>
+              <td>P1</td>
+              <td>
+                The route currently maps around OpenAI-specific error strings while the app supports
+                multiple providers.
+              </td>
+              <td>Continue surfacing generic 502s and raw provider wording.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </main>
+  </body>
+</html>

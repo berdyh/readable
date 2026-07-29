@@ -1,6 +1,6 @@
-import { getEmbeddingEnvironment } from './embeddings';
+import { getEmbeddingEnvironment } from "./embeddings";
 
-export const PAPER_CHUNK_COLLECTION = 'paper_chunks';
+export const PAPER_CHUNK_COLLECTION = "paper_chunks";
 
 export interface QdrantEnvironmentConfig {
   url: string;
@@ -8,7 +8,7 @@ export interface QdrantEnvironmentConfig {
   timeoutMs: number;
   collection: string;
   vectorSize: number;
-  distance: 'Cosine' | 'Dot' | 'Euclid';
+  distance: "Cosine" | "Dot" | "Euclid";
 }
 
 const DEFAULT_TIMEOUT_MS = 20_000;
@@ -23,7 +23,7 @@ const DEFAULT_COLLECTION = PAPER_CHUNK_COLLECTION;
  * single-provider deployments that want a stable collection name.
  */
 export function getQdrantEnvironment(): QdrantEnvironmentConfig {
-  const url = process.env.QDRANT_URL ?? 'http://localhost:6333';
+  const url = process.env.QDRANT_URL ?? "http://localhost:6333";
   const apiKey = process.env.QDRANT_API_KEY;
 
   let collection = process.env.QDRANT_COLLECTION ?? DEFAULT_COLLECTION;
@@ -41,27 +41,23 @@ export function getQdrantEnvironment(): QdrantEnvironmentConfig {
         vectorSize = embeddingEnv.dimensions;
       }
     } catch {
-      // Embedding provider is not configured (e.g. no API key set yet).
-      // Fall back to legacy defaults; ingest pipeline will still skip vector
-      // indexing gracefully and the user's first paper-load surfaces the
-      // missing-key error clearly.
+      // Keep the store probe usable even if embedding config is malformed.
+      // Normal auto mode resolves to either OpenRouter or the local fallback.
     }
   }
 
   return {
-    url: url.replace(/\/+$/, ''),
+    url: url.replace(/\/+$/, ""),
     apiKey,
     timeoutMs: Number(process.env.QDRANT_TIMEOUT_MS ?? DEFAULT_TIMEOUT_MS),
     collection,
     vectorSize,
-    distance:
-      (process.env.QDRANT_DISTANCE as QdrantEnvironmentConfig['distance']) ??
-      'Cosine',
+    distance: (process.env.QDRANT_DISTANCE as QdrantEnvironmentConfig["distance"]) ?? "Cosine",
   };
 }
 
 interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
   query?: Record<string, string | number | boolean | undefined>;
 }
@@ -85,25 +81,25 @@ async function qdrantRequest<T>(
   const timer = setTimeout(() => controller.abort(), env.timeoutMs);
 
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
   };
 
   if (env.apiKey) {
-    headers['api-key'] = env.apiKey;
+    headers["api-key"] = env.apiKey;
   }
 
   try {
     const response = await fetch(url, {
-      method: options.method ?? 'GET',
+      method: options.method ?? "GET",
       headers,
       body: options.body ? JSON.stringify(options.body) : undefined,
       signal: controller.signal,
     });
 
     if (!response.ok) {
-      const text = await response.text().catch(() => '');
+      const text = await response.text().catch(() => "");
       throw new Error(
-        `Qdrant request ${options.method ?? 'GET'} ${path} failed (${response.status}): ${text}`,
+        `Qdrant request ${options.method ?? "GET"} ${path} failed (${response.status}): ${text}`,
       );
     }
 
@@ -124,7 +120,58 @@ interface CollectionInfoResult {
         vectors?: { size?: number; distance?: string };
       };
     };
+    payload_schema?: Record<string, { data_type?: string } | string>;
   };
+}
+
+type QdrantPayloadSchema = NonNullable<CollectionInfoResult["result"]>["payload_schema"];
+
+function hasPayloadIndex(
+  schema: QdrantPayloadSchema | undefined,
+  fieldName: string,
+  expectedType: string,
+): boolean {
+  const field = schema?.[fieldName];
+  const dataType = typeof field === "string" ? field : field?.data_type;
+  return dataType?.toLowerCase() === expectedType;
+}
+
+async function createPayloadIndex(
+  env: QdrantEnvironmentConfig,
+  fieldName: string,
+  fieldSchema: "keyword" | "integer",
+): Promise<void> {
+  try {
+    await qdrantRequest(
+      `/collections/${encodeURIComponent(env.collection)}/index`,
+      {
+        method: "PUT",
+        body: {
+          field_name: fieldName,
+          field_schema: fieldSchema,
+        },
+      },
+      env,
+    );
+  } catch (error) {
+    if (error instanceof Error && error.message.toLowerCase().includes("already exists")) {
+      return;
+    }
+    throw error;
+  }
+}
+
+async function ensurePayloadIndexes(
+  env: QdrantEnvironmentConfig,
+  schema?: QdrantPayloadSchema,
+): Promise<void> {
+  if (!hasPayloadIndex(schema, "paperId", "keyword")) {
+    await createPayloadIndex(env, "paperId", "keyword");
+  }
+
+  if (!hasPayloadIndex(schema, "pageNumber", "integer")) {
+    await createPayloadIndex(env, "pageNumber", "integer");
+  }
 }
 
 export async function ensureQdrantCollection(
@@ -133,7 +180,7 @@ export async function ensureQdrantCollection(
   try {
     const info = await qdrantRequest<CollectionInfoResult>(
       `/collections/${encodeURIComponent(env.collection)}`,
-      { method: 'GET' },
+      { method: "GET" },
       env,
     );
 
@@ -143,12 +190,10 @@ export async function ensureQdrantCollection(
         `Qdrant collection "${env.collection}" already exists with size ${existing.size} but expected ${env.vectorSize}. Drop the collection or set QDRANT_VECTOR_SIZE to match.`,
       );
     }
+    await ensurePayloadIndexes(env, info.result?.payload_schema);
     return;
   } catch (error) {
-    if (
-      !(error instanceof Error) ||
-      !error.message.includes('failed (404)')
-    ) {
+    if (!(error instanceof Error) || !error.message.includes("failed (404)")) {
       throw error;
     }
   }
@@ -156,7 +201,7 @@ export async function ensureQdrantCollection(
   await qdrantRequest(
     `/collections/${encodeURIComponent(env.collection)}`,
     {
-      method: 'PUT',
+      method: "PUT",
       body: {
         vectors: {
           size: env.vectorSize,
@@ -167,29 +212,7 @@ export async function ensureQdrantCollection(
     env,
   );
 
-  await qdrantRequest(
-    `/collections/${encodeURIComponent(env.collection)}/index`,
-    {
-      method: 'PUT',
-      body: {
-        field_name: 'paperId',
-        field_schema: 'keyword',
-      },
-    },
-    env,
-  );
-
-  await qdrantRequest(
-    `/collections/${encodeURIComponent(env.collection)}/index`,
-    {
-      method: 'PUT',
-      body: {
-        field_name: 'pageNumber',
-        field_schema: 'integer',
-      },
-    },
-    env,
-  );
+  await ensurePayloadIndexes(env);
 }
 
 export interface PaperChunkVectorPoint {
@@ -216,7 +239,7 @@ export async function upsertPaperChunkVectors(
   await qdrantRequest(
     `/collections/${encodeURIComponent(env.collection)}/points`,
     {
-      method: 'PUT',
+      method: "PUT",
       body: {
         points: points.map((point) => ({
           id: point.id,
@@ -237,12 +260,12 @@ export async function deletePaperChunkVectorsByPaper(
   await qdrantRequest(
     `/collections/${encodeURIComponent(env.collection)}/points/delete`,
     {
-      method: 'POST',
+      method: "POST",
       body: {
         filter: {
           must: [
             {
-              key: 'paperId',
+              key: "paperId",
               match: { value: paperId },
             },
           ],
@@ -257,7 +280,7 @@ export async function deletePaperChunkVectorsByPaper(
 export interface QdrantSearchHit {
   id: string;
   score: number;
-  payload: PaperChunkVectorPoint['payload'];
+  payload: PaperChunkVectorPoint["payload"];
   vector?: number[];
 }
 
@@ -265,7 +288,7 @@ interface QdrantSearchResponse {
   result?: Array<{
     id: string | number;
     score: number;
-    payload?: PaperChunkVectorPoint['payload'];
+    payload?: PaperChunkVectorPoint["payload"];
   }>;
 }
 
@@ -283,7 +306,7 @@ export async function searchPaperChunkVectors(
   const response = await qdrantRequest<QdrantSearchResponse>(
     `/collections/${encodeURIComponent(env.collection)}/points/search`,
     {
-      method: 'POST',
+      method: "POST",
       body: {
         vector: options.vector,
         limit: options.limit ?? 10,
@@ -292,7 +315,7 @@ export async function searchPaperChunkVectors(
         filter: {
           must: [
             {
-              key: 'paperId',
+              key: "paperId",
               match: { value: options.paperId },
             },
           ],
@@ -307,13 +330,34 @@ export async function searchPaperChunkVectors(
     score: entry.score,
     payload: (entry.payload ?? {
       paperId: options.paperId,
-      chunkId: '',
-    }) as PaperChunkVectorPoint['payload'],
+      chunkId: "",
+    }) as PaperChunkVectorPoint["payload"],
   }));
 }
 
 export async function pingQdrant(
   env: QdrantEnvironmentConfig = getQdrantEnvironment(),
 ): Promise<void> {
-  await qdrantRequest('/readyz', { method: 'GET' }, env);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), env.timeoutMs);
+  const headers: Record<string, string> = {};
+
+  if (env.apiKey) {
+    headers["api-key"] = env.apiKey;
+  }
+
+  try {
+    const response = await fetch(`${env.url}/readyz`, {
+      method: "GET",
+      headers,
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      throw new Error(`Qdrant readiness check failed (${response.status}): ${text}`);
+    }
+  } finally {
+    clearTimeout(timer);
+  }
 }

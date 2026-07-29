@@ -11,20 +11,16 @@
  * because token-rotation writes always change the mtime.
  */
 
-import { promises as fs } from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
+import { promises as fs } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
-import type { RoutingProviderId } from './types';
+import type { RoutingProviderId } from "./types";
 
 export interface CliCredential {
   provider: RoutingProviderId;
   /** Display label for the source — `claude-cli`, `codex-cli`, etc. */
-  source:
-    | 'claude-cli'
-    | 'codex-cli'
-    | 'gemini-cli'
-    | 'gcloud-adc';
+  source: "claude-cli" | "codex-cli" | "gemini-cli" | "gcloud-adc";
   /** Access / bearer token to send to the provider. */
   accessToken: string;
   /** Refresh token if available — kept so we can re-issue access. */
@@ -54,7 +50,7 @@ async function statMtime(filePath: string): Promise<number | null> {
     return stat.mtimeMs;
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
-    if (code === 'ENOENT' || code === 'ENOTDIR') {
+    if (code === "ENOENT" || code === "ENOTDIR") {
       return null;
     }
     throw error;
@@ -63,7 +59,7 @@ async function statMtime(filePath: string): Promise<number | null> {
 
 async function readJson<T>(filePath: string): Promise<T | null> {
   try {
-    const raw = await fs.readFile(filePath, 'utf-8');
+    const raw = await fs.readFile(filePath, "utf-8");
     return JSON.parse(raw) as T;
   } catch {
     return null;
@@ -101,16 +97,16 @@ interface CodexAuthFile {
 }
 
 export async function readCodexCliCredentials(): Promise<CliCredential | null> {
-  const codexHome = process.env.CODEX_HOME?.trim() || path.join(homedir(), '.codex');
-  const filePath = path.join(codexHome, 'auth.json');
+  const codexHome = process.env.CODEX_HOME?.trim() || path.join(homedir(), ".codex");
+  const filePath = path.join(codexHome, "auth.json");
   return readWithCache<CliCredential>(filePath, async () => {
     const data = await readJson<CodexAuthFile>(filePath);
     const access = data?.tokens?.access_token;
     if (!access) return null;
     const expiresAt = (() => {
       const raw = data?.tokens?.expires_at;
-      if (typeof raw === 'number') return raw * 1000;
-      if (typeof raw === 'string') {
+      if (typeof raw === "number") return raw * 1000;
+      if (typeof raw === "string") {
         const numeric = Number(raw);
         if (!Number.isNaN(numeric)) return numeric * 1000;
         const parsed = Date.parse(raw);
@@ -119,8 +115,8 @@ export async function readCodexCliCredentials(): Promise<CliCredential | null> {
       return undefined;
     })();
     return {
-      provider: 'openai-codex',
-      source: 'codex-cli',
+      provider: "openai-codex",
+      source: "codex-cli",
       accessToken: access,
       refreshToken: data?.tokens?.refresh_token,
       expiresAt,
@@ -143,14 +139,14 @@ interface ClaudeAuthFile {
 }
 
 export async function readClaudeCliCredentials(): Promise<CliCredential | null> {
-  const filePath = path.join(homedir(), '.claude', '.credentials.json');
+  const filePath = path.join(homedir(), ".claude", ".credentials.json");
   return readWithCache<CliCredential>(filePath, async () => {
     const data = await readJson<ClaudeAuthFile>(filePath);
     const access = data?.claudeAiOauth?.accessToken;
     if (!access) return null;
     return {
-      provider: 'anthropic',
-      source: 'claude-cli',
+      provider: "anthropic",
+      source: "claude-cli",
       accessToken: access,
       refreshToken: data?.claudeAiOauth?.refreshToken,
       expiresAt: data?.claudeAiOauth?.expiresAt,
@@ -170,15 +166,15 @@ interface GeminiAuthFile {
 }
 
 export async function readGeminiCliCredentials(): Promise<CliCredential | null> {
-  const filePath = path.join(homedir(), '.gemini', 'oauth_creds.json');
+  const filePath = path.join(homedir(), ".gemini", "oauth_creds.json");
   return readWithCache<CliCredential>(filePath, async () => {
     const data = await readJson<GeminiAuthFile>(filePath);
     const block = data?.credentials ?? data;
     const access = block?.access_token;
     if (!access) return null;
     return {
-      provider: 'gemini',
-      source: 'gemini-cli',
+      provider: "gemini",
+      source: "gemini-cli",
       accessToken: access,
       refreshToken: block?.refresh_token,
       expiresAt: block?.expiry_date,
@@ -200,27 +196,27 @@ interface AdcCredential {
 export async function readGoogleAdcCredentials(): Promise<CliCredential | null> {
   const explicit = process.env.GOOGLE_APPLICATION_CREDENTIALS?.trim();
   const filePath =
-    (explicit && explicit.length > 0
+    explicit && explicit.length > 0
       ? explicit
-      : path.join(homedir(), '.config', 'gcloud', 'application_default_credentials.json'));
+      : path.join(homedir(), ".config", "gcloud", "application_default_credentials.json");
 
   return readWithCache<CliCredential>(filePath, async () => {
     const data = await readJson<AdcCredential>(filePath);
     if (!data) return null;
-    if (data.type !== 'authorized_user') {
+    if (data.type !== "authorized_user") {
       // Service-account creds are out of scope for the personal-subscription
       // routing layer; the caller should configure that via env keys instead.
       return null;
     }
     if (!data.refresh_token) return null;
     return {
-      provider: 'google-vertex',
-      source: 'gcloud-adc',
+      provider: "google-vertex",
+      source: "gcloud-adc",
       // ADC requires us to mint an access token via the refresh flow before
       // we can call any Google API. The fallback layer treats `accessToken`
       // here as a refresh-only credential and fetches an access token at
       // request time.
-      accessToken: '',
+      accessToken: "",
       refreshToken: data.refresh_token,
       accountId: data.account,
       sourcePath: filePath,
@@ -263,18 +259,20 @@ export function resetCliCredentialCache(): void {
  */
 export function getInstallHint(provider: RoutingProviderId): string | undefined {
   switch (provider) {
-    case 'anthropic':
-      return 'Install Claude Code: `npm i -g @anthropic-ai/claude-code` then run `claude login`.';
-    case 'openai-codex':
-      return 'Install Codex CLI: `npm i -g @openai/codex` then run `codex login`.';
-    case 'gemini':
-      return 'Install Gemini CLI: see https://github.com/google-gemini/gemini-cli — then run `gemini auth login`.';
-    case 'google-vertex':
-      return 'Install gcloud SDK: https://cloud.google.com/sdk/docs/install — then `gcloud auth application-default login`.';
-    case 'openai':
-      return 'Set OPENAI_API_KEY in .env.local (https://platform.openai.com/api-keys).';
-    case 'openrouter':
-      return 'Set OPENROUTER_API_KEY in .env.local (https://openrouter.ai/keys). Free tier available.';
+    case "coding-agent":
+      return "Install/login to a local CLI, e.g. `npm i -g @openai/codex` then `codex login`; set LLM_LOCAL_AGENTS=codex-cli.";
+    case "anthropic":
+      return "Install Claude Code: `npm i -g @anthropic-ai/claude-code` then run `claude login`.";
+    case "openai-codex":
+      return "Install Codex CLI: `npm i -g @openai/codex` then run `codex login`.";
+    case "gemini":
+      return "Install Gemini CLI: see https://github.com/google-gemini/gemini-cli — then run `gemini auth login`.";
+    case "google-vertex":
+      return "Install gcloud SDK: https://cloud.google.com/sdk/docs/install — then `gcloud auth application-default login`.";
+    case "openai":
+      return "Set OPENAI_API_KEY in .env.local (https://platform.openai.com/api-keys).";
+    case "openrouter":
+      return "Set OPENROUTER_API_KEY in .env.local (https://openrouter.ai/keys). Free tier available.";
     default:
       return undefined;
   }

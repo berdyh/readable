@@ -55,6 +55,7 @@ export interface QuestionEvidenceContext {
   expandedWindow: QaChunkContext[];
   figures: QaFigureContext[];
   citations: QaCitationContext[];
+  retrieval?: QaRetrievalDiagnostics;
   selection?: NormalizedSelection;
 }
 
@@ -62,9 +63,38 @@ export interface AnswerCitation {
   chunkId: string;
   page?: number;
   quote?: string;
+  sourceAvailable?: boolean;
+}
+
+export type QaVectorRetrievalStatus = "ok" | "skipped" | "embedding_failed" | "search_failed";
+
+export type QaTextRetrievalStatus = "ok" | "empty";
+
+export interface QaRetrievalDiagnostics {
+  vector: {
+    status: QaVectorRetrievalStatus;
+    hitCount: number;
+    reason?: string;
+  };
+  text: {
+    status: QaTextRetrievalStatus;
+    hitCount: number;
+  };
+}
+
+export type AnswerTrustStatus = "sourced" | "uncited" | "refused";
+
+export interface AnswerTrustMetadata {
+  status: AnswerTrustStatus;
+  hasEvidence: boolean;
+  validCitationCount: number;
+  invalidCitationCount: number;
+  warnings: string[];
+  retrieval: QaRetrievalDiagnostics;
 }
 
 export interface AnswerResult {
   answer: string;
   cites: AnswerCitation[];
+  trust: AnswerTrustMetadata;
 }

@@ -17,16 +17,8 @@
  * no profiles configured.
  */
 
-import {
-  isProfileInCooldown,
-  listProfilesForProvider,
-} from './auth-profile-store';
-import type {
-  AuthProfile,
-  AuthProfileStore,
-  AuthProfileType,
-  RoutingProviderId,
-} from './types';
+import { isProfileInCooldown, listProfilesForProvider } from "./auth-profile-store";
+import type { AuthProfile, AuthProfileStore, AuthProfileType, RoutingProviderId } from "./types";
 
 const TYPE_PRIORITY: Record<AuthProfileType, number> = {
   oauth: 0,

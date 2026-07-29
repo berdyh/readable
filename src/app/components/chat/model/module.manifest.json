@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "web.chat.model",
+  "parent": "web.chat",
+  "path": "src/app/components/chat/model",
+  "goal": "Defines the client-side chat data shapes.",
+  "owns": ["src/app/components/chat/model"],
+  "interface": {
+    "entrypoint": "types.ts",
+    "exports": ["ChatMessage", "ChatTab", "fromWireMessage"]
+  },
+  "uses": [
+    {
+      "module": "server.chat",
+      "via": "@/server/chat/types"
+    },
+    {
+      "module": "server.qa",
+      "via": "@/server/qa/types"
+    }
+  ],
+  "constraints": ["data shapes", "string and number rules"],
+  "checks": ["pnpm vitest run src/app/components/chat/model"]
+}

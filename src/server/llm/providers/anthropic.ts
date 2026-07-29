@@ -1,10 +1,5 @@
-import type {
-  LlmProvider,
-  LlmProviderInterface,
-  LlmRequest,
-  LlmConfig,
-} from '../types';
-import { getModel } from '@/server/llm-config/models';
+import type { LlmProvider, LlmProviderInterface, LlmRequest, LlmConfig } from "../types";
+import { getModel } from "@/server/llm-config";
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 
@@ -25,34 +20,32 @@ function requireEnvVar(name: string, purpose: string): string {
 
 function getDefaultModel(taskType?: string): string {
   // Use model config from llm-config, with env var override support
-  const modelFromConfig = getModel('anthropic', taskType);
-  
+  const modelFromConfig = getModel("anthropic", taskType);
+
   // Check for legacy env vars or new override
-  const envModel = process.env.ANTHROPIC_MODEL || 
-                   (taskType === 'summary' || taskType === 'summarize' 
-                     ? process.env.ANTHROPIC_SUMMARY_MODEL 
-                     : undefined) ||
-                   (taskType === 'qa' || taskType === 'question' 
-                     ? process.env.ANTHROPIC_QA_MODEL 
-                     : undefined);
-  
+  const envModel =
+    process.env.ANTHROPIC_MODEL ||
+    (taskType === "summary" || taskType === "summarize"
+      ? process.env.ANTHROPIC_SUMMARY_MODEL
+      : undefined) ||
+    (taskType === "qa" || taskType === "question" ? process.env.ANTHROPIC_QA_MODEL : undefined);
+
   return envModel || modelFromConfig;
 }
 
 function getAnthropicConfig(config?: LlmConfig, taskType?: string): AnthropicProviderConfig {
   const apiKey =
     config?.apiKey ??
-    requireEnvVar('ANTHROPIC_API_KEY', 'to use Anthropic. Set it in your environment.');
+    requireEnvVar("ANTHROPIC_API_KEY", "to use Anthropic. Set it in your environment.");
   const baseUrl =
     (config?.baseUrl as string) ??
     process.env.ANTHROPIC_API_BASE_URL ??
-    'https://api.anthropic.com';
-  const model =
-    (config?.model as string) ?? getDefaultModel(taskType);
+    "https://api.anthropic.com";
+  const model = (config?.model as string) ?? getDefaultModel(taskType);
 
   return {
     apiKey,
-    baseUrl: baseUrl.replace(/\/+$/, ''),
+    baseUrl: baseUrl.replace(/\/+$/, ""),
     model,
     timeoutMs:
       (config?.timeoutMs as number) ??
@@ -69,18 +62,15 @@ export class AnthropicProvider implements LlmProviderInterface {
     this.taskType = taskType;
   }
 
-  async generateJson(
-    request: LlmRequest,
-    _options?: { taskName?: string },
-  ): Promise<string> {
+  async generateJson(request: LlmRequest, _options?: { taskName?: string }): Promise<string> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.config.timeoutMs);
 
     try {
       const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        'x-api-key': this.config.apiKey,
-        'anthropic-version': '2023-06-01',
+        "Content-Type": "application/json",
+        "x-api-key": this.config.apiKey,
+        "anthropic-version": "2023-06-01",
       };
 
       // Anthropic uses tool_use for structured output
@@ -88,7 +78,7 @@ export class AnthropicProvider implements LlmProviderInterface {
       const systemPrompt = `${request.systemPrompt}\n\nYou must respond with valid JSON only. Follow this schema: ${JSON.stringify(request.schema ?? {})}`;
 
       const response = await fetch(`${this.config.baseUrl}/v1/messages`, {
-        method: 'POST',
+        method: "POST",
         headers,
         body: JSON.stringify({
           model: this.config.model,
@@ -97,7 +87,7 @@ export class AnthropicProvider implements LlmProviderInterface {
           system: systemPrompt,
           messages: [
             {
-              role: 'user',
+              role: "user",
               content: request.userPrompt,
             },
           ],
@@ -106,25 +96,21 @@ export class AnthropicProvider implements LlmProviderInterface {
       });
 
       if (!response.ok) {
-        const body = await response
-          .text()
-          .catch(() => 'Unable to read response body.');
-        throw new Error(
-          `Anthropic request failed with status ${response.status}: ${body}`,
-        );
+        const body = await response.text().catch(() => "Unable to read response body.");
+        throw new Error(`Anthropic request failed with status ${response.status}: ${body}`);
       }
 
       const payload = (await response.json()) as Record<string, unknown>;
       const content = payload.content as Array<{ type?: string; text?: string }>;
 
       if (!Array.isArray(content) || content.length === 0) {
-        throw new Error('Anthropic response did not include content.');
+        throw new Error("Anthropic response did not include content.");
       }
 
-      const textContent = content.find((item) => item.type === 'text')?.text;
+      const textContent = content.find((item) => item.type === "text")?.text;
 
-      if (typeof textContent !== 'string' || !textContent.trim()) {
-        throw new Error('Anthropic response did not include text content.');
+      if (typeof textContent !== "string" || !textContent.trim()) {
+        throw new Error("Anthropic response did not include text content.");
       }
 
       // Extract JSON from response (may be wrapped in markdown code blocks)
@@ -142,13 +128,13 @@ export class AnthropicProvider implements LlmProviderInterface {
 
     try {
       const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        'x-api-key': this.config.apiKey,
-        'anthropic-version': '2023-06-01',
+        "Content-Type": "application/json",
+        "x-api-key": this.config.apiKey,
+        "anthropic-version": "2023-06-01",
       };
 
       const response = await fetch(`${this.config.baseUrl}/v1/messages`, {
-        method: 'POST',
+        method: "POST",
         headers,
         body: JSON.stringify({
           model: this.config.model,
@@ -157,7 +143,7 @@ export class AnthropicProvider implements LlmProviderInterface {
           system: request.systemPrompt,
           messages: [
             {
-              role: 'user',
+              role: "user",
               content: request.userPrompt,
             },
           ],
@@ -166,25 +152,21 @@ export class AnthropicProvider implements LlmProviderInterface {
       });
 
       if (!response.ok) {
-        const body = await response
-          .text()
-          .catch(() => 'Unable to read response body.');
-        throw new Error(
-          `Anthropic request failed with status ${response.status}: ${body}`,
-        );
+        const body = await response.text().catch(() => "Unable to read response body.");
+        throw new Error(`Anthropic request failed with status ${response.status}: ${body}`);
       }
 
       const payload = (await response.json()) as Record<string, unknown>;
       const content = payload.content as Array<{ type?: string; text?: string }>;
 
       if (!Array.isArray(content) || content.length === 0) {
-        throw new Error('Anthropic response did not include content.');
+        throw new Error("Anthropic response did not include content.");
       }
 
-      const textContent = content.find((item) => item.type === 'text')?.text;
+      const textContent = content.find((item) => item.type === "text")?.text;
 
-      if (typeof textContent !== 'string' || !textContent.trim()) {
-        throw new Error('Anthropic response did not include text content.');
+      if (typeof textContent !== "string" || !textContent.trim()) {
+        throw new Error("Anthropic response did not include text content.");
       }
 
       return textContent.trim();
@@ -194,7 +176,6 @@ export class AnthropicProvider implements LlmProviderInterface {
   }
 
   getProviderName(): LlmProvider {
-    return 'anthropic';
+    return "anthropic";
   }
 }
-

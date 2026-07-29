@@ -3,11 +3,7 @@
 import { useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 
-import {
-  PASS_DESCRIPTORS,
-  THREE_PASS_ORDER,
-  type ThreePass,
-} from "./usePassState";
+import { PASS_DESCRIPTORS, THREE_PASS_ORDER, type ThreePass } from "./usePassState";
 
 export interface ThreePassBarProps {
   pass: ThreePass;
@@ -25,27 +21,30 @@ export function ThreePassBar({ pass, onPassChange }: ThreePassBarProps) {
   const descriptor = PASS_DESCRIPTORS[pass];
 
   const stripeBase =
-    "border-neutral-200 bg-white text-neutral-800 " +
-    "dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200";
+    "border-zinc-200 bg-white text-zinc-800 " +
+    "dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200";
 
   const buttonInactive =
-    "border border-neutral-300 text-neutral-500 hover:bg-neutral-100 " +
-    "dark:border-neutral-700 dark:text-neutral-400 dark:hover:bg-neutral-800";
+    "border border-zinc-300 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 " +
+    "dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100";
 
   const buttonActive =
-    "bg-neutral-900 text-white shadow " +
-    "dark:bg-neutral-100 dark:text-neutral-900";
+    "bg-zinc-900 text-white shadow-sm " + //
+    "dark:bg-zinc-100 dark:text-zinc-900";
+
+  // The active pill inverts its own foreground, so the step bubble has to
+  // invert back or the number paints on top of its own colour and vanishes.
+  const numberBubbleActive =
+    "bg-white/25 text-white " + //
+    "dark:bg-zinc-900/20 dark:text-zinc-900";
 
   const cardBase =
-    "border-neutral-200 bg-neutral-50 text-neutral-600 " +
-    "dark:border-neutral-800 dark:bg-neutral-900/60 dark:text-neutral-300";
+    "border-zinc-200 bg-zinc-50 text-zinc-600 " +
+    "dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-300";
 
   const toggleBase =
-    "text-neutral-500 hover:bg-neutral-100 " +
-    "dark:text-neutral-400 dark:hover:bg-neutral-800";
-
-  const numberBubbleActive =
-    "bg-current text-white dark:text-neutral-900";
+    "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 " +
+    "dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100";
 
   return (
     <section
@@ -56,7 +55,7 @@ export function ThreePassBar({ pass, onPassChange }: ThreePassBarProps) {
       // value can briefly differ — silence the warning, the next
       // render reconciles it.
       suppressHydrationWarning
-      className={`mb-4 rounded-xl border ${stripeBase}`}
+      className={`mb-4 rounded-lg border ${stripeBase}`}
     >
       <header className="flex items-center justify-between gap-3 px-4 py-2">
         <div className="flex items-center gap-2">
@@ -67,7 +66,7 @@ export function ThreePassBar({ pass, onPassChange }: ThreePassBarProps) {
                 key={step}
                 type="button"
                 onClick={() => onPassChange(step)}
-                className={`inline-flex h-8 items-center rounded-full px-3 text-xs font-medium uppercase tracking-wide transition ${
+                className={`inline-flex h-8 items-center rounded-full px-3 text-xs font-medium uppercase tracking-wide transition-colors duration-150 ${
                   active ? buttonActive : buttonInactive
                 }`}
                 aria-pressed={active}
@@ -75,9 +74,7 @@ export function ThreePassBar({ pass, onPassChange }: ThreePassBarProps) {
               >
                 <span
                   className={`mr-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-semibold ${
-                    active
-                      ? numberBubbleActive
-                      : "border border-current"
+                    active ? numberBubbleActive : "border border-current"
                   }`}
                 >
                   {idx + 1}
@@ -92,21 +89,17 @@ export function ThreePassBar({ pass, onPassChange }: ThreePassBarProps) {
           onClick={() => setExpanded((value) => !value)}
           aria-expanded={expanded}
           aria-controls="three-pass-guidance"
-          className={`inline-flex h-8 w-8 items-center justify-center rounded-full transition ${toggleBase}`}
+          className={`inline-flex h-8 w-8 items-center justify-center rounded-full transition-colors duration-150 ${toggleBase}`}
           title={expanded ? "Hide guidance" : "Show guidance"}
         >
-          {expanded ? (
-            <ChevronUp className="h-4 w-4" />
-          ) : (
-            <ChevronDown className="h-4 w-4" />
-          )}
+          {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </button>
       </header>
 
       {expanded && (
         <div
           id="three-pass-guidance"
-          className={`mx-4 mb-3 rounded-lg border px-4 py-3 ${cardBase}`}
+          className={`mx-4 mb-3 rounded-md border px-4 py-3 ${cardBase}`}
         >
           <p className="mb-2 text-sm font-medium">
             {descriptor.label} pass · <span className="font-normal italic">{descriptor.goal}</span>
@@ -116,7 +109,7 @@ export function ThreePassBar({ pass, onPassChange }: ThreePassBarProps) {
               <li key={line}>{line}</li>
             ))}
           </ul>
-          <p className="mt-2 text-[11px] uppercase tracking-wide opacity-70">
+          <p className="mt-2 text-[11px] uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
             Budget: {descriptor.budget}
           </p>
         </div>

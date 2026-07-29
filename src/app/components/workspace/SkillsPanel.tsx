@@ -100,24 +100,27 @@ export function SkillsPanel({ refreshKey }: SkillsPanelProps) {
   return (
     <aside
       data-testid="skills-panel"
-      className="flex w-72 flex-col gap-2 rounded-xl border border-neutral-200 bg-white p-4 text-neutral-700 dark:border-neutral-800 dark:bg-neutral-900/60 dark:text-neutral-300"
+      className="flex w-72 flex-col gap-2 rounded-lg border border-zinc-200 bg-white p-4 text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-300"
       aria-label="Skills panel"
     >
-      <header className="flex items-center justify-between">
+      <header className="flex items-center justify-between gap-2">
         <h2 className="flex items-center gap-2 text-sm font-medium">
-          <Sparkles className="h-4 w-4" /> Your skills
+          <Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+          Your skills
         </h2>
-        <span className="text-[10px] uppercase tracking-wide opacity-60">
-          {isLoading ? "loading…" : `${visibleConcepts?.length ?? 0} concepts`}
+        <span className="shrink-0 text-[11px] tabular-nums text-zinc-500 dark:text-zinc-400">
+          {isLoading ? "Loading…" : `${visibleConcepts?.length ?? 0} concepts`}
         </span>
       </header>
 
       {authRequired && (
-        <p className="text-xs opacity-70">Sign in to track concepts you encounter.</p>
+        <p className="text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
+          Sign in to track concepts you encounter.
+        </p>
       )}
 
       {visibleError && (
-        <p className="text-xs text-amber-500" role="alert">
+        <p className="text-xs leading-relaxed text-amber-700 dark:text-amber-400" role="alert">
           {visibleError}
         </p>
       )}
@@ -127,7 +130,7 @@ export function SkillsPanel({ refreshKey }: SkillsPanelProps) {
         visibleConcepts &&
         visibleConcepts.length === 0 &&
         !isLoading && (
-          <p className="text-xs opacity-70">
+          <p className="text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
             No concepts yet. Ask a question or generate a summary; encountered concepts will be
             tracked here.
           </p>
@@ -138,7 +141,7 @@ export function SkillsPanel({ refreshKey }: SkillsPanelProps) {
           {visibleConcepts.slice(0, 30).map((entry) => (
             <li
               key={entry.concept}
-              className="flex max-w-full items-center gap-1.5 rounded-full border border-neutral-200 bg-neutral-100 px-2.5 py-1 text-xs text-neutral-700 dark:border-neutral-700 dark:bg-neutral-800/80 dark:text-neutral-200"
+              className="flex max-w-full items-center gap-1.5 rounded-full border border-zinc-200 bg-zinc-100 px-2.5 py-1 text-xs text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800/80 dark:text-zinc-200"
               title={
                 entry.description
                   ? `${entry.description}\nFirst seen: ${formatLearnedAt(entry.learnedAt)}`

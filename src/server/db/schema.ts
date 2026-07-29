@@ -107,12 +107,15 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   content TEXT NOT NULL,
   citations JSONB,
   reasoning TEXT,
+  metadata JSONB,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (session_id, id),
   FOREIGN KEY (session_id, user_id, paper_id)
     REFERENCES chat_sessions(session_id, user_id, paper_id)
     ON DELETE CASCADE
 );
+ALTER TABLE chat_messages
+  ADD COLUMN IF NOT EXISTS metadata JSONB;
 CREATE INDEX IF NOT EXISTS chat_messages_session_created_idx
   ON chat_messages(session_id, created_at);
 `;

@@ -1,10 +1,5 @@
-import type {
-  LlmProvider,
-  LlmProviderInterface,
-  LlmRequest,
-  LlmConfig,
-} from '../types';
-import { getModel } from '@/server/llm-config/models';
+import type { LlmProvider, LlmProviderInterface, LlmRequest, LlmConfig } from "../types";
+import { getModel } from "@/server/llm-config";
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 
@@ -30,13 +25,13 @@ function getDefaultModel(taskType?: string): string {
   // shape as `getModel()` so the documented OPENAI_QA_MODEL override
   // actually wins when both it and OPENAI_MODEL are set.
   const taskEnv = (() => {
-    if (taskType === 'summary' || taskType === 'summarize' || taskType === 'paper_summary') {
+    if (taskType === "summary" || taskType === "summarize" || taskType === "paper_summary") {
       return process.env.OPENAI_SUMMARY_MODEL;
     }
-    if (taskType === 'qa' || taskType === 'question') {
+    if (taskType === "qa" || taskType === "question") {
       return process.env.OPENAI_QA_MODEL;
     }
-    if (taskType === 'selection_summary' || taskType === 'inline_summary') {
+    if (taskType === "selection_summary" || taskType === "inline_summary") {
       return process.env.OPENAI_SELECTION_SUMMARY_MODEL;
     }
     return undefined;
@@ -45,29 +40,24 @@ function getDefaultModel(taskType?: string): string {
   if (taskEnv && taskEnv.trim()) return taskEnv.trim();
   if (process.env.OPENAI_MODEL?.trim()) return process.env.OPENAI_MODEL.trim();
 
-  return getModel('openai', taskType);
+  return getModel("openai", taskType);
 }
 
 function getOpenAiConfig(config?: LlmConfig, taskType?: string): OpenAiProviderConfig {
   const apiKey =
-    config?.apiKey ??
-    requireEnvVar('OPENAI_API_KEY', 'to use OpenAI. Set it in your environment.');
+    config?.apiKey ?? requireEnvVar("OPENAI_API_KEY", "to use OpenAI. Set it in your environment.");
   const baseUrl =
-    (config?.baseUrl as string) ??
-    process.env.OPENAI_API_BASE_URL ??
-    'https://api.openai.com/v1';
-  const model =
-    (config?.model as string) ?? getDefaultModel(taskType);
+    (config?.baseUrl as string) ?? process.env.OPENAI_API_BASE_URL ?? "https://api.openai.com/v1";
+  const model = (config?.model as string) ?? getDefaultModel(taskType);
 
   return {
     apiKey,
-    baseUrl: baseUrl.replace(/\/+$/, ''),
+    baseUrl: baseUrl.replace(/\/+$/, ""),
     model,
     organization: (config?.organization as string) ?? process.env.OPENAI_ORGANIZATION,
     project: (config?.project as string) ?? process.env.OPENAI_PROJECT,
     timeoutMs:
-      (config?.timeoutMs as number) ??
-      Number(process.env.OPENAI_TIMEOUT_MS ?? DEFAULT_TIMEOUT_MS),
+      (config?.timeoutMs as number) ?? Number(process.env.OPENAI_TIMEOUT_MS ?? DEFAULT_TIMEOUT_MS),
   };
 }
 
@@ -80,10 +70,7 @@ export class OpenAiProvider implements LlmProviderInterface {
     this.taskType = taskType;
   }
 
-  async generateJson(
-    request: LlmRequest,
-    options?: { taskName?: string },
-  ): Promise<string> {
+  async generateJson(request: LlmRequest, options?: { taskName?: string }): Promise<string> {
     // The constructor already resolved this.config.model with proper
     // priority (explicit config.model > task-specific env > general env
     // > catalog). Re-deriving here would discard the routing layer's
@@ -97,39 +84,39 @@ export class OpenAiProvider implements LlmProviderInterface {
 
     try {
       const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
         Authorization: `Bearer ${this.config.apiKey}`,
       };
 
       if (this.config.organization) {
-        headers['OpenAI-Organization'] = this.config.organization;
+        headers["OpenAI-Organization"] = this.config.organization;
       }
 
       if (this.config.project) {
-        headers['OpenAI-Project'] = this.config.project;
+        headers["OpenAI-Project"] = this.config.project;
       }
 
       const response = await fetch(`${this.config.baseUrl}/chat/completions`, {
-        method: 'POST',
+        method: "POST",
         headers,
         body: JSON.stringify({
           model,
           temperature: request.temperature ?? 0.3,
           response_format: {
-            type: 'json_schema',
+            type: "json_schema",
             json_schema: {
-              name: options?.taskName ?? 'llm_response',
+              name: options?.taskName ?? "llm_response",
               schema: request.schema ?? {},
               strict: true,
             },
           },
           messages: [
             {
-              role: 'system',
+              role: "system",
               content: request.systemPrompt,
             },
             {
-              role: 'user',
+              role: "user",
               content: request.userPrompt,
             },
           ],
@@ -138,33 +125,30 @@ export class OpenAiProvider implements LlmProviderInterface {
       });
 
       if (!response.ok) {
-        const body = await response
-          .text()
-          .catch(() => 'Unable to read response body.');
-        throw new Error(
-          `OpenAI request failed with status ${response.status}: ${body}`,
-        );
+        const body = await response.text().catch(() => "Unable to read response body.");
+        throw new Error(`OpenAI request failed with status ${response.status}: ${body}`);
       }
 
       const payload = (await response.json()) as Record<string, unknown>;
       const choices = payload.choices as Array<
-        {
-          message?: { content?: string };
-          finish_reason?: string;
-        } | undefined
+        | {
+            message?: { content?: string };
+            finish_reason?: string;
+          }
+        | undefined
       >;
 
       const firstChoice = choices?.[0];
       const finishReason = firstChoice?.finish_reason;
 
-      if (finishReason && finishReason !== 'stop') {
+      if (finishReason && finishReason !== "stop") {
         throw new Error(`OpenAI response finished with reason: ${finishReason}`);
       }
 
       const content = firstChoice?.message?.content;
 
-      if (typeof content !== 'string' || !content.trim()) {
-        throw new Error('OpenAI response did not include content.');
+      if (typeof content !== "string" || !content.trim()) {
+        throw new Error("OpenAI response did not include content.");
       }
 
       return content.trim();
@@ -179,31 +163,31 @@ export class OpenAiProvider implements LlmProviderInterface {
 
     try {
       const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
         Authorization: `Bearer ${this.config.apiKey}`,
       };
 
       if (this.config.organization) {
-        headers['OpenAI-Organization'] = this.config.organization;
+        headers["OpenAI-Organization"] = this.config.organization;
       }
 
       if (this.config.project) {
-        headers['OpenAI-Project'] = this.config.project;
+        headers["OpenAI-Project"] = this.config.project;
       }
 
       const response = await fetch(`${this.config.baseUrl}/chat/completions`, {
-        method: 'POST',
+        method: "POST",
         headers,
         body: JSON.stringify({
           model: this.config.model,
           temperature: request.temperature ?? 0.3,
           messages: [
             {
-              role: 'system',
+              role: "system",
               content: request.systemPrompt,
             },
             {
-              role: 'user',
+              role: "user",
               content: request.userPrompt,
             },
           ],
@@ -212,27 +196,24 @@ export class OpenAiProvider implements LlmProviderInterface {
       });
 
       if (!response.ok) {
-        const body = await response
-          .text()
-          .catch(() => 'Unable to read response body.');
-        throw new Error(
-          `OpenAI request failed with status ${response.status}: ${body}`,
-        );
+        const body = await response.text().catch(() => "Unable to read response body.");
+        throw new Error(`OpenAI request failed with status ${response.status}: ${body}`);
       }
 
       const payload = (await response.json()) as Record<string, unknown>;
       const choices = payload.choices as Array<
-        {
-          message?: { content?: string };
-          finish_reason?: string;
-        } | undefined
+        | {
+            message?: { content?: string };
+            finish_reason?: string;
+          }
+        | undefined
       >;
 
       const firstChoice = choices?.[0];
       const content = firstChoice?.message?.content;
 
-      if (typeof content !== 'string' || !content.trim()) {
-        throw new Error('OpenAI response did not include content.');
+      if (typeof content !== "string" || !content.trim()) {
+        throw new Error("OpenAI response did not include content.");
       }
 
       return content.trim();
@@ -242,7 +223,6 @@ export class OpenAiProvider implements LlmProviderInterface {
   }
 
   getProviderName(): LlmProvider {
-    return 'openai';
+    return "openai";
   }
 }
-

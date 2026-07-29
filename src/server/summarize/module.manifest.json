@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "id": "server.summarize",
+  "parent": "server",
+  "path": "src/server/summarize",
+  "goal": "Produces a structured summary of a stored paper.",
+  "owns": ["src/server/summarize"],
+  "interface": {
+    "entrypoint": "index.ts",
+    "exports": ["summarizePaper"]
+  },
+  "uses": [
+    {
+      "module": "server.db",
+      "via": "fetchPaperChunksByPaperId"
+    },
+    {
+      "module": "server.llm",
+      "via": "generateJson"
+    },
+    {
+      "module": "server.ingest",
+      "via": "fetchArxivMetadata"
+    },
+    {
+      "module": "server.persona",
+      "via": "recordPersonaSignals"
+    },
+    {
+      "module": "server.llm-config",
+      "via": "getSystemPrompt"
+    }
+  ],
+  "constraints": ["context assembly", "structured summary output"],
+  "checks": ["pnpm vitest run src/server/e2e"]
+}

@@ -2,7 +2,7 @@
  * LLM Provider Abstraction Layer
  *
  * This module provides a unified interface for interacting with different LLM providers
- * (OpenAI, Anthropic, Gemini). It abstracts away provider-specific implementations
+ * (OpenAI, Anthropic, Gemini, OpenRouter, local coding agents). It abstracts away provider-specific implementations
  * and provides a consistent API for generating JSON and text responses.
  *
  * Usage:
@@ -30,17 +30,16 @@ export type {
   LlmResponse,
   LlmProviderInterface,
   LlmConfig,
-} from './types';
+} from "./types";
 
+export { createLlmProvider, getDefaultProvider, generateJson, generateText } from "./router";
+
+export { OpenAiProvider } from "./providers/openai";
+export { AnthropicProvider } from "./providers/anthropic";
+export { GeminiProvider } from "./providers/gemini";
+export { OpenRouterProvider } from "./providers/openrouter";
 export {
-  createLlmProvider,
-  getDefaultProvider,
-  generateJson,
-  generateText,
-} from './router';
-
-export { OpenAiProvider } from './providers/openai';
-export { AnthropicProvider } from './providers/anthropic';
-export { GeminiProvider } from './providers/gemini';
-export { OpenRouterProvider } from './providers/openrouter';
-
+  LocalCodingAgentProvider,
+  listAvailableLocalCodingAgents,
+  type CodingAgentId,
+} from "./providers/local-coding-agent";

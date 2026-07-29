@@ -1,12 +1,12 @@
-import { loadQuestionEvidence } from '@/server/qa/context';
-import { parseQuestionSelection } from '@/server/qa/selection';
+import { loadQuestionEvidence } from "@/server/qa";
+import { parseQuestionSelection } from "@/server/qa";
 import type {
   AnswerCitation,
   QuestionSelection,
   QuestionEvidenceContext,
   QaChunkContext,
-} from '@/server/qa/types';
-import { generateJson } from '@/server/llm';
+} from "@/server/qa/types";
+import { generateJson } from "@/server/llm";
 
 import type {
   SelectionCalloutResult,
@@ -14,49 +14,49 @@ import type {
   SelectionFiguresResult,
   SelectionSummaryResult,
   SelectionSummaryBullet,
-} from './types';
+} from "./types";
 
-import { getSystemPrompt } from '@/server/llm-config';
+import { getSystemPrompt } from "@/server/llm-config";
 
 const SELECTION_SUMMARY_SCHEMA: Record<string, unknown> = {
-  type: 'object',
+  type: "object",
   additionalProperties: false,
-  required: ['bullets', 'more', 'citations'],
+  required: ["bullets", "more", "citations"],
   properties: {
     bullets: {
-      type: 'array',
+      type: "array",
       minItems: 2,
       maxItems: 5,
       items: {
-        type: 'object',
+        type: "object",
         additionalProperties: false,
-        required: ['text', 'citation_ids'],
+        required: ["text", "citation_ids"],
         properties: {
-          text: { type: 'string', minLength: 1 },
+          text: { type: "string", minLength: 1 },
           citation_ids: {
-            type: 'array',
+            type: "array",
             minItems: 1,
-            items: { type: 'string', minLength: 1 },
+            items: { type: "string", minLength: 1 },
           },
         },
       },
     },
     more: {
-      type: 'array',
+      type: "array",
       minItems: 1,
       maxItems: 3,
-      items: { type: 'string', minLength: 1 },
+      items: { type: "string", minLength: 1 },
     },
     citations: {
-      type: 'array',
+      type: "array",
       items: {
-        type: 'object',
+        type: "object",
         additionalProperties: false,
-        required: ['chunk_id', 'page', 'quote'],
+        required: ["chunk_id", "page", "quote"],
         properties: {
-          chunk_id: { type: 'string', minLength: 1 },
-          page: { type: 'integer', minimum: 1 },
-          quote: { type: 'string', minLength: 1 },
+          chunk_id: { type: "string", minLength: 1 },
+          page: { type: "integer", minimum: 1 },
+          quote: { type: "string", minLength: 1 },
         },
       },
     },
@@ -85,19 +85,16 @@ function truncate(text: string, max = 420): string {
   return `${text.slice(0, max - 1)}…`;
 }
 
-function buildChunkSummary(
-  chunk: QuestionEvidenceContext['hits'][number],
-  index: number,
-): string {
+function buildChunkSummary(chunk: QuestionEvidenceContext["hits"][number], index: number): string {
   const headerParts = [`[chunk_id=${chunk.chunkId}]`];
   if (chunk.section) {
     headerParts.push(`section: ${chunk.section}`);
   }
-  if (typeof chunk.pageNumber === 'number') {
+  if (typeof chunk.pageNumber === "number") {
     headerParts.push(`page: ${chunk.pageNumber}`);
   }
-  const header = `Chunk ${index + 1}: ${headerParts.join(' · ')}`;
-  const body = truncate(chunk.text.replace(/\s+/g, ' ').trim(), 520);
+  const header = `Chunk ${index + 1}: ${headerParts.join(" · ")}`;
+  const body = truncate(chunk.text.replace(/\s+/g, " ").trim(), 520);
   return `${header}\n${body}`;
 }
 
@@ -115,13 +112,13 @@ function buildSelectionUserPrompt(
   if (selection.section) {
     lines.push(`Section hint: ${selection.section}`);
   }
-  if (typeof selection.page === 'number') {
+  if (typeof selection.page === "number") {
     lines.push(`Page hint: ${selection.page}`);
   }
 
-  lines.push('\nEvidence chunks (reference chunk_ids in citations):');
+  lines.push("\nEvidence chunks (reference chunk_ids in citations):");
   if (evidence.hits.length === 0) {
-    lines.push('- No matching chunks were retrieved; rely on the highlight.');
+    lines.push("- No matching chunks were retrieved; rely on the highlight.");
   } else {
     evidence.hits.slice(0, 6).forEach((chunk, index) => {
       lines.push(buildChunkSummary(chunk, index));
@@ -129,10 +126,10 @@ function buildSelectionUserPrompt(
   }
 
   if (evidence.figures.length) {
-    lines.push('\nNearby figures:');
+    lines.push("\nNearby figures:");
     evidence.figures.forEach((figure) => {
       lines.push(
-        `- ${figure.figureId} (${figure.pageNumber ? `page ${figure.pageNumber}` : 'page ?'}): ${truncate(
+        `- ${figure.figureId} (${figure.pageNumber ? `page ${figure.pageNumber}` : "page ?"}): ${truncate(
           figure.caption,
           240,
         )}`,
@@ -141,38 +138,35 @@ function buildSelectionUserPrompt(
   }
 
   lines.push(
-    '\nInstructions: Return JSON matching the provided schema. Each bullet must cite at least one chunk_id from the evidence list using the citation_ids field.',
+    "\nInstructions: Return JSON matching the provided schema. Each bullet must cite at least one chunk_id from the evidence list using the citation_ids field.",
   );
 
-  return lines.join('\n');
+  return lines.join("\n");
 }
 
 function parseLlmPayload(raw: string): LlmSummaryPayload {
   try {
     return JSON.parse(raw) as LlmSummaryPayload;
   } catch (error) {
-    const reason =
-      error instanceof Error ? error.message : 'Unable to parse JSON.';
+    const reason = error instanceof Error ? error.message : "Unable to parse JSON.";
     throw new Error(`Failed to parse inline summary payload: ${reason}`);
   }
 }
 
-function normalizeBullets(
-  bullets: LlmSummaryBullet[] | undefined,
-): SelectionSummaryBullet[] {
+function normalizeBullets(bullets: LlmSummaryBullet[] | undefined): SelectionSummaryBullet[] {
   if (!Array.isArray(bullets) || bullets.length === 0) {
     return [];
   }
 
   return bullets
     .map((bullet) => {
-      const text = typeof bullet.text === 'string' ? bullet.text.trim() : '';
+      const text = typeof bullet.text === "string" ? bullet.text.trim() : "";
       if (!text) {
         return undefined;
       }
       const citationIds = Array.isArray(bullet.citation_ids)
         ? bullet.citation_ids
-            .map((id) => (typeof id === 'string' ? id.trim() : ''))
+            .map((id) => (typeof id === "string" ? id.trim() : ""))
             .filter((id) => id.length > 0)
         : [];
       return {
@@ -188,13 +182,11 @@ function normalizeDeeper(more: string[] | undefined): string[] {
     return [];
   }
   return more
-    .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
+    .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
     .filter((entry) => entry.length > 0);
 }
 
-function normalizeCitations(
-  entries: LlmSummaryPayload['citations'],
-): AnswerCitation[] {
+function normalizeCitations(entries: LlmSummaryPayload["citations"]): AnswerCitation[] {
   if (!Array.isArray(entries)) {
     return [];
   }
@@ -203,7 +195,7 @@ function normalizeCitations(
   const seen = new Set<string>();
 
   for (const entry of entries) {
-    if (!entry || typeof entry.chunk_id !== 'string') {
+    if (!entry || typeof entry.chunk_id !== "string") {
       continue;
     }
     const chunkId = entry.chunk_id.trim();
@@ -213,15 +205,13 @@ function normalizeCitations(
 
     // Validate page: must be a number >= 1 (schema requirement)
     const page =
-      typeof entry.page === 'number' &&
-      Number.isFinite(entry.page) &&
-      entry.page >= 1
+      typeof entry.page === "number" && Number.isFinite(entry.page) && entry.page >= 1
         ? entry.page
         : undefined;
 
     // Validate quote: must be a string with minLength: 1 (schema requirement)
     const quote =
-      typeof entry.quote === 'string' && entry.quote.trim().length >= 1
+      typeof entry.quote === "string" && entry.quote.trim().length >= 1
         ? entry.quote.trim()
         : undefined;
 
@@ -248,17 +238,14 @@ function normalizeCitations(
  */
 function createCitationFromChunk(chunk: QaChunkContext): AnswerCitation {
   const page =
-    typeof chunk.pageNumber === 'number' &&
+    typeof chunk.pageNumber === "number" &&
     Number.isFinite(chunk.pageNumber) &&
     chunk.pageNumber >= 1
       ? chunk.pageNumber
       : undefined;
 
-  const trimmedText = chunk.text.replace(/\s+/g, ' ').trim();
-  const quote =
-    trimmedText.length > 0
-      ? truncate(trimmedText, 240)
-      : `[chunk_id=${chunk.chunkId}]`;
+  const trimmedText = chunk.text.replace(/\s+/g, " ").trim();
+  const quote = trimmedText.length > 0 ? truncate(trimmedText, 240) : `[chunk_id=${chunk.chunkId}]`;
 
   return {
     chunkId: chunk.chunkId,
@@ -293,7 +280,7 @@ function buildCalloutResult(
   const deeper = normalizeDeeper(payload.more);
   const citationList = normalizeCitations(payload.citations);
   const citationMap = new Map<string, AnswerCitation>();
-  
+
   // Only add citations that meet schema requirements (already validated in normalizeCitations)
   // Incomplete citations are filtered out and will be created via ensureCitationForChunk
   // when their chunkIds are referenced in bullets
@@ -301,9 +288,9 @@ function buildCalloutResult(
     // Double-check: ensure citation has all required fields (defensive programming)
     if (
       citation.chunkId &&
-      typeof citation.page === 'number' &&
+      typeof citation.page === "number" &&
       citation.page >= 1 &&
-      typeof citation.quote === 'string' &&
+      typeof citation.quote === "string" &&
       citation.quote.length >= 1
     ) {
       citationMap.set(citation.chunkId, citation);
@@ -315,8 +302,8 @@ function buildCalloutResult(
     const fallbackText =
       fallbackChunk?.text?.slice(0, 180) ??
       evidence.selection?.text ??
-      'No inline summary available.';
-    
+      "No inline summary available.";
+
     if (fallbackChunk) {
       // Only create bullet with citation if we have a valid chunk
       const chunkId = fallbackChunk.chunkId;
@@ -345,18 +332,12 @@ function buildCalloutResult(
 
   if (!deeper.length && evidence.hits[0]) {
     deeper.push(
-      `Deeper context: ${truncate(
-        evidence.hits[0].text.replace(/\s+/g, ' ').trim(),
-        360,
-      )}`,
+      `Deeper context: ${truncate(evidence.hits[0].text.replace(/\s+/g, " ").trim(), 360)}`,
     );
   }
 
   if (citationMap.size === 0 && evidence.hits[0]) {
-    citationMap.set(
-      evidence.hits[0].chunkId,
-      createCitationFromChunk(evidence.hits[0]),
-    );
+    citationMap.set(evidence.hits[0].chunkId, createCitationFromChunk(evidence.hits[0]));
   }
 
   return {
@@ -366,36 +347,39 @@ function buildCalloutResult(
   };
 }
 
+// NOTE: this used to accept `options: { userId?: string }`, which it never read.
+// The route authenticates and passed a real userId in, so selection summaries
+// looked like they fed the persona graph the way qa and summarize do — they
+// never have. The dead parameter is removed rather than left to imply otherwise;
+// wiring up persona recording here is tracked in docs/open-issues.md.
 export async function summarizeSelection(
   paperId: string,
   selectionInput: QuestionSelection,
-  options: { userId?: string } = {},
 ): Promise<SelectionSummaryResult> {
   const selection = parseQuestionSelection(selectionInput);
   if (!selection?.text) {
-    throw new Error('Selection text is required for inline summary.');
+    throw new Error("Selection text is required for inline summary.");
   }
 
-  const evidence = await loadQuestionEvidence(
-    paperId,
-    selection.text,
-    {
-      selection,
-    },
-  );
+  const evidence = await loadQuestionEvidence(paperId, selection.text, {
+    selection,
+  });
 
-  const systemPrompt = getSystemPrompt('selection_summary');
+  const systemPrompt = getSystemPrompt("selection_summary");
 
   const userPrompt = buildSelectionUserPrompt(paperId, selection, evidence);
 
-  const raw = await generateJson({
-    systemPrompt,
-    userPrompt,
-    schema: SELECTION_SUMMARY_SCHEMA,
-    temperature: 0.25,
-  }, {
-    taskName: 'selection_summary',
-  });
+  const raw = await generateJson(
+    {
+      systemPrompt,
+      userPrompt,
+      schema: SELECTION_SUMMARY_SCHEMA,
+      temperature: 0.25,
+    },
+    {
+      taskName: "selection_summary",
+    },
+  );
 
   const payload = parseLlmPayload(raw);
   const callout = buildCalloutResult(payload, evidence);
@@ -411,7 +395,7 @@ export async function getSelectionFigures(
 ): Promise<SelectionFiguresResult> {
   const selection = parseQuestionSelection(selectionInput);
   if (!selection?.text) {
-    throw new Error('Selection text is required.');
+    throw new Error("Selection text is required.");
   }
 
   const evidence = await loadQuestionEvidence(paperId, selection.text, {
@@ -429,7 +413,7 @@ export async function getSelectionCitations(
 ): Promise<SelectionCitationsResult> {
   const selection = parseQuestionSelection(selectionInput);
   if (!selection?.text) {
-    throw new Error('Selection text is required.');
+    throw new Error("Selection text is required.");
   }
 
   const evidence = await loadQuestionEvidence(paperId, selection.text, {

@@ -5,7 +5,7 @@ import {
   AUTH_REQUIRED_MESSAGE,
   isAuthenticationRequiredError,
   requireAuthenticatedUserId,
-} from "@/server/auth/user";
+} from "@/server/auth";
 import { createChatSession } from "@/server/db";
 
 function generateSessionId(): string {

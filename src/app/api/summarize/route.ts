@@ -4,7 +4,7 @@ import {
   AUTH_REQUIRED_MESSAGE,
   isAuthenticationRequiredError,
   requireAuthenticatedUserId,
-} from "@/server/auth/user";
+} from "@/server/auth";
 import { summarizePaper } from "@/server/summarize";
 
 interface SummarizeRequestPayload {

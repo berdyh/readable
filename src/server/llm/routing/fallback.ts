@@ -31,16 +31,10 @@ import {
   isProfileInCooldown,
   recordProfileSuccess,
   saveUsageStatsOnly,
-} from './auth-profile-store';
-import {
-  promoteAuthProfileInOrder,
-  resolveAuthProfileOrder,
-} from './auth-profile-order';
-import {
-  shouldAdvanceFallback,
-  shouldAllowCooldownProbeForReason,
-} from './failover-classifier';
-import { coerceToFailoverError, FailoverError } from './failover-error';
+} from "./auth-profile-store";
+import { promoteAuthProfileInOrder, resolveAuthProfileOrder } from "./auth-profile-order";
+import { shouldAdvanceFallback, shouldAllowCooldownProbeForReason } from "./failover-classifier";
+import { coerceToFailoverError, FailoverError } from "./failover-error";
 import type {
   AuthProfile,
   AuthProfileStore,
@@ -48,7 +42,7 @@ import type {
   ModelCandidate,
   ModelRef,
   RoutingProviderId,
-} from './types';
+} from "./types";
 
 const MIN_PROBE_INTERVAL_MS = 30_000;
 
@@ -57,14 +51,12 @@ const SLASH_REF_PATTERN = /^([\w-]+)\/(.+)$/;
 export function parseModelRef(ref: ModelRef | string): ModelCandidate {
   const match = SLASH_REF_PATTERN.exec(ref);
   if (!match) {
-    throw new Error(
-      `Invalid model ref "${ref}". Expected "provider/model" slash form.`,
-    );
+    throw new Error(`Invalid model ref "${ref}". Expected "provider/model" slash form.`);
   }
   return {
     provider: match[1].toLowerCase() as RoutingProviderId,
     model: match[2],
-    source: 'primary',
+    source: "primary",
   };
 }
 
@@ -118,22 +110,16 @@ export class FallbackSummaryError extends Error {
   readonly attempts: FallbackAttempt[];
   readonly soonestCooldownExpiry?: number;
 
-  constructor(
-    attempts: FallbackAttempt[],
-    options: { soonestCooldownExpiry?: number } = {},
-  ) {
+  constructor(attempts: FallbackAttempt[], options: { soonestCooldownExpiry?: number } = {}) {
     const tail =
       attempts.length > 0
         ? attempts
             .slice(-3)
-            .map(
-              (a) =>
-                `${a.candidate.provider}/${a.candidate.model} (${a.reason})`,
-            )
-            .join(' → ')
-        : 'no attempts';
+            .map((a) => `${a.candidate.provider}/${a.candidate.model} (${a.reason})`)
+            .join(" → ")
+        : "no attempts";
     super(`All providers exhausted. Last attempts: ${tail}`);
-    this.name = 'FallbackSummaryError';
+    this.name = "FallbackSummaryError";
     this.attempts = attempts;
     this.soonestCooldownExpiry = options.soonestCooldownExpiry;
   }
@@ -164,7 +150,7 @@ function buildCandidateChain(
   const seen = new Set<string>(`${chain[0].provider}/${chain[0].model}`);
   for (const ref of fallbacks ?? []) {
     const candidate = parseModelRef(ref);
-    candidate.source = 'fallback';
+    candidate.source = "fallback";
     const key = `${candidate.provider}/${candidate.model}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -193,9 +179,7 @@ function decideCooldownAction(
   if (profileIds.length === 0) {
     return { skip: true };
   }
-  const ready = profileIds.filter(
-    (id) => !isProfileInCooldown(store.usageStats ?? {}, id, now),
-  );
+  const ready = profileIds.filter((id) => !isProfileInCooldown(store.usageStats ?? {}, id, now));
   if (ready.length > 0) {
     // Caller will handle ready profiles; no cooldown decision needed.
     return {};
@@ -232,7 +216,7 @@ function decideCooldownAction(
 export async function runWithModelFallback<T>(
   options: RunWithFallbackOptions<T>,
 ): Promise<RunWithFallbackResult<T>> {
-  const agentId = options.agentId ?? 'default';
+  const agentId = options.agentId ?? "default";
   const now = options.now ?? (() => Date.now());
 
   const candidates = buildCandidateChain(options.primary, options.fallbacks);
@@ -243,8 +227,7 @@ export async function runWithModelFallback<T>(
 
   for (const candidate of candidates) {
     const decision = decideCooldownAction(store, candidate, agentId, now());
-    const triedForProvider =
-      profileIdsTriedInRun.get(candidate.provider) ?? new Set<string>();
+    const triedForProvider = profileIdsTriedInRun.get(candidate.provider) ?? new Set<string>();
     if (decision.skip) {
       if (triedForProvider.size === 0) {
         continue;
@@ -365,9 +348,7 @@ export async function runWithModelFallback<T>(
     const stats = store.usageStats?.[id];
     if (stats?.cooldownUntil && stats.cooldownUntil > now()) {
       soonest =
-        soonest === undefined || stats.cooldownUntil < soonest
-          ? stats.cooldownUntil
-          : soonest;
+        soonest === undefined || stats.cooldownUntil < soonest ? stats.cooldownUntil : soonest;
     }
   }
 

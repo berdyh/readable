@@ -65,7 +65,7 @@ export function TodoBlock({
         checked={checked}
         onChange={handleCheckboxChange}
         disabled={isLocked}
-        className="mt-1 h-4 w-4 cursor-pointer rounded border-neutral-300 disabled:opacity-50 disabled:cursor-not-allowed"
+        className="mt-1 h-4 w-4 cursor-pointer rounded border-zinc-300 disabled:opacity-50 disabled:cursor-not-allowed"
       />
       <div className={clsx("flex-1", checked && "opacity-60")}>
         <TipTapBlock
@@ -76,7 +76,7 @@ export function TodoBlock({
           onBackspace={onBackspace}
           onSlashCommand={onSlashCommand}
           placeholder="To-do"
-          className={checked ? "line-through text-neutral-500" : ""}
+          className={checked ? "line-through text-zinc-500" : ""}
           paperId={paperId}
           blockIndex={blockIndex}
           onChangeBlockType={onChangeBlockType}

@@ -19,29 +19,21 @@ function normalizeBaseUrl(url: string | undefined): string | undefined {
     return undefined;
   }
 
-  return url.replace(/\/+$/, '');
+  return url.replace(/\/+$/, "");
 }
 
 export function getIngestEnvironment(): IngestEnvironmentConfig {
   return {
-    arxivApiBaseUrl:
-      process.env.ARXIV_API_BASE_URL ?? 'https://export.arxiv.org/api/query',
-    ar5ivBaseUrl: process.env.AR5IV_BASE_URL ?? 'https://ar5iv.org/html',
+    arxivApiBaseUrl: process.env.ARXIV_API_BASE_URL ?? "https://export.arxiv.org/api/query",
+    ar5ivBaseUrl: process.env.AR5IV_BASE_URL ?? "https://ar5iv.org/html",
     deepSeekOcrUrl: normalizeBaseUrl(process.env.DEEPSEEK_OCR_URL),
     runpodApiKey: process.env.RUNPOD_API_KEY,
     runpodEndpointId: process.env.RUNPOD_ENDPOINT_ID,
-    fetchTimeoutMs: Number(
-      process.env.INGEST_FETCH_TIMEOUT_MS ?? DEFAULT_FETCH_TIMEOUT_MS,
-    ),
-    pdfFetchTimeoutMs: Number(
-      process.env.INGEST_PDF_TIMEOUT_MS ?? DEFAULT_FETCH_TIMEOUT_MS,
-    ),
-    ocrTimeoutMs: Number(
-      process.env.INGEST_OCR_TIMEOUT_MS ?? DEFAULT_OCR_TIMEOUT_MS,
-    ),
+    fetchTimeoutMs: Number(process.env.INGEST_FETCH_TIMEOUT_MS ?? DEFAULT_FETCH_TIMEOUT_MS),
+    pdfFetchTimeoutMs: Number(process.env.INGEST_PDF_TIMEOUT_MS ?? DEFAULT_FETCH_TIMEOUT_MS),
+    ocrTimeoutMs: Number(process.env.INGEST_OCR_TIMEOUT_MS ?? DEFAULT_OCR_TIMEOUT_MS),
     defaultContactEmail: process.env.ARXIV_CONTACT_EMAIL,
-    enableOcrFallback:
-      (process.env.ENABLE_OCR_FALLBACK ?? 'true').toLowerCase() !== 'false',
+    enableOcrFallback: (process.env.ENABLE_OCR_FALLBACK ?? "true").toLowerCase() !== "false",
   };
 }
 
@@ -57,7 +49,7 @@ export function buildArxivMetadataUrl(
   const email = contactEmail ?? environment.defaultContactEmail;
 
   if (email) {
-    params.set('mailto', email);
+    params.set("mailto", email);
   }
 
   return `${environment.arxivApiBaseUrl}?${params.toString()}`;

@@ -32,13 +32,7 @@ interface EditorContextValue {
   focusBlock: (blockId: string, position?: "start" | "end") => void;
 }
 
-
-
-function scheduleFocusRetry(
-  focusFn: () => boolean,
-  onExhausted: () => void,
-  retries = 5,
-) {
+function scheduleFocusRetry(focusFn: () => boolean, onExhausted: () => void, retries = 5) {
   const tryFocus = (attempt: number) => {
     if (focusFn()) {
       return;
@@ -76,11 +70,7 @@ interface EditorProviderProps {
   initialBlocks?: Block[];
 }
 
-export function EditorProvider({
-  children,
-  paperId,
-  initialBlocks = [],
-}: EditorProviderProps) {
+export function EditorProvider({ children, paperId, initialBlocks = [] }: EditorProviderProps) {
   const [blocks, setBlocksState] = useState<Block[]>(initialBlocks);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -103,33 +93,28 @@ export function EditorProvider({
   };
 
   // Debounced save to backend
-  const saveToBackend = useCallback(
-    async (_blocksToSave: Block[]) => {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
+  const saveToBackend = useCallback(async (_blocksToSave: Block[]) => {
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
 
-      saveTimeoutRef.current = setTimeout(async () => {
-        setLoading(true);
-        try {
-          // TODO: Implement API call to save blocks
-          // await fetch(`/api/editor/blocks/${paperId}`, {
-          //   method: "PUT",
-          //   headers: { "Content-Type": "application/json" },
-          //   body: JSON.stringify({ blocks: _blocksToSave }),
-          // });
-        } catch (err) {
-          console.error("Failed to save blocks:", err);
-          setError(
-            err instanceof Error ? err.message : "Failed to save blocks",
-          );
-        } finally {
-          setLoading(false);
-        }
-      }, 1000);
-    },
-    [],
-  );
+    saveTimeoutRef.current = setTimeout(async () => {
+      setLoading(true);
+      try {
+        // TODO: Implement API call to save blocks
+        // await fetch(`/api/editor/blocks/${paperId}`, {
+        //   method: "PUT",
+        //   headers: { "Content-Type": "application/json" },
+        //   body: JSON.stringify({ blocks: _blocksToSave }),
+        // });
+      } catch (err) {
+        console.error("Failed to save blocks:", err);
+        setError(err instanceof Error ? err.message : "Failed to save blocks");
+      } finally {
+        setLoading(false);
+      }
+    }, 1000);
+  }, []);
 
   const addBlock = useCallback(
     (type: Block["type"], index: number, content = ""): Block => {
@@ -137,10 +122,7 @@ export function EditorProvider({
         id: uuidv4(),
         type,
         content,
-        metadata:
-          type === "to_do_list"
-            ? { checked: false }
-            : undefined,
+        metadata: type === "to_do_list" ? { checked: false } : undefined,
       };
 
       setBlocksState((prev) => {
@@ -251,19 +233,17 @@ export function EditorProvider({
     pendingFocusRef.current = { blockId, position };
   }, []);
 
-
   const changeBlockType = useCallback(
     (blockId: string, newType: Block["type"]) => {
       setBlocksState((prev) => {
         const updated = prev.map((block) => {
           if (block.id === blockId) {
             // Preserve metadata for to-do lists
-            const metadata = newType === "to_do_list" 
-              ? { ...block.metadata, checked: false }
-              : undefined;
-            
+            const metadata =
+              newType === "to_do_list" ? { ...block.metadata, checked: false } : undefined;
+
             const content = block.content || "";
-            
+
             return { ...block, type: newType, content, metadata };
           }
           return block;
@@ -298,7 +278,5 @@ export function EditorProvider({
     focusBlock,
   };
 
-  return (
-    <EditorContext.Provider value={value}>{children}</EditorContext.Provider>
-  );
+  return <EditorContext.Provider value={value}>{children}</EditorContext.Provider>;
 }

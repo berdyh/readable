@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "server.auth",
+  "parent": "server",
+  "path": "src/server/auth",
+  "goal": "Resolves the authenticated user id for a request.",
+  "owns": ["src/server/auth", "src/proxy.ts"],
+  "interface": {
+    "entrypoint": "index.ts",
+    "exports": [
+      "requireAuthenticatedUserId",
+      "AuthenticationRequiredError",
+      "isAuthenticationRequiredError",
+      "AUTH_REQUIRED_MESSAGE"
+    ]
+  },
+  "constraints": ["authentication", "the authenticated-user error contract"],
+  "checks": ["pnpm vitest run src/app/api"]
+}

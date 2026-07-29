@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "id": "server.ingest",
+  "parent": "server",
+  "path": "src/server/ingest",
+  "goal": "Converts a source paper into the stored records the rest of the app reads.",
+  "owns": ["src/server/ingest"],
+  "interface": {
+    "entrypoint": "index.ts",
+    "exports": [
+      "ingestPaper",
+      "fetchArxivMetadata",
+      "fetchAr5ivHtml",
+      "parseAr5ivHtml",
+      "extractPdfText",
+      "shouldUseOcr",
+      "runDeepSeekOcr",
+      "getIngestEnvironment",
+      "IngestResult"
+    ]
+  },
+  "uses": [
+    {
+      "module": "server.db",
+      "via": "replacePaperIngestData"
+    },
+    {
+      "module": "server.vector",
+      "via": "upsertPaperChunkVectors"
+    }
+  ],
+  "constraints": ["source fetching", "text and figure extraction", "chunking"],
+  "checks": ["pnpm vitest run src/server/ingest src/server/e2e"],
+  "stubs": [
+    {
+      "id": "ingest.extraction-primitives-are-public",
+      "why": "/api/extract-research-paper reimplements part of the pipeline instead of calling ingestPaper(), so it needs extractPdfText/shouldUseOcr/runDeepSeekOcr directly. Exposing them keeps the boundary honest rather than letting the route deep-import.",
+      "action": "isolate-for-later",
+      "paths": ["src/server/ingest/index.ts", "src/app/api/extract-research-paper/route.ts"],
+      "contract": {
+        "target": "The route calls a single ingest entry point and the primitives become internal again.",
+        "validation": ["pnpm vitest run src/app/api/extract-research-paper"]
+      }
+    }
+  ]
+}

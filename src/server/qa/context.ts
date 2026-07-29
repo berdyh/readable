@@ -1,19 +1,16 @@
-import { fetchArxivMetadata } from '@/server/ingest/arxiv';
-import type { ArxivMetadata } from '@/server/ingest/types';
+import { fetchArxivMetadata } from "@/server/ingest";
+import type { ArxivMetadata } from "@/server/ingest/types";
 import {
   fetchPaperCitationsByPaperId,
   fetchPaperFiguresByPaperId,
   type Citation,
   type Figure,
-} from '@/server/db';
+} from "@/server/db";
 import {
   enrichCitation as enrichWithSemanticScholar,
   type SemanticScholarPaper,
-} from '@/server/external/semantic-scholar';
-import {
-  hybridPaperChunkSearch,
-  type HybridPaperChunkHit,
-} from '@/server/search/hybrid';
+} from "@/server/external";
+import { hybridPaperChunkSearch, type HybridPaperChunkHit } from "@/server/search";
 
 import type {
   NormalizedSelection,
@@ -23,7 +20,7 @@ import type {
   QuestionEvidenceContext,
   QuestionOptions,
   QuestionSelection,
-} from './types';
+} from "./types";
 
 const DEFAULT_HYBRID_LIMIT = 8;
 const DEFAULT_HYBRID_ALPHA = 0.65;
@@ -31,7 +28,7 @@ const DEFAULT_PAGE_WINDOW = 1;
 const MAX_CITATIONS_TO_ENRICH = 4;
 
 function normalizeTextValue(value: unknown): string | undefined {
-  if (typeof value !== 'string') {
+  if (typeof value !== "string") {
     return undefined;
   }
 
@@ -39,9 +36,7 @@ function normalizeTextValue(value: unknown): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-export function normalizeSelection(
-  selection?: QuestionSelection,
-): NormalizedSelection | undefined {
+export function normalizeSelection(selection?: QuestionSelection): NormalizedSelection | undefined {
   if (!selection) {
     return undefined;
   }
@@ -49,7 +44,7 @@ export function normalizeSelection(
   const text = normalizeTextValue(selection.text);
   const section = normalizeTextValue(selection.section);
   const page =
-    typeof selection.page === 'number' && Number.isFinite(selection.page)
+    typeof selection.page === "number" && Number.isFinite(selection.page)
       ? selection.page
       : undefined;
 
@@ -64,17 +59,14 @@ export function normalizeSelection(
   };
 }
 
-function buildHybridQuery(
-  question: string,
-  selection: NormalizedSelection | undefined,
-): string {
+function buildHybridQuery(question: string, selection: NormalizedSelection | undefined): string {
   const parts = [question.trim()];
 
   if (selection?.text) {
     parts.push(selection.text);
   }
 
-  return parts.join(' ').trim();
+  return parts.join(" ").trim();
 }
 
 function mapHybridHit(hit: HybridPaperChunkHit): QaChunkContext {
@@ -105,9 +97,7 @@ function collectFigureIds(chunks: QaChunkContext[]): Set<string> {
   return ids;
 }
 
-function collectCitationCounts(
-  chunks: QaChunkContext[],
-): Map<string, number> {
+function collectCitationCounts(chunks: QaChunkContext[]): Map<string, number> {
   const counts = new Map<string, number>();
 
   for (const chunk of chunks) {
@@ -151,8 +141,8 @@ function normalizeArxivIdentifier(value: string | undefined): string | undefined
     return undefined;
   }
 
-  const cleaned = value.replace(/\.pdf$/i, '');
-  return cleaned.replace(/v\d+$/i, '').trim() || undefined;
+  const cleaned = value.replace(/\.pdf$/i, "");
+  return cleaned.replace(/v\d+$/i, "").trim() || undefined;
 }
 
 function extractArxivIdFromCitation(citation: Citation | undefined): string | undefined {
@@ -285,11 +275,7 @@ async function enrichCitation(
     ssEnrichInput.title = context.title;
     ssEnrichInput.year = context.year;
   }
-  if (
-    ssEnrichInput.arxivId ||
-    ssEnrichInput.doi ||
-    ssEnrichInput.title
-  ) {
+  if (ssEnrichInput.arxivId || ssEnrichInput.doi || ssEnrichInput.title) {
     const ss = await enrichWithSemanticScholar(ssEnrichInput).catch(() => undefined);
     if (ss) {
       applySemanticScholarMetadata(context, ss);
@@ -335,13 +321,9 @@ async function collectRelevantCitations(
     return [];
   }
 
-  const sorted = Array.from(citationCounts.entries()).sort(
-    (a, b) => b[1] - a[1],
-  );
+  const sorted = Array.from(citationCounts.entries()).sort((a, b) => b[1] - a[1]);
 
-  const candidates = sorted
-    .slice(0, MAX_CITATIONS_TO_ENRICH)
-    .map(([citationId]) => citationId);
+  const candidates = sorted.slice(0, MAX_CITATIONS_TO_ENRICH).map(([citationId]) => citationId);
 
   const citations = await fetchPaperCitationsByPaperId(paperId);
   const citationMap = new Map<string, Citation>();
@@ -368,13 +350,13 @@ export async function loadQuestionEvidence(
 ): Promise<QuestionEvidenceContext> {
   const normalizedQuestion = normalizeTextValue(question);
   if (!normalizedQuestion) {
-    throw new Error('Question text is required.');
+    throw new Error("Question text is required.");
   }
 
   const selection = normalizeSelection(options.selection);
   const query = buildHybridQuery(normalizedQuestion, selection);
 
-  const { hits, expandedWindow } = await hybridPaperChunkSearch({
+  const { hits, expandedWindow, retrieval } = await hybridPaperChunkSearch({
     paperId,
     query,
     limit: options.limit ?? DEFAULT_HYBRID_LIMIT,
@@ -398,6 +380,7 @@ export async function loadQuestionEvidence(
     expandedWindow: mappedWindow,
     figures,
     citations,
+    retrieval,
     selection,
   };
 }

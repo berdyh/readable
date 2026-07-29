@@ -1,4 +1,4 @@
-import type { AnswerCitation, QuestionSelection } from '@/server/qa/types';
+import type { AnswerCitation, QuestionSelection } from "@/server/qa/types";
 
 export interface SelectionCommandContext {
   paperId: string;

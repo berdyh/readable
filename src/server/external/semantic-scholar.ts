@@ -14,22 +14,22 @@
  * `CACHE_TTL_MS`. Adequate for warm Next.js workers; cold starts re-fetch.
  */
 
-const DEFAULT_BASE_URL = 'https://api.semanticscholar.org/graph/v1';
+const DEFAULT_BASE_URL = "https://api.semanticscholar.org/graph/v1";
 const DEFAULT_TIMEOUT_MS = 10_000;
 const CACHE_TTL_MS = 24 * 60 * 60_000; // 24h
 
 const FIELDS = [
-  'paperId',
-  'title',
-  'abstract',
-  'year',
-  'venue',
-  'authors.name',
-  'externalIds',
-  'openAccessPdf',
-  'citationCount',
-  'url',
-].join(',');
+  "paperId",
+  "title",
+  "abstract",
+  "year",
+  "venue",
+  "authors.name",
+  "externalIds",
+  "openAccessPdf",
+  "citationCount",
+  "url",
+].join(",");
 
 export interface SemanticScholarPaper {
   /** SS-internal id (UUID-like). */
@@ -82,7 +82,7 @@ interface CacheEntry {
 const cache = new Map<string, CacheEntry>();
 
 function getBaseUrl(): string {
-  return (process.env.SEMANTIC_SCHOLAR_API_URL ?? DEFAULT_BASE_URL).replace(/\/+$/, '');
+  return (process.env.SEMANTIC_SCHOLAR_API_URL ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
 }
 
 function getTimeoutMs(): number {
@@ -105,24 +105,24 @@ function shapePaper(raw: RawSemanticScholarPaper | undefined): SemanticScholarPa
     title: raw.title?.trim() || undefined,
     abstract: raw.abstract?.trim() || undefined,
     authors: authors.length > 0 ? authors : undefined,
-    year: typeof raw.year === 'number' ? raw.year : undefined,
+    year: typeof raw.year === "number" ? raw.year : undefined,
     venue: raw.venue?.trim() || undefined,
     doi: raw.externalIds?.DOI?.trim() || undefined,
     arxivId: raw.externalIds?.ArXiv?.trim() || undefined,
     url: raw.url?.trim() || undefined,
     openAccessPdfUrl: raw.openAccessPdf?.url?.trim() || undefined,
-    citationCount: typeof raw.citationCount === 'number' ? raw.citationCount : undefined,
+    citationCount: typeof raw.citationCount === "number" ? raw.citationCount : undefined,
   };
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T | undefined> {
   const apiKey = getApiKey();
   const headers: Record<string, string> = {
-    Accept: 'application/json',
+    Accept: "application/json",
     ...(init?.headers as Record<string, string> | undefined),
   };
   if (apiKey) {
-    headers['x-api-key'] = apiKey;
+    headers["x-api-key"] = apiKey;
   }
 
   const controller = new AbortController();
@@ -145,7 +145,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T | undefin
     }
     return (await response.json()) as T;
   } catch (error) {
-    if ((error as { name?: string }).name === 'AbortError') {
+    if ((error as { name?: string }).name === "AbortError") {
       console.warn(`[semantic-scholar] ${path} timed out after ${getTimeoutMs()}ms`);
     } else {
       console.warn(
@@ -216,21 +216,19 @@ export async function searchByTitle(
 ): Promise<SemanticScholarPaper | undefined> {
   const trimmed = title.trim();
   if (!trimmed) return undefined;
-  const key = `title:${trimmed.toLowerCase()}:${year ?? ''}`;
+  const key = `title:${trimmed.toLowerCase()}:${year ?? ""}`;
   const cached = cacheGet(key);
   if (cached !== undefined) return cached ?? undefined;
 
   const params = new URLSearchParams({
     query: trimmed,
-    limit: '3',
+    limit: "3",
     fields: FIELDS,
   });
   if (year) {
-    params.set('year', String(year));
+    params.set("year", String(year));
   }
-  const raw = await request<RawSearchResponse>(
-    `/paper/search?${params.toString()}`,
-  );
+  const raw = await request<RawSearchResponse>(`/paper/search?${params.toString()}`);
   const shaped = shapePaper(raw?.data?.[0]);
   cacheSet(key, shaped ?? null);
   return shaped;

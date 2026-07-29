@@ -1,18 +1,11 @@
-import type { PoolClient } from 'pg';
+import { createHash } from "node:crypto";
 
-import {
-  buildCitationUuid,
-  buildFigureUuid,
-  buildPaperChunkUuid,
-} from './ids';
-import { ensureSchema } from './migrate';
-import { withPgClient } from './postgres';
-import type {
-  Citation,
-  Figure,
-  PaperChunk,
-  PaperRecord,
-} from './types';
+import type { PoolClient } from "pg";
+
+import { buildCitationUuid, buildFigureUuid, buildPaperChunkUuid } from "./ids";
+import { ensureSchema } from "./migrate";
+import { withPgClient } from "./postgres";
+import type { Citation, Figure, PaperChunk, PaperRecord } from "./types";
 
 interface PaperChunkRow {
   id: string;
@@ -51,12 +44,9 @@ interface PaperCitationRow {
 }
 
 const cleanArray = (values: string[] | undefined): string[] =>
-  (values ?? [])
-    .map((value) => (typeof value === 'string' ? value.trim() : ''))
-    .filter(Boolean);
+  (values ?? []).map((value) => (typeof value === "string" ? value.trim() : "")).filter(Boolean);
 
-const cleanIntArray = (values: string[] | undefined): string[] =>
-  cleanArray(values);
+const cleanIntArray = (values: string[] | undefined): string[] => cleanArray(values);
 
 function mapPaperChunkRow(row: PaperChunkRow): PaperChunk {
   return {
@@ -65,12 +55,9 @@ function mapPaperChunkRow(row: PaperChunkRow): PaperChunk {
     chunkId: row.chunk_id,
     text: row.text,
     section: row.section ?? undefined,
-    pageNumber:
-      typeof row.page_number === 'number' ? row.page_number : undefined,
-    tokenStart:
-      typeof row.token_start === 'number' ? row.token_start : undefined,
-    tokenEnd:
-      typeof row.token_end === 'number' ? row.token_end : undefined,
+    pageNumber: typeof row.page_number === "number" ? row.page_number : undefined,
+    tokenStart: typeof row.token_start === "number" ? row.token_start : undefined,
+    tokenEnd: typeof row.token_end === "number" ? row.token_end : undefined,
     citations: row.citations ?? undefined,
     figureIds: row.figure_ids ?? undefined,
   };
@@ -81,9 +68,8 @@ function mapFigureRow(row: PaperFigureRow): Figure {
     id: row.id,
     paperId: row.paper_id,
     figureId: row.figure_id,
-    caption: row.caption ?? '',
-    pageNumber:
-      typeof row.page_number === 'number' ? row.page_number : undefined,
+    caption: row.caption ?? "",
+    pageNumber: typeof row.page_number === "number" ? row.page_number : undefined,
     imageUrl: row.image_url ?? undefined,
     chunkIds: row.chunk_ids ?? undefined,
   };
@@ -96,7 +82,7 @@ function mapCitationRow(row: PaperCitationRow): Citation {
     citationId: row.citation_id,
     title: row.title ?? undefined,
     authors: row.authors ?? undefined,
-    year: typeof row.year === 'number' ? row.year : undefined,
+    year: typeof row.year === "number" ? row.year : undefined,
     source: row.source ?? undefined,
     doi: row.doi ?? undefined,
     url: row.url ?? undefined,
@@ -153,7 +139,7 @@ async function ensurePaperRow(
       record?.publishedAt ?? null,
       record?.updatedAt ?? null,
       record?.pdfUrl ?? null,
-      typeof record?.pages === 'number' ? record.pages : null,
+      typeof record?.pages === "number" ? record.pages : null,
     ],
   );
 }
@@ -200,38 +186,138 @@ export async function getPaper(paperId: string): Promise<PaperRecord | undefined
       publishedAt: row.published_at?.toISOString(),
       updatedAt: row.updated_at?.toISOString(),
       pdfUrl: row.pdf_url ?? undefined,
-      pages: typeof row.pages === 'number' ? row.pages : undefined,
+      pages: typeof row.pages === "number" ? row.pages : undefined,
     };
   });
 }
 
 export interface UpsertPaperChunksOptions {
   paperRecord?: Partial<PaperRecord>;
+  replaceExistingForPaper?: boolean;
 }
 
-export async function upsertPaperChunks(
+export interface UpsertPaperRelatedRecordsOptions {
+  paperId?: string;
+  replaceExistingForPaper?: boolean;
+}
+
+export interface ReplacePaperIngestDataInput {
+  paper: PaperRecord;
+  chunks: PaperChunk[];
+  figures: Figure[];
+  citations: Citation[];
+}
+
+export interface ReplacePaperIngestDataResult {
+  chunkIds: string[];
+  figureIds: string[];
+  citationIds: string[];
+}
+
+export interface ReplacePaperIngestDataOptions {
+  /**
+   * Runs after the Postgres replacement transaction commits but before the
+   * paper-scoped advisory lock is released. Vector replacement uses this to
+   * keep same-paper DB and vector replacement serialized as one ingest unit.
+   */
+  afterCommit?: (result: ReplacePaperIngestDataResult) => Promise<void>;
+}
+
+function buildAdvisoryLockKeys(value: string): [number, number] {
+  const digest = createHash("sha256").update(value).digest();
+  return [digest.readInt32BE(0), digest.readInt32BE(4)];
+}
+
+async function lockPaperIngest(client: PoolClient, paperId: string): Promise<void> {
+  const [key1, key2] = buildAdvisoryLockKeys(`paper-ingest:${paperId}`);
+  await client.query("SELECT pg_advisory_lock($1::integer, $2::integer)", [key1, key2]);
+}
+
+async function unlockPaperIngest(client: PoolClient, paperId: string): Promise<void> {
+  const [key1, key2] = buildAdvisoryLockKeys(`paper-ingest:${paperId}`);
+  await client.query("SELECT pg_advisory_unlock($1::integer, $2::integer)", [key1, key2]);
+}
+
+async function withPaperIngestLock<T>(
+  client: PoolClient,
+  paperId: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  await lockPaperIngest(client, paperId);
+  try {
+    return await fn();
+  } finally {
+    await unlockPaperIngest(client, paperId).catch(() => undefined);
+  }
+}
+
+function assertPaperScopedRecords(
+  paperId: string,
+  records: Array<{ paperId: string }>,
+  label: string,
+): void {
+  const mismatched = records.find((record) => record.paperId !== paperId);
+  if (mismatched) {
+    throw new Error(
+      `${label} contains record for paper "${mismatched.paperId}" while replacing "${paperId}".`,
+    );
+  }
+}
+
+async function withTransaction<T>(client: PoolClient, fn: () => Promise<T>): Promise<T> {
+  await client.query("BEGIN");
+  try {
+    const result = await fn();
+    await client.query("COMMIT");
+    return result;
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  }
+}
+
+async function upsertPaperChunksWithClient(
+  client: PoolClient,
   chunks: PaperChunk[],
   options: UpsertPaperChunksOptions = {},
 ): Promise<string[]> {
-  if (chunks.length === 0) {
+  const paperIds = Array.from(
+    new Set([
+      ...chunks.map((chunk) => chunk.paperId),
+      ...(options.paperRecord?.paperId ? [options.paperRecord.paperId] : []),
+    ]),
+  );
+
+  if (chunks.length === 0 && paperIds.length === 0) {
     return [];
   }
 
-  await ensureSchema();
+  for (const paperId of paperIds) {
+    await ensurePaperRow(client, paperId, options.paperRecord);
+  }
 
-  const paperIds = Array.from(new Set(chunks.map((chunk) => chunk.paperId)));
-
-  return withPgClient(async (client) => {
+  if (options.replaceExistingForPaper) {
     for (const paperId of paperIds) {
-      await ensurePaperRow(client, paperId, options.paperRecord);
-    }
-
-    const ids: string[] = [];
-
-    for (const chunk of chunks) {
-      const id = chunk.id ?? buildPaperChunkUuid(chunk.paperId, chunk.chunkId);
+      const chunkIds = chunks
+        .filter((chunk) => chunk.paperId === paperId)
+        .map((chunk) => chunk.chunkId);
       await client.query(
         `
+          DELETE FROM paper_chunks
+          WHERE paper_id = $1
+            AND NOT (chunk_id = ANY($2::text[]))
+          `,
+        [paperId, chunkIds],
+      );
+    }
+  }
+
+  const ids: string[] = [];
+
+  for (const chunk of chunks) {
+    const id = chunk.id ?? buildPaperChunkUuid(chunk.paperId, chunk.chunkId);
+    await client.query(
+      `
         INSERT INTO paper_chunks (
           id,
           paper_id,
@@ -253,46 +339,78 @@ export async function upsertPaperChunks(
           citations = EXCLUDED.citations,
           figure_ids = EXCLUDED.figure_ids
         `,
-        [
-          id,
-          chunk.paperId,
-          chunk.chunkId,
-          chunk.text,
-          chunk.section ?? null,
-          typeof chunk.pageNumber === 'number' ? chunk.pageNumber : null,
-          typeof chunk.tokenStart === 'number' ? chunk.tokenStart : null,
-          typeof chunk.tokenEnd === 'number' ? chunk.tokenEnd : null,
-          cleanArray(chunk.citations),
-          cleanArray(chunk.figureIds),
-        ],
-      );
-      ids.push(id);
-    }
+      [
+        id,
+        chunk.paperId,
+        chunk.chunkId,
+        chunk.text,
+        chunk.section ?? null,
+        typeof chunk.pageNumber === "number" ? chunk.pageNumber : null,
+        typeof chunk.tokenStart === "number" ? chunk.tokenStart : null,
+        typeof chunk.tokenEnd === "number" ? chunk.tokenEnd : null,
+        cleanArray(chunk.citations),
+        cleanArray(chunk.figureIds),
+      ],
+    );
+    ids.push(id);
+  }
 
-    return ids;
-  });
+  return ids;
 }
 
-export async function upsertFigures(figures: Figure[]): Promise<string[]> {
-  if (figures.length === 0) {
+export async function upsertPaperChunks(
+  chunks: PaperChunk[],
+  options: UpsertPaperChunksOptions = {},
+): Promise<string[]> {
+  if (chunks.length === 0) {
+    return [];
+  }
+  await ensureSchema();
+  return withPgClient((client) => upsertPaperChunksWithClient(client, chunks, options));
+}
+
+async function upsertFiguresWithClient(
+  client: PoolClient,
+  figures: Figure[],
+  options: UpsertPaperRelatedRecordsOptions = {},
+): Promise<string[]> {
+  const paperIds = Array.from(
+    new Set([
+      ...figures.map((figure) => figure.paperId),
+      ...(options.paperId ? [options.paperId] : []),
+    ]),
+  );
+
+  if (figures.length === 0 && paperIds.length === 0) {
     return [];
   }
 
-  await ensureSchema();
+  for (const paperId of paperIds) {
+    await ensurePaperRow(client, paperId);
+  }
 
-  const paperIds = Array.from(new Set(figures.map((figure) => figure.paperId)));
-
-  return withPgClient(async (client) => {
+  if (options.replaceExistingForPaper) {
     for (const paperId of paperIds) {
-      await ensurePaperRow(client, paperId);
-    }
-
-    const ids: string[] = [];
-
-    for (const figure of figures) {
-      const id = figure.id ?? buildFigureUuid(figure.paperId, figure.figureId);
+      const figureIds = figures
+        .filter((figure) => figure.paperId === paperId)
+        .map((figure) => figure.figureId);
       await client.query(
         `
+          DELETE FROM paper_figures
+          WHERE paper_id = $1
+            AND NOT (figure_id = ANY($2::text[]))
+          `,
+        [paperId, figureIds],
+      );
+    }
+  }
+
+  const ids: string[] = [];
+
+  for (const figure of figures) {
+    const id = figure.id ?? buildFigureUuid(figure.paperId, figure.figureId);
+    await client.query(
+      `
         INSERT INTO paper_figures (
           id,
           paper_id,
@@ -308,47 +426,76 @@ export async function upsertFigures(figures: Figure[]): Promise<string[]> {
           image_url = EXCLUDED.image_url,
           chunk_ids = EXCLUDED.chunk_ids
         `,
-        [
-          id,
-          figure.paperId,
-          figure.figureId,
-          figure.caption ?? '',
-          typeof figure.pageNumber === 'number' ? figure.pageNumber : null,
-          figure.imageUrl ?? null,
-          cleanIntArray(figure.chunkIds),
-        ],
-      );
-      ids.push(id);
-    }
+      [
+        id,
+        figure.paperId,
+        figure.figureId,
+        figure.caption ?? "",
+        typeof figure.pageNumber === "number" ? figure.pageNumber : null,
+        figure.imageUrl ?? null,
+        cleanIntArray(figure.chunkIds),
+      ],
+    );
+    ids.push(id);
+  }
 
-    return ids;
-  });
+  return ids;
 }
 
-export async function upsertCitations(citations: Citation[]): Promise<string[]> {
-  if (citations.length === 0) {
+export async function upsertFigures(
+  figures: Figure[],
+  options: UpsertPaperRelatedRecordsOptions = {},
+): Promise<string[]> {
+  if (figures.length === 0 && !options.paperId) {
+    return [];
+  }
+  await ensureSchema();
+  return withPgClient((client) => upsertFiguresWithClient(client, figures, options));
+}
+
+async function upsertCitationsWithClient(
+  client: PoolClient,
+  citations: Citation[],
+  options: UpsertPaperRelatedRecordsOptions = {},
+): Promise<string[]> {
+  const paperIds = Array.from(
+    new Set([
+      ...citations.map((citation) => citation.paperId),
+      ...(options.paperId ? [options.paperId] : []),
+    ]),
+  );
+
+  if (citations.length === 0 && paperIds.length === 0) {
     return [];
   }
 
-  await ensureSchema();
+  for (const paperId of paperIds) {
+    await ensurePaperRow(client, paperId);
+  }
 
-  const paperIds = Array.from(
-    new Set(citations.map((citation) => citation.paperId)),
-  );
-
-  return withPgClient(async (client) => {
+  if (options.replaceExistingForPaper) {
     for (const paperId of paperIds) {
-      await ensurePaperRow(client, paperId);
-    }
-
-    const ids: string[] = [];
-
-    for (const citation of citations) {
-      const id =
-        citation.id ?? buildCitationUuid(citation.paperId, citation.citationId);
-
+      const citationIds = citations
+        .filter((citation) => citation.paperId === paperId)
+        .map((citation) => citation.citationId);
       await client.query(
         `
+          DELETE FROM paper_citations
+          WHERE paper_id = $1
+            AND NOT (citation_id = ANY($2::text[]))
+          `,
+        [paperId, citationIds],
+      );
+    }
+  }
+
+  const ids: string[] = [];
+
+  for (const citation of citations) {
+    const id = citation.id ?? buildCitationUuid(citation.paperId, citation.citationId);
+
+    await client.query(
+      `
         INSERT INTO paper_citations (
           id,
           paper_id,
@@ -370,29 +517,78 @@ export async function upsertCitations(citations: Citation[]): Promise<string[]> 
           url = EXCLUDED.url,
           chunk_ids = EXCLUDED.chunk_ids
         `,
-        [
-          id,
-          citation.paperId,
-          citation.citationId,
-          citation.title ?? null,
-          cleanArray(citation.authors),
-          typeof citation.year === 'number' ? citation.year : null,
-          citation.source ?? null,
-          citation.doi ?? null,
-          citation.url ?? null,
-          cleanIntArray(citation.chunkIds),
-        ],
-      );
-      ids.push(id);
-    }
+      [
+        id,
+        citation.paperId,
+        citation.citationId,
+        citation.title ?? null,
+        cleanArray(citation.authors),
+        typeof citation.year === "number" ? citation.year : null,
+        citation.source ?? null,
+        citation.doi ?? null,
+        citation.url ?? null,
+        cleanIntArray(citation.chunkIds),
+      ],
+    );
+    ids.push(id);
+  }
 
-    return ids;
-  });
+  return ids;
 }
 
-export async function fetchPaperChunksByPaperId(
-  paperId: string,
-): Promise<PaperChunk[]> {
+export async function upsertCitations(
+  citations: Citation[],
+  options: UpsertPaperRelatedRecordsOptions = {},
+): Promise<string[]> {
+  if (citations.length === 0 && !options.paperId) {
+    return [];
+  }
+  await ensureSchema();
+  return withPgClient((client) => upsertCitationsWithClient(client, citations, options));
+}
+
+export async function replacePaperIngestData(
+  input: ReplacePaperIngestDataInput,
+  options: ReplacePaperIngestDataOptions = {},
+): Promise<ReplacePaperIngestDataResult> {
+  await ensureSchema();
+
+  const { paper, chunks, figures, citations } = input;
+  assertPaperScopedRecords(paper.paperId, chunks, "chunks");
+  assertPaperScopedRecords(paper.paperId, figures, "figures");
+  assertPaperScopedRecords(paper.paperId, citations, "citations");
+
+  return withPgClient((client) =>
+    withPaperIngestLock(client, paper.paperId, async () => {
+      const result = await withTransaction(client, async () => {
+        await ensurePaperRow(client, paper.paperId, paper);
+
+        const chunkIds = await upsertPaperChunksWithClient(client, chunks, {
+          paperRecord: paper,
+          replaceExistingForPaper: true,
+        });
+        const figureIds = await upsertFiguresWithClient(client, figures, {
+          paperId: paper.paperId,
+          replaceExistingForPaper: true,
+        });
+        const citationIds = await upsertCitationsWithClient(client, citations, {
+          paperId: paper.paperId,
+          replaceExistingForPaper: true,
+        });
+
+        return { chunkIds, figureIds, citationIds };
+      });
+
+      if (options.afterCommit) {
+        await options.afterCommit(result);
+      }
+
+      return result;
+    }),
+  );
+}
+
+export async function fetchPaperChunksByPaperId(paperId: string): Promise<PaperChunk[]> {
   await ensureSchema();
   return withPgClient(async (client) => {
     const { rows } = await client.query<PaperChunkRow>(
@@ -408,9 +604,7 @@ export async function fetchPaperChunksByPaperId(
   });
 }
 
-export async function fetchPaperFiguresByPaperId(
-  paperId: string,
-): Promise<Figure[]> {
+export async function fetchPaperFiguresByPaperId(paperId: string): Promise<Figure[]> {
   await ensureSchema();
   return withPgClient(async (client) => {
     const { rows } = await client.query<PaperFigureRow>(
@@ -425,9 +619,7 @@ export async function fetchPaperFiguresByPaperId(
   });
 }
 
-export async function fetchPaperCitationsByPaperId(
-  paperId: string,
-): Promise<Citation[]> {
+export async function fetchPaperCitationsByPaperId(paperId: string): Promise<Citation[]> {
   await ensureSchema();
   return withPgClient(async (client) => {
     const { rows } = await client.query<PaperCitationRow>(
@@ -494,8 +686,7 @@ export async function searchPaperChunksByText(
       chunkId: row.chunk_id,
       text: row.text,
       section: row.section ?? undefined,
-      pageNumber:
-        typeof row.page_number === 'number' ? row.page_number : undefined,
+      pageNumber: typeof row.page_number === "number" ? row.page_number : undefined,
       citations: row.citations ?? [],
       figureIds: row.figure_ids ?? [],
       rank: row.rank,
@@ -503,9 +694,7 @@ export async function searchPaperChunksByText(
   });
 }
 
-export async function fetchChunksByIds(
-  ids: string[],
-): Promise<PaperChunk[]> {
+export async function fetchChunksByIds(ids: string[]): Promise<PaperChunk[]> {
   if (ids.length === 0) {
     return [];
   }

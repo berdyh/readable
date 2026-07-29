@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "web.chat.hooks",
+  "parent": "web.chat",
+  "path": "src/app/components/chat/hooks",
+  "goal": "Holds the chat sidecar's client state.",
+  "owns": ["src/app/components/chat/hooks"],
+  "interface": {
+    "entrypoint": "(imported by ../sidecar and ../inline)",
+    "exports": [
+      "useChatSessions",
+      "useChatPanelWidth",
+      "useEditorIntentPrompt",
+      "useSlashCommandMenu"
+    ]
+  },
+  "constraints": ["client state", "effects"],
+  "checks": ["pnpm vitest run src/app/components/chat"],
+  "uses": [
+    {
+      "module": "server.qa",
+      "via": "@/server/qa/types"
+    }
+  ]
+}

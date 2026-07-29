@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "web.workspace",
+  "parent": "web",
+  "path": "src/app/components/workspace",
+  "goal": "Composes the paper reading surface.",
+  "owns": ["src/app/components/workspace"],
+  "interface": {
+    "entrypoint": "ReaderWorkspace.tsx",
+    "exports": ["ReaderWorkspace"]
+  },
+  "uses": [
+    {
+      "module": "server.summarize",
+      "via": "@/server/summarize/types"
+    },
+    {
+      "module": "server.editor",
+      "via": "@/server/editor/types"
+    }
+  ],
+  "constraints": ["reading layout", "pass state", "paper status"],
+  "checks": ["pnpm vitest run src/app/components/workspace"]
+}

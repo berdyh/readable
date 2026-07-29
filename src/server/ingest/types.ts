@@ -93,7 +93,7 @@ export interface IngestRequest {
   forceOcr?: boolean;
 }
 
-export type PdfVisualKind = 'figure' | 'table';
+export type PdfVisualKind = "figure" | "table";
 
 export interface PdfCaptionMatch {
   id: string;
@@ -108,7 +108,7 @@ export interface PdfCaptionMatch {
 export interface PdfImageMetadata {
   pageNumber: number;
   name?: string;
-  type: 'xObject' | 'inline';
+  type: "xObject" | "inline";
   width?: number;
   height?: number;
 }
@@ -120,6 +120,6 @@ export interface PdfAnalysis {
   avgTextPerPage: number;
   avgImagesPerPage: number;
   isLikelyScanned: boolean;
-  recommendedTool: 'pdfjs-dist' | 'deepseek-ocr';
-  confidence: 'low' | 'medium' | 'high';
+  recommendedTool: "pdfjs-dist" | "deepseek-ocr";
+  confidence: "low" | "medium" | "high";
 }

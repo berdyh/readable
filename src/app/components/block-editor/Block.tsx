@@ -20,8 +20,10 @@ import { FigureBlock } from "./blocks/FigureBlock";
 import {
   getDeletionFocusTarget,
   isBlockContentEmpty,
-  resolveDropReorder,
+  isFullBleedBlock,
 } from "./blockInteractionUtils";
+import { executeApiCommand } from "./apiHandlers";
+import { useBlockDragAndDrop } from "./useBlockDragAndDrop";
 
 interface BlockProps {
   block: BlockType;
@@ -44,10 +46,11 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
   } = useEditorStore();
   const [isFocused, setIsFocused] = useState(false);
   const [showOptions, setShowOptions] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragOver, setDragOver] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const isLocked = block.metadata?.locked === true;
+
+  const { isDragging, dragOver, onDragStart, onDragEnd, onDragOver, onDragLeave, onDrop } =
+    useBlockDragAndDrop({ blockId: block.id, blocks: state.blocks, moveBlock });
 
   useEffect(() => {
     registerBlockFocusApi(block.id, {
@@ -74,8 +77,6 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
   // Handler for API execution from slash commands
   const handleExecuteApi = useCallback(
     async (command: string, params?: Record<string, unknown>) => {
-      const { executeApiCommand } = await import("./apiHandlers");
-
       // Insert blocks after the current block index
       await executeApiCommand(command, {
         paperId: state.paperId,
@@ -173,74 +174,6 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
       },
     });
   }, [block.id, block.metadata, isLocked, updateBlock]);
-
-  const handleDragStart = useCallback(
-    (e: React.DragEvent) => {
-      setIsDragging(true);
-      e.dataTransfer.effectAllowed = "move";
-      e.dataTransfer.setData("text/plain", block.id);
-      e.dataTransfer.setData("application/x-block-reorder", "true");
-      e.stopPropagation();
-      if (e.dataTransfer.setDragImage) {
-        const dragImage = e.currentTarget.cloneNode(true) as HTMLElement;
-        dragImage.style.opacity = "0.5";
-        dragImage.style.transform = "rotate(2deg)";
-        document.body.appendChild(dragImage);
-        e.dataTransfer.setDragImage(dragImage, 0, 0);
-        setTimeout(() => document.body.removeChild(dragImage), 0);
-      }
-    },
-    [block.id],
-  );
-
-  const handleDragEnd = useCallback((e: React.DragEvent) => {
-    setIsDragging(false);
-    setDragOver(false);
-    e.preventDefault();
-    e.stopPropagation();
-  }, []);
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    e.dataTransfer.dropEffect = "move";
-    setDragOver(true);
-  }, []);
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX;
-    const y = e.clientY;
-    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
-      setDragOver(false);
-    }
-  }, []);
-
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setDragOver(false);
-      setIsDragging(false);
-
-      const isBlockReorder = e.dataTransfer.getData("application/x-block-reorder") === "true";
-      if (!isBlockReorder) return;
-
-      const draggedBlockId = e.dataTransfer.getData("text/plain");
-      if (!draggedBlockId || draggedBlockId === block.id) return;
-
-      const rect = e.currentTarget.getBoundingClientRect();
-      const midPoint = rect.top + rect.height / 2;
-      const dropPosition = e.clientY < midPoint ? "before" : "after";
-      const reorder = resolveDropReorder(state.blocks, draggedBlockId, block.id, dropPosition);
-      if (!reorder) return;
-
-      moveBlock(draggedBlockId, reorder.toIndex);
-    },
-    [block.id, moveBlock, state.blocks],
-  );
 
   const handleFocus = useCallback(() => {
     setIsFocused(true);
@@ -352,7 +285,7 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
           />
         );
       case "divider":
-        return <DividerBlock block={block} />;
+        return <DividerBlock />;
       case "callout":
         return (
           <CalloutBlock
@@ -387,14 +320,7 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
           />
         );
       case "figure":
-        return (
-          <FigureBlock
-            block={block}
-            paperId={state.paperId}
-            isLocked={isLocked}
-            onUpdate={handleUpdate}
-          />
-        );
+        return <FigureBlock block={block} paperId={state.paperId} isLocked={isLocked} />;
       default:
         return (
           <TextBlock
@@ -421,17 +347,17 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
       ref={containerRef}
       className={clsx(
         "group relative flex items-start gap-2 rounded-md px-2 py-1 transition-all duration-150",
-        "hover:bg-neutral-50/50 dark:hover:bg-neutral-900/50",
-        isFocused && !isDragging && "bg-neutral-50 dark:bg-neutral-900",
+        "hover:bg-zinc-50/50 dark:hover:bg-zinc-900/50",
+        isFocused && !isDragging && "bg-zinc-50 dark:bg-zinc-900",
         isDragging && "opacity-50 pointer-events-none scale-[0.98]",
         dragOver && "ring-2 ring-blue-500 dark:ring-blue-400 bg-blue-50/50 dark:bg-blue-950/30",
       )}
       data-block-id={block.id}
       onFocus={handleFocus}
       onBlur={handleBlur}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
       draggable={false}
     >
       <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 z-10">
@@ -441,7 +367,7 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
             e.stopPropagation();
             handleToggleLock();
           }}
-          className="flex h-6 w-6 items-center justify-center rounded hover:bg-neutral-200 dark:hover:bg-neutral-700 active:scale-95 transition-all duration-150 text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
+          className="touch-target relative flex h-6 w-6 items-center justify-center rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 active:scale-95 transition-all duration-150 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
           title={isLocked ? "Click to unlock and edit" : "Click to lock (make read-only)"}
         >
           {isLocked ? <Edit2 className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
@@ -453,7 +379,7 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
           <button
             type="button"
             onClick={handleAddClick}
-            className="flex h-6 w-6 items-center justify-center rounded hover:bg-neutral-200 dark:hover:bg-neutral-700 active:scale-95 transition-all duration-150 text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 pointer-events-auto"
+            className="touch-target relative flex h-6 w-6 items-center justify-center rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 active:scale-95 transition-all duration-150 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 pointer-events-auto"
             title="Add block"
           >
             <Plus className="h-4 w-4" />
@@ -462,17 +388,30 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
         <button
           type="button"
           draggable
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-          className="flex h-6 w-6 items-center justify-center rounded hover:bg-neutral-200 dark:hover:bg-neutral-700 active:scale-95 transition-all duration-150 cursor-move text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 pointer-events-auto"
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
+          className="touch-target relative flex h-6 w-6 items-center justify-center rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 active:scale-95 transition-all duration-150 cursor-move text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 pointer-events-auto"
           title="Drag to reorder"
         >
           <GripVertical className="h-4 w-4" />
         </button>
       </div>
 
-      <div className="flex-1" onFocus={handleFocus}>
-        {renderBlock()}
+      {/* min-w-0: without it a flex item's automatic minimum size is its
+          min-content width, so one long unbreakable token in a paper (inline
+          LaTeX, a URL) widens the whole page and the phone scrolls sideways. */}
+      <div className="min-w-0 flex-1" onFocus={handleFocus}>
+        {/* Prose is capped at a ~70ch measure. Past roughly that width the eye
+            loses the start of the next line on the return sweep, which is the
+            single thing that makes a long paper tiring to read.
+
+            It cannot be a blanket cap on the column, because the blocks in
+            FULL_BLEED_BLOCK_TYPES are not prose: a figure narrowed to 70ch is
+            unreadable, and a rule that stops short of the column edge reads as
+            a rendering bug rather than a divider. */}
+        <div className={isFullBleedBlock(block.type) ? undefined : "max-w-[70ch]"}>
+          {renderBlock()}
+        </div>
       </div>
     </div>
   );

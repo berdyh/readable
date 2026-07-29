@@ -8,12 +8,12 @@
  *   pnpm tsx scripts/probe-embedding.ts
  */
 
-import { config as loadDotenv } from 'dotenv';
+import { config as loadDotenv } from "dotenv";
 
-loadDotenv({ path: '.env.local' });
+loadDotenv({ path: ".env.local" });
 loadDotenv();
 
-import { probeEmbeddingDimensions } from '@/server/vector/embeddings';
+import { probeEmbeddingDimensions } from "@/server/vector";
 
 async function main() {
   try {
@@ -22,11 +22,11 @@ async function main() {
       `[probe] provider=${result.providerId} model=${result.model} dimensions=${result.dimensions}`,
     );
     if (result.dimensions === 0) {
-      console.error('[probe] Provider returned an empty vector. Check API key + model.');
+      console.error("[probe] Provider returned an empty vector. Check API key + model.");
       process.exit(1);
     }
   } catch (error) {
-    console.error('[probe] Failed:', error instanceof Error ? error.message : error);
+    console.error("[probe] Failed:", error instanceof Error ? error.message : error);
     process.exit(1);
   }
 }

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "readable",
+  "path": ".",
+  "goal": "Turns an arXiv paper into a document a reader can question, cite, and edit.",
+  "owns": ["src/shims"],
+  "interface": {
+    "entrypoint": "src/app/page.tsx",
+    "exports": []
+  },
+  "constraints": ["repo-wide conventions", "module boundary rules", "the verify gate"],
+  "checks": ["pnpm verify"]
+}

@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "id": "server.editor",
+  "parent": "server",
+  "path": "src/server/editor",
+  "goal": "Serves the editor's selection-scoped actions.",
+  "owns": ["src/server/editor"],
+  "interface": {
+    "entrypoint": "index.ts",
+    "exports": [
+      "summarizeSelection",
+      "getSelectionFigures",
+      "getSelectionCitations",
+      "ingestArxivInline",
+      "normalizeArxivTarget",
+      "InlineArxivIngestError"
+    ]
+  },
+  "uses": [
+    {
+      "module": "server.qa",
+      "via": "loadQuestionEvidence"
+    },
+    {
+      "module": "server.ingest",
+      "via": "fetchArxivMetadata"
+    },
+    {
+      "module": "server.llm",
+      "via": "generateJson"
+    },
+    {
+      "module": "server.llm-config",
+      "via": "getSystemPrompt"
+    }
+  ],
+  "constraints": ["selection-scoped retrieval", "inline arXiv ingest"],
+  "checks": ["pnpm vitest run src/server/editor src/app/api/editor"]
+}

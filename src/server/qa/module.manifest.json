@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "id": "server.qa",
+  "parent": "server",
+  "path": "src/server/qa",
+  "goal": "Answers a question about a paper with grounded citations.",
+  "owns": ["src/server/qa"],
+  "interface": {
+    "entrypoint": "index.ts",
+    "exports": ["answerPaperQuestion", "loadQuestionEvidence", "parseQuestionSelection"]
+  },
+  "uses": [
+    {
+      "module": "server.search",
+      "via": "hybridPaperChunkSearch"
+    },
+    {
+      "module": "server.llm",
+      "via": "generateJson"
+    },
+    {
+      "module": "server.persona",
+      "via": "recordPersonaSignals"
+    },
+    {
+      "module": "server.external",
+      "via": "enrichCitation"
+    },
+    {
+      "module": "server.db",
+      "via": "fetchChunksByIds"
+    },
+    {
+      "module": "server.ingest",
+      "via": "@/server/ingest/types"
+    },
+    {
+      "module": "server.llm-config",
+      "via": "getSystemPrompt"
+    }
+  ],
+  "constraints": ["evidence assembly", "grounded answering", "citation validity"],
+  "checks": ["pnpm vitest run src/server/qa"]
+}

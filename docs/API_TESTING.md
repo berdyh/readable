@@ -1,207 +1,213 @@
-# API Endpoints Testing Guide
+# API Testing Guide
 
-This document provides a guide for testing all API endpoints in the application.
+Readable has two API proof loops:
 
-## Quick Test Script
+- Offline route checks: validate routing, payload errors, and Clerk auth gates without external services.
+- Live API checks: call real Clerk-protected and provider-backed endpoints.
 
-A test script has been created to verify all endpoints are properly routed:
+Auth is enforced per handler via `requireAuthenticatedUserId()`, not by a
+`middleware.ts` (there isn't one), so each route below states its own gate. The
+full route inventory is in [`API_ANALYSIS.md`](./API_ANALYSIS.md).
+
+## Offline Route Checks
+
+Start the dev server, then run the default API harness:
 
 ```bash
-# Terminal 1: Start the dev server
+# Terminal 1
 pnpm dev
 
-# Terminal 2: Run the test script
-pnpm exec tsx scripts/test-api-endpoints.ts
+# Terminal 2
+pnpm test:api
 ```
 
-## Manual Testing Guide
+This mode intentionally expects some non-2xx responses. For example, protected routes should return `401` without a Clerk session token, and malformed payloads should return `400` before any provider work starts. It does not require Postgres data, Qdrant, arXiv, Clerk credentials, or LLM keys.
 
-### 1. Health Check ✅
+## Live External-Service Checks
 
-**Endpoint:** `GET /api/health`
+Use live mode only when the local stack and credentials are configured:
 
-- **Status:** Always works (no dependencies)
-- **Test:**
-  ```bash
-  curl http://localhost:3000/api/health
-  ```
-- **Expected:** `{"status":"ok","timestamp":"..."}`
+```bash
+pnpm dev
 
-### 2. Summarize 📝
+TEST_AUTH_TOKEN=<clerk-session-token> \
+TEST_LIVE_PAPER_ID=<paper-id-that-exists-in-postgres> \
+TEST_LIVE_ARXIV_ID=2401.00001 \
+pnpm test:api -- --live
+```
 
-**Endpoint:** `POST /api/summarize`
+Optional PDF extraction coverage:
 
-- **Required:** `paperId` (must exist in Postgres `papers` table)
-- **Dependencies:** Postgres, Qdrant, OpenAI API
-- **Test:**
-  ```bash
-  curl -X POST http://localhost:3000/api/summarize \
-    -H "Content-Type: application/json" \
-    -d '{"paperId":"your-paper-id"}'
-  ```
+```bash
+TEST_AUTH_TOKEN=<clerk-session-token> \
+TEST_LIVE_PAPER_ID=<paper-id-that-exists-in-postgres> \
+TEST_PDF_PATH=/absolute/path/to/paper.pdf \
+pnpm test:api -- --live
+```
 
-### 3. Q&A 💬
+The Clerk token should be a session token for a development test user. The practical automation path is to create or select a Clerk test user, create a session, create a session token, then pass it as `Authorization: Bearer <token>` through `TEST_AUTH_TOKEN`.
 
-**Endpoint:** `POST /api/qa`
+## Manual Endpoint Notes
 
-- **Required:** `paperId`, `question`
-- **Dependencies:** Postgres, Qdrant, OpenAI API
-- **Test:**
-  ```bash
-  curl -X POST http://localhost:3000/api/qa \
-    -H "Content-Type: application/json" \
-    -d '{"paperId":"your-paper-id","question":"What is this paper about?"}'
-  ```
+### Health
 
-### 4. Ingest 📥
+`GET /api/health`
 
-**Endpoint:** `POST /api/ingest`
+```bash
+curl http://localhost:3000/api/health
+```
 
-- **Required:** `arxivId`
-- **Dependencies:** arXiv API, Postgres, Qdrant, OpenAI, OpenAI (for embeddings + LLM), GROBID (optional), OCR service (optional)
-- **Test:**
-  ```bash
-  curl -X POST http://localhost:3000/api/ingest \
-    -H "Content-Type: application/json" \
-    -d '{"arxivId":"2401.00001"}'
-  ```
-- **Note:** This is a long-running operation
+Expected: `200` with `{ "status": "ok", "timestamp": "..." }`.
 
-### 5. Extract Research Paper 📄
+### Paper Q&A
 
-**Endpoint:** `POST /api/extract-research-paper`
+`POST /api/qa`
 
-- **Required:** PDF file via `formData`
-- **Dependencies:** PDF.js, OCR service (optional)
-- **Test:**
-  ```bash
-  curl -X POST http://localhost:3000/api/extract-research-paper \
-    -F "pdf=@/path/to/paper.pdf"
-  ```
+Requires Clerk auth, an existing `paperId`, Postgres, Qdrant, and a configured LLM path.
 
-### 6. Editor Selection Summary 📋
+```bash
+curl -X POST http://localhost:3000/api/qa \
+  -H "Authorization: Bearer $TEST_AUTH_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"paperId":"your-paper-id","question":"What is this paper about?"}'
+```
 
-**Endpoint:** `POST /api/editor/selection/summary`
+### Summarize
 
-- **Required:** `paperId`, `selection` (with `text`)
-- **Dependencies:** Postgres, Qdrant, OpenAI API
-- **Test:**
-  ```bash
-  curl -X POST http://localhost:3000/api/editor/selection/summary \
-    -H "Content-Type: application/json" \
-    -d '{"paperId":"your-paper-id","selection":{"text":"selected text"}}'
-  ```
+`POST /api/summarize`
 
-### 7. Editor Selection Figures 📊
+Requires Clerk auth, an existing `paperId`, Postgres, and a configured LLM path.
 
-**Endpoint:** `POST /api/editor/selection/figures`
+```bash
+curl -X POST http://localhost:3000/api/summarize \
+  -H "Authorization: Bearer $TEST_AUTH_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"paperId":"your-paper-id"}'
+```
 
-- **Required:** `paperId`, `selection`
-- **Dependencies:** Postgres, Qdrant
-- **Test:**
-  ```bash
-  curl -X POST http://localhost:3000/api/editor/selection/figures \
-    -H "Content-Type: application/json" \
-    -d '{"paperId":"your-paper-id","selection":{"text":"selected text"}}'
-  ```
+### Ingest
 
-### 8. Editor Selection Citations 📚
+`POST /api/ingest`
 
-**Endpoint:** `POST /api/editor/selection/citations`
+Requires Clerk auth, arXiv, Postgres, Qdrant, and an active embedder.
 
-- **Required:** `paperId`, `selection`
-- **Dependencies:** Postgres, Qdrant
-- **Test:**
-  ```bash
-  curl -X POST http://localhost:3000/api/editor/selection/citations \
-    -H "Content-Type: application/json" \
-    -d '{"paperId":"your-paper-id","selection":{"text":"selected text"}}'
-  ```
+```bash
+curl -X POST http://localhost:3000/api/ingest \
+  -H "Authorization: Bearer $TEST_AUTH_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"arxivId":"2401.00001"}'
+```
 
-### 9. Editor Ingest ArXiv 🔗
+### Extract Research Paper
 
-**Endpoint:** `POST /api/editor/ingest/arxiv`
+`POST /api/extract-research-paper`
 
-- **Required:** `target` (arXiv ID or URL)
-- **Dependencies:** arXiv API, Postgres, Qdrant, OpenAI embeddings
-- **Test:**
-  ```bash
-  curl -X POST http://localhost:3000/api/editor/ingest/arxiv \
-    -H "Content-Type: application/json" \
-    -d '{"target":"2401.00001"}'
-  ```
+Requires Clerk auth. OCR services are optional and only used when OCR fallback is enabled and needed.
 
-### 10. Chat Session 💭
+```bash
+curl -X POST http://localhost:3000/api/extract-research-paper \
+  -H "Authorization: Bearer $TEST_AUTH_TOKEN" \
+  -F "pdf=@/path/to/paper.pdf"
+```
 
-**Endpoint:** `POST /api/chat/session`
+### Editor Selection APIs
 
-- **Required:** `paperId`
-- **Dependencies:** None (in-memory storage)
-- **Test:**
-  ```bash
-  curl -X POST http://localhost:3000/api/chat/session \
-    -H "Content-Type: application/json" \
-    -d '{"paperId":"your-paper-id"}'
-  ```
+`POST /api/editor/selection/summary`
 
-### 11. Chat History (GET) 📜
+Requires Clerk auth, Postgres, Qdrant, and a configured LLM path.
 
-**Endpoint:** `GET /api/chat/history`
+```bash
+curl -X POST http://localhost:3000/api/editor/selection/summary \
+  -H "Authorization: Bearer $TEST_AUTH_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"paperId":"your-paper-id","selection":{"text":"selected text"}}'
+```
 
-- **Required:** `sessionId` OR `paperId`
-- **Dependencies:** None (in-memory storage)
-- **Test:**
-  ```bash
-  curl "http://localhost:3000/api/chat/history?paperId=your-paper-id"
-  ```
+`POST /api/editor/selection/figures`
 
-### 12. Chat History (POST) 💾
+Requires Postgres and Qdrant.
 
-**Endpoint:** `POST /api/chat/history`
+```bash
+curl -X POST http://localhost:3000/api/editor/selection/figures \
+  -H "Content-Type: application/json" \
+  -d '{"paperId":"your-paper-id","selection":{"text":"selected text"}}'
+```
 
-- **Required:** `sessionId`, `paperId`, `message` or `messages`
-- **Dependencies:** None (in-memory storage)
-- **Test:**
-  ```bash
-  curl -X POST http://localhost:3000/api/chat/history \
-    -H "Content-Type: application/json" \
-    -d '{"sessionId":"test-session","paperId":"your-paper-id","message":{"id":"msg1","role":"user","content":"Hello","createdAt":1234567890}}'
-  ```
+`POST /api/editor/selection/citations`
 
-## Testing Status
+Requires Postgres and Qdrant.
 
-### ✅ Can Test Without External Services
+```bash
+curl -X POST http://localhost:3000/api/editor/selection/citations \
+  -H "Content-Type: application/json" \
+  -d '{"paperId":"your-paper-id","selection":{"text":"selected text"}}'
+```
 
-- `/api/health` - Always works
-- `/api/chat/session` - In-memory storage
-- `/api/chat/history` - In-memory storage
+### Editor arXiv Ingest
 
-### ⚠️ Require External Services
+`POST /api/editor/ingest/arxiv`
 
-All other endpoints require:
+Requires arXiv, Postgres, Qdrant, and an active embedder.
 
-- **Postgres** - Source of truth for papers, chunks, figures, citations, persona state
-- **Qdrant** - Vector index for paper-chunk embeddings
-- **OpenAI API** - For summarization, Q&A, and chunk embeddings
-- **arXiv API** - For paper ingestion
-- **Optional:** GROBID, OCR services, Semantic Scholar API
+```bash
+curl -X POST http://localhost:3000/api/editor/ingest/arxiv \
+  -H "Content-Type: application/json" \
+  -d '{"target":"2401.00001"}'
+```
 
-## Expected Behaviors
+### Chat Session and History
 
-### Missing Required Fields
+`POST /api/chat/session`, `GET /api/chat/history`, `POST /api/chat/history`, and `DELETE /api/chat/history`
 
-All endpoints should return `400 Bad Request` with error message when required fields are missing.
+Chat sessions and messages are persisted in Postgres and scoped to the authenticated Clerk user. They are not in-memory and do not survive by bypassing Clerk auth.
 
-### Missing External Services
+```bash
+curl -X POST http://localhost:3000/api/chat/session \
+  -H "Authorization: Bearer $TEST_AUTH_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"paperId":"your-paper-id"}'
 
-Endpoints requiring external services will return `502 Bad Gateway` or `500 Internal Server Error` if services are unavailable.
+curl "http://localhost:3000/api/chat/history?paperId=your-paper-id" \
+  -H "Authorization: Bearer $TEST_AUTH_TOKEN"
+```
 
-### Successful Responses
+### Skills
 
-Most endpoints return `200 OK` or `201 Created` with JSON data.
+`GET /api/skills`
 
-## Notes
+Requires Clerk auth and Postgres. Returns the authenticated user's tracked
+`persona_concepts` (capped at 200). The user is taken from the Clerk session, not
+from the URL.
 
-- The test script (`scripts/test-api-endpoints.ts`) tests routing and error handling even without full configuration
-- In-memory storage (chat history) will reset on server restart
-- Some endpoints have long timeouts (e.g., ingestion can take minutes)
+```bash
+curl http://localhost:3000/api/skills \
+  -H "Authorization: Bearer $TEST_AUTH_TOKEN"
+```
+
+`GET /api/skills/[userId]` is retired and always returns `410 Gone` telling the
+caller to use `/api/skills`. Do not add coverage that expects it to work.
+
+## Error Taxonomy
+
+- `400 Bad Request`: malformed JSON, missing required fields, or invalid message/selection payloads.
+- `401 Unauthorized`: Clerk session is missing or invalid on protected routes.
+- `403 Forbidden`: authenticated user is trying to mutate a chat session they do not own.
+- `404 Not Found`: requested paper content does not exist for summary-style reads.
+- `410 Gone`: retired endpoint (`/api/skills/[userId]`).
+- `429 Too Many Requests`: upstream provider or arXiv rate limit.
+- `402 Payment Required`: LLM provider reports exhausted credit/quota.
+- `500 Internal Server Error`: local configuration or persistence failure.
+- `502 Bad Gateway`: upstream provider, arXiv, ingest, vector, or LLM failure.
+- `503 Service Unavailable`: no usable LLM provider is currently configured or reachable.
+- `504 Gateway Timeout`: upstream provider or arXiv request timed out.
+
+## Source-Click Accessibility QA
+
+Use this checklist for browser QA after UI or citation/source changes:
+
+1. Sign in through Clerk and open a paper workspace.
+2. Ask a Q&A question that returns citations, or use editor selection actions that insert figures/citations.
+3. Tab to each citation/source control and confirm the visible focus ring is present.
+4. Activate each control with `Enter` or `Space` and confirm it reveals or navigates to the referenced source.
+5. Click the same controls with a mouse and verify the paper/editor focus does not jump unexpectedly.
+6. Repeat at a narrow viewport and confirm source controls remain visible, named, and non-overlapping.

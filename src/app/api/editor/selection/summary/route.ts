@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { summarizeSelection } from "@/server/editor/selection";
+import { summarizeSelection } from "@/server/editor";
 import {
   AUTH_REQUIRED_MESSAGE,
   isAuthenticationRequiredError,
   requireAuthenticatedUserId,
-} from "@/server/auth/user";
+} from "@/server/auth";
 import { parseSelectionRequest } from "../utils";
 
 function mapErrorStatus(error: unknown): number {
@@ -31,10 +31,9 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const userId = await requireAuthenticatedUserId();
-    const result = await summarizeSelection(payload.paperId, payload.selection, {
-      userId,
-    });
+    // The route still gates on auth — only the unused userId hand-off is gone.
+    await requireAuthenticatedUserId();
+    const result = await summarizeSelection(payload.paperId, payload.selection);
 
     return NextResponse.json(result, { status: 200 });
   } catch (error) {

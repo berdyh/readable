@@ -4,7 +4,8 @@ import {
   AUTH_REQUIRED_MESSAGE,
   isAuthenticationRequiredError,
   requireAuthenticatedUserId,
-} from "@/server/auth/user";
+} from "@/server/auth";
+import { InvalidChatPayloadError, parseChatMessage, toApiMessage } from "@/server/chat";
 import {
   ChatSessionOwnershipError,
   deleteChatSession,
@@ -12,118 +13,6 @@ import {
   listChatSessionsForPaper,
   saveChatMessages,
 } from "@/server/db";
-import type { ChatMessageRecord } from "@/server/db";
-
-interface ChatMessage {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  citations?: ChatCitation[];
-  reasoning?: string;
-  createdAt: number;
-}
-
-interface ChatCitation {
-  id?: string;
-  title?: string;
-  url?: string;
-  page?: number;
-  chunkId?: string;
-  quote?: string;
-}
-
-const CITATION_STRING_FIELDS = ["id", "title", "url", "chunkId", "quote"] as const;
-
-class InvalidChatPayloadError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "InvalidChatPayloadError";
-  }
-}
-
-function parseCitations(value: unknown): ChatCitation[] | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  if (!Array.isArray(value)) {
-    throw new InvalidChatPayloadError("Chat message citations must be an array.");
-  }
-
-  return value.map((entry) => {
-    if (!entry || typeof entry !== "object") {
-      throw new InvalidChatPayloadError("Chat message citation entries must be objects.");
-    }
-
-    const record = entry as Record<string, unknown>;
-    const citation: ChatCitation = {};
-    for (const field of CITATION_STRING_FIELDS) {
-      if (typeof record[field] === "string" && record[field].trim()) {
-        citation[field] = record[field].trim();
-      }
-    }
-    if (typeof record.page === "number" && Number.isFinite(record.page)) {
-      citation.page = record.page;
-    }
-
-    if (Object.keys(citation).length === 0) {
-      throw new InvalidChatPayloadError(
-        "Chat message citation entries must include citation metadata.",
-      );
-    }
-
-    return citation;
-  });
-}
-
-function parseChatMessage(value: unknown): ChatMessage {
-  if (!value || typeof value !== "object") {
-    throw new InvalidChatPayloadError("Chat message must be an object.");
-  }
-
-  const record = value as Record<string, unknown>;
-  const id = typeof record.id === "string" ? record.id.trim() : "";
-  const role = record.role;
-  const content = typeof record.content === "string" ? record.content.trim() : "";
-  const createdAt =
-    typeof record.createdAt === "number" && Number.isFinite(record.createdAt)
-      ? record.createdAt
-      : Date.now();
-
-  if (!id) {
-    throw new InvalidChatPayloadError("Chat message id is required.");
-  }
-  if (role !== "user" && role !== "assistant") {
-    throw new InvalidChatPayloadError('Chat message role must be "user" or "assistant".');
-  }
-  if (!content) {
-    throw new InvalidChatPayloadError("Chat message content is required.");
-  }
-
-  const message: ChatMessage = {
-    id,
-    role,
-    content,
-    createdAt,
-  };
-
-  message.citations = parseCitations(record.citations);
-  if (typeof record.reasoning === "string" && record.reasoning.trim()) {
-    message.reasoning = record.reasoning.trim();
-  }
-
-  return message;
-}
-
-function toApiMessage(message: ChatMessageRecord): ChatMessage {
-  return {
-    id: message.id,
-    role: message.role,
-    content: message.content,
-    citations: parseCitations(message.citations),
-    reasoning: message.reasoning,
-    createdAt: message.createdAt,
-  };
-}
 
 /**
  * Get chat history for a session or all sessions for a paper.

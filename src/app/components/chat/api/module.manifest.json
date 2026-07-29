@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "web.chat.api",
+  "parent": "web.chat",
+  "path": "src/app/components/chat/api",
+  "goal": "Talks to the chat and QA HTTP endpoints.",
+  "owns": ["src/app/components/chat/api"],
+  "interface": {
+    "entrypoint": "chatApi.ts",
+    "exports": [
+      "askQuestion",
+      "createChatSession",
+      "deleteChatSession",
+      "fetchChatHistory",
+      "saveChatMessage"
+    ]
+  },
+  "constraints": ["fetch to /api/chat/* and /api/qa"],
+  "checks": ["pnpm vitest run src/app/components/chat"],
+  "uses": [
+    {
+      "module": "server.qa",
+      "via": "@/server/qa/types"
+    }
+  ]
+}

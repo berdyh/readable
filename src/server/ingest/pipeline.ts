@@ -1,25 +1,24 @@
 import {
   buildPaperChunkUuid,
-  upsertCitations,
-  upsertFigures,
-  upsertPaper,
-  upsertPaperChunks,
+  replacePaperIngestData,
   type Citation,
   type Figure,
   type PaperChunk,
-} from '@/server/db';
-import { embedTexts, getEmbeddingEnvironment } from '@/server/vector/embeddings';
+  type PaperRecord,
+} from "@/server/db";
+import { embedTexts, getEmbeddingEnvironment } from "@/server/vector";
 import {
+  deletePaperChunkVectorsByPaper,
   ensureQdrantCollection,
   upsertPaperChunkVectors,
   type PaperChunkVectorPoint,
-} from '@/server/vector/qdrant';
+} from "@/server/vector";
 
-import { fetchAr5ivHtml, fetchArxivMetadata, fetchArxivPdf } from './arxiv';
-import { parseAr5ivHtml } from './ar5iv';
-import { getIngestEnvironment, type IngestEnvironmentConfig } from './config';
-import { runDeepSeekOcr } from './ocr';
-import { extractPdfText, shouldUseOcr } from './pdf';
+import { fetchAr5ivHtml, fetchArxivMetadata, fetchArxivPdf } from "./arxiv";
+import { parseAr5ivHtml } from "./ar5iv";
+import { buildAr5ivHtmlUrl, getIngestEnvironment, type IngestEnvironmentConfig } from "./config";
+import { runDeepSeekOcr } from "./ocr";
+import { extractPdfText, shouldUseOcr } from "./pdf";
 import type {
   HtmlParseResult,
   IngestRequest,
@@ -31,7 +30,7 @@ import type {
   PdfCaptionMatch,
   PdfExtractionResult,
   PdfVisualKind,
-} from './types';
+} from "./types";
 
 interface BuildChunkResult {
   chunks: PaperChunk[];
@@ -44,12 +43,9 @@ interface IngestOptions {
   skipVectorIndex?: boolean;
 }
 
-const MIN_TEXT_THRESHOLD_FOR_PDF =
-  Number(process.env.INGEST_PDF_TEXT_THRESHOLD ?? 1_000);
+const MIN_TEXT_THRESHOLD_FOR_PDF = Number(process.env.INGEST_PDF_TEXT_THRESHOLD ?? 1_000);
 
-function mergeEnvironment(
-  overrides?: Partial<IngestEnvironmentConfig>,
-): IngestEnvironmentConfig {
+function mergeEnvironment(overrides?: Partial<IngestEnvironmentConfig>): IngestEnvironmentConfig {
   if (!overrides) {
     return getIngestEnvironment();
   }
@@ -62,11 +58,11 @@ function mergeEnvironment(
 }
 
 function normalizeReferenceKey(kind: PdfVisualKind, raw: string): string {
-  return `${kind}:${raw.toLowerCase().replace(/[^a-z0-9]+/g, '')}`;
+  return `${kind}:${raw.toLowerCase().replace(/[^a-z0-9]+/g, "")}`;
 }
 
 function createReferenceRegex(kind: PdfVisualKind): RegExp {
-  if (kind === 'figure') {
+  if (kind === "figure") {
     return /(?:Figure|Fig\.?)\s+([A-Za-z0-9.\-]+)/gi;
   }
 
@@ -82,13 +78,13 @@ function collectFigureIdsFromParagraph(
   }
 
   const ids = new Set<string>();
-  const figureRegex = createReferenceRegex('figure');
-  const tableRegex = createReferenceRegex('table');
+  const figureRegex = createReferenceRegex("figure");
+  const tableRegex = createReferenceRegex("table");
 
   let match: RegExpExecArray | null;
 
   while ((match = figureRegex.exec(text)) !== null) {
-    const normalized = normalizeReferenceKey('figure', match[1]);
+    const normalized = normalizeReferenceKey("figure", match[1]);
     const id = lookup.get(normalized);
     if (id) {
       ids.add(id);
@@ -96,7 +92,7 @@ function collectFigureIdsFromParagraph(
   }
 
   while ((match = tableRegex.exec(text)) !== null) {
-    const normalized = normalizeReferenceKey('table', match[1]);
+    const normalized = normalizeReferenceKey("table", match[1]);
     const id = lookup.get(normalized);
     if (id) {
       ids.add(id);
@@ -106,9 +102,7 @@ function collectFigureIdsFromParagraph(
   return Array.from(ids);
 }
 
-function buildFigureLookup(
-  extraction: PdfExtractionResult | undefined,
-): Map<string, string> {
+function buildFigureLookup(extraction: PdfExtractionResult | undefined): Map<string, string> {
   const lookup = new Map<string, string>();
 
   if (!extraction) {
@@ -146,13 +140,13 @@ function collectNormalizedFigureKeys(figure: PaperFigure): string[] {
     const figureMatch = label.match(/(?:Figure|Fig\.?)\s*([A-Za-z0-9.\-]+)/i);
     const tableMatch = label.match(/Table\s*([A-Za-z0-9.\-]+)/i);
     if (figureMatch?.[1]) {
-      push('figure', figureMatch[1]);
+      push("figure", figureMatch[1]);
     }
     if (tableMatch?.[1]) {
-      push('table', tableMatch[1]);
+      push("table", tableMatch[1]);
     }
     if (!figureMatch && !tableMatch && /^[A-Za-z0-9.\-]+$/.test(label)) {
-      push('figure', label);
+      push("figure", label);
     }
   }
 
@@ -160,10 +154,10 @@ function collectNormalizedFigureKeys(figure: PaperFigure): string[] {
     const figureIdMatch = id.match(/(?:fig|figure)[^0-9a-z]*([0-9a-z.\-]+)/i);
     const tableIdMatch = id.match(/(?:tab|table)[^0-9a-z]*([0-9a-z.\-]+)/i);
     if (figureIdMatch?.[1]) {
-      push('figure', figureIdMatch[1]);
+      push("figure", figureIdMatch[1]);
     }
     if (tableIdMatch?.[1]) {
-      push('table', tableIdMatch[1]);
+      push("table", tableIdMatch[1]);
     }
   }
 
@@ -172,16 +166,14 @@ function collectNormalizedFigureKeys(figure: PaperFigure): string[] {
     const match = trimmed.match(/^(Figure|Fig\.?|Table)\s+([A-Za-z0-9.\-]+)/i);
     if (match?.[2]) {
       const prefix = match[1].toLowerCase();
-      push(prefix.startsWith('table') ? 'table' : 'figure', match[2]);
+      push(prefix.startsWith("table") ? "table" : "figure", match[2]);
     }
   }
 
   return keys;
 }
 
-function buildCaptionMatchIndex(
-  extraction: PdfExtractionResult | undefined,
-): {
+function buildCaptionMatchIndex(extraction: PdfExtractionResult | undefined): {
   matches: PdfCaptionMatch[];
   byId: Map<string, PdfCaptionMatch>;
   byNormalized: Map<string, PdfCaptionMatch>;
@@ -196,10 +188,7 @@ function buildCaptionMatchIndex(
     };
   }
 
-  const matches: PdfCaptionMatch[] = [
-    ...extraction.figures,
-    ...extraction.tables,
-  ];
+  const matches: PdfCaptionMatch[] = [...extraction.figures, ...extraction.tables];
 
   const byId = new Map<string, PdfCaptionMatch>();
   const byNormalized = new Map<string, PdfCaptionMatch>();
@@ -249,16 +238,10 @@ function enrichFiguresWithPdfData(
     }
 
     if (!match && figure.caption) {
-      const normalizedCaption = figure.caption
-        .replace(/\s+/g, ' ')
-        .trim()
-        .toLowerCase();
+      const normalizedCaption = figure.caption.replace(/\s+/g, " ").trim().toLowerCase();
 
       match = index.matches.find((candidate) => {
-        const candidateCaption = candidate.caption
-          .replace(/\s+/g, ' ')
-          .trim()
-          .toLowerCase();
+        const candidateCaption = candidate.caption.replace(/\s+/g, " ").trim().toLowerCase();
 
         return (
           candidateCaption.startsWith(normalizedCaption) ||
@@ -360,16 +343,11 @@ function selectFigures(
   return [];
 }
 
-function selectReferences(
-  teiResult: ParsedTeiResult | undefined,
-): PaperReference[] {
+function selectReferences(teiResult: ParsedTeiResult | undefined): PaperReference[] {
   return teiResult?.references ?? [];
 }
 
-function buildChunks(
-  paperId: string,
-  sections: PaperSection[],
-): BuildChunkResult {
+function buildChunks(paperId: string, sections: PaperSection[]): BuildChunkResult {
   const chunks: PaperChunk[] = [];
   const citationToChunks = new Map<string, Set<string>>();
   const figureToChunks = new Map<string, Set<string>>();
@@ -388,8 +366,7 @@ function buildChunks(
       });
 
       paragraph.citations.forEach((citationId) => {
-        const entry =
-          citationToChunks.get(citationId) ?? new Set<string>();
+        const entry = citationToChunks.get(citationId) ?? new Set<string>();
         entry.add(chunkId);
         citationToChunks.set(citationId, entry);
       });
@@ -449,10 +426,7 @@ function attachChunkRefsToFigures(
   paperId: string,
 ): PaperFigure[] {
   return figures.map((figure) => {
-    const combined = [
-      ...(figure.chunkIds ?? []),
-      ...(mapping.get(figure.id) ?? []),
-    ];
+    const combined = [...(figure.chunkIds ?? []), ...(mapping.get(figure.id) ?? [])];
     const normalized = normalizeChunkReferenceIds(paperId, combined);
 
     if (!normalized) {
@@ -475,10 +449,7 @@ function attachChunkRefsToReferences(
   paperId: string,
 ): PaperReference[] {
   return references.map((reference) => {
-    const combined = [
-      ...(reference.chunkIds ?? []),
-      ...(mapping.get(reference.id) ?? []),
-    ];
+    const combined = [...(reference.chunkIds ?? []), ...(mapping.get(reference.id) ?? [])];
     const normalized = normalizeChunkReferenceIds(paperId, combined);
 
     if (!normalized) {
@@ -506,14 +477,11 @@ function toFigureRecords(paperId: string, figures: PaperFigure[]): Figure[] {
   }));
 }
 
-function toCitationRecords(
-  paperId: string,
-  references: PaperReference[],
-): Citation[] {
+function toCitationRecords(paperId: string, references: PaperReference[]): Citation[] {
   return references.map((reference) => ({
     paperId,
     citationId: reference.id,
-    title: reference.title ?? '',
+    title: reference.title ?? "",
     authors: reference.authors,
     year: reference.year,
     source: reference.source,
@@ -524,6 +492,7 @@ function toCitationRecords(
 }
 
 async function indexChunkVectors(
+  paperId: string,
   chunks: PaperChunk[],
   chunkIds: string[],
 ): Promise<void> {
@@ -531,22 +500,23 @@ async function indexChunkVectors(
     return;
   }
 
-  // Probe the active embedding provider before doing any work. If its
-  // API key is missing (e.g. a fresh checkout that hasn't run
-  // `pnpm setup` yet), skip vector indexing — the paper stays
-  // retrievable via Postgres FTS and ingest doesn't fail.
+  // Resolve the active embedder once so collection naming and vector
+  // dimensions stay aligned. Auto mode falls back to local embeddings when
+  // the OpenRouter key is absent.
+  let embeddingEnv: ReturnType<typeof getEmbeddingEnvironment>;
   try {
-    getEmbeddingEnvironment();
+    embeddingEnv = getEmbeddingEnvironment();
   } catch (error) {
-    const reason = error instanceof Error ? error.message : 'unknown';
+    const reason = error instanceof Error ? error.message : "unknown";
     console.warn(`[ingest] Skipping vector index: ${reason}`);
     return;
   }
 
   await ensureQdrantCollection();
+  await deletePaperChunkVectorsByPaper(paperId);
 
   const texts = chunks.map((chunk) => chunk.text);
-  const vectors = await embedTexts(texts);
+  const vectors = await embedTexts(texts, { environment: embeddingEnv });
 
   const points: PaperChunkVectorPoint[] = chunks.map((chunk, index) => ({
     id: chunkIds[index],
@@ -601,13 +571,7 @@ export async function ingestPaper(
     throw new Error(`Unable to fetch arXiv metadata for ${arxivId}.`);
   }
 
-  const ar5ivImageBase = (() => {
-    try {
-      return new URL(environment.ar5ivBaseUrl).origin;
-    } catch {
-      return undefined;
-    }
-  })();
+  const ar5ivImageBase = buildAr5ivHtmlUrl(arxivId, environment);
 
   const htmlResult =
     htmlPayload && htmlPayload.length > 0
@@ -655,42 +619,27 @@ export async function ingestPaper(
 
   const pdfFallbackSections = buildSectionsFromPdf(
     fallbackExtraction,
-    ocrExtraction ? 'OCR' : 'PDF',
+    ocrExtraction ? "OCR" : "PDF",
     figureLookup,
   );
 
   const sections = selectSections(teiResult, htmlResult, pdfFallbackSections);
 
   if (!sections.length) {
-    throw new Error(
-      `Unable to extract meaningful sections for arXiv paper ${arxivId}.`,
-    );
+    throw new Error(`Unable to extract meaningful sections for arXiv paper ${arxivId}.`);
   }
 
-  const extractedFigures = selectFigures(
-    teiResult,
-    htmlResult,
-    fallbackExtraction,
-  );
+  const extractedFigures = selectFigures(teiResult, htmlResult, fallbackExtraction);
   const figures = enrichFiguresWithPdfData(extractedFigures, fallbackExtraction);
   const references = selectReferences(teiResult);
 
-  const { chunks, citationToChunks, figureToChunks } = buildChunks(
-    metadata.id,
-    sections,
-  );
+  const { chunks, citationToChunks, figureToChunks } = buildChunks(metadata.id, sections);
 
   if (!chunks.length) {
-    throw new Error(
-      `No chunkable paragraphs were produced for arXiv paper ${arxivId}.`,
-    );
+    throw new Error(`No chunkable paragraphs were produced for arXiv paper ${arxivId}.`);
   }
 
-  const figuresWithChunks = attachChunkRefsToFigures(
-    figures,
-    figureToChunks,
-    metadata.id,
-  );
+  const figuresWithChunks = attachChunkRefsToFigures(figures, figureToChunks, metadata.id);
   const referencesWithChunks = attachChunkRefsToReferences(
     references,
     citationToChunks,
@@ -699,7 +648,7 @@ export async function ingestPaper(
 
   const pages = fallbackExtraction?.pages.length;
 
-  await upsertPaper({
+  const paperRecord: PaperRecord = {
     paperId: metadata.id,
     title: metadata.title,
     abstract: metadata.abstract,
@@ -710,28 +659,32 @@ export async function ingestPaper(
     updatedAt: metadata.updatedAt,
     pdfUrl: metadata.pdfUrl,
     pages,
-  });
+  };
 
-  const chunkIds = await upsertPaperChunks(chunks);
+  await replacePaperIngestData(
+    {
+      paper: paperRecord,
+      chunks,
+      figures: toFigureRecords(metadata.id, figuresWithChunks),
+      citations: toCitationRecords(metadata.id, referencesWithChunks),
+    },
+    {
+      afterCommit: async ({ chunkIds: committedChunkIds }) => {
+        if (options?.skipVectorIndex) {
+          return;
+        }
 
-  if (figuresWithChunks.length) {
-    await upsertFigures(toFigureRecords(metadata.id, figuresWithChunks));
-  }
-
-  if (referencesWithChunks.length) {
-    await upsertCitations(toCitationRecords(metadata.id, referencesWithChunks));
-  }
-
-  if (!options?.skipVectorIndex) {
-    try {
-      await indexChunkVectors(chunks, chunkIds);
-    } catch (error) {
-      console.warn(
-        `[ingest] Vector indexing failed for ${arxivId}; chunks remain searchable via Postgres.`,
-        error,
-      );
-    }
-  }
+        try {
+          await indexChunkVectors(metadata.id, chunks, committedChunkIds);
+        } catch (error) {
+          console.warn(
+            `[ingest] Vector indexing failed for ${arxivId}; chunks remain searchable via Postgres.`,
+            error,
+          );
+        }
+      },
+    },
+  );
 
   return {
     paperId: metadata.id,

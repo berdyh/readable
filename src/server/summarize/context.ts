@@ -1,12 +1,9 @@
-import { fetchArxivMetadata } from '@/server/ingest/arxiv';
-import type { ArxivMetadata } from '@/server/ingest/types';
-import {
-  fetchPaperFiguresByPaperId,
-  fetchPaperChunksByPaperId,
-} from '@/server/db';
-import type { Figure, PaperChunk } from '@/server/db';
+import { fetchArxivMetadata } from "@/server/ingest";
+import type { ArxivMetadata } from "@/server/ingest/types";
+import { fetchPaperFiguresByPaperId, fetchPaperChunksByPaperId } from "@/server/db";
+import type { Figure, PaperChunk } from "@/server/db";
 
-import type { PageSpan } from './types';
+import type { PageSpan } from "./types";
 
 const MAX_PARAGRAPHS_PER_SECTION = 8;
 const MAX_PARAGRAPHS_PER_FIGURE = 4;
@@ -55,8 +52,8 @@ interface ChunkRecord {
 }
 
 function normalizeSectionKey(value: string | undefined): string {
-  const trimmed = (value ?? '').trim();
-  return trimmed || 'General Overview';
+  const trimmed = (value ?? "").trim();
+  return trimmed || "General Overview";
 }
 
 function normalizeParagraph(text: string | undefined): string | undefined {
@@ -64,7 +61,7 @@ function normalizeParagraph(text: string | undefined): string | undefined {
     return undefined;
   }
 
-  const normalized = text.replace(/\s+/g, ' ').trim();
+  const normalized = text.replace(/\s+/g, " ").trim();
   return normalized || undefined;
 }
 
@@ -86,9 +83,11 @@ function buildPageSpan(pages: Set<number>): PageSpan | undefined {
   };
 }
 
-function collectSections(
-  chunks: PaperChunk[],
-): { sections: SectionContext[]; chunkRecords: ChunkRecord[]; sectionKeyToId: Map<string, string> } {
+function collectSections(chunks: PaperChunk[]): {
+  sections: SectionContext[];
+  chunkRecords: ChunkRecord[];
+  sectionKeyToId: Map<string, string>;
+} {
   const sectionMap = new Map<string, SectionAccumulator>();
   const sectionOrder: string[] = [];
   const chunkRecords: ChunkRecord[] = [];
@@ -110,14 +109,11 @@ function collectSections(
     }
 
     const normalizedParagraph = normalizeParagraph(chunk.text);
-    if (
-      normalizedParagraph &&
-      accumulator.paragraphs.length < MAX_PARAGRAPHS_PER_SECTION
-    ) {
+    if (normalizedParagraph && accumulator.paragraphs.length < MAX_PARAGRAPHS_PER_SECTION) {
       accumulator.paragraphs.push(normalizedParagraph);
     }
 
-    if (typeof chunk.pageNumber === 'number') {
+    if (typeof chunk.pageNumber === "number") {
       accumulator.pages.add(chunk.pageNumber);
     }
 
@@ -195,7 +191,7 @@ function collectFigures(
           figure: {
             paperId: record.chunk.paperId,
             figureId,
-            caption: '',
+            caption: "",
           },
           sections: new Set<string>(),
           paragraphs: [],
@@ -205,10 +201,7 @@ function collectFigures(
 
       accumulator.sections.add(sectionId);
 
-      if (
-        normalizedParagraph &&
-        accumulator.paragraphs.length < MAX_PARAGRAPHS_PER_FIGURE
-      ) {
+      if (normalizedParagraph && accumulator.paragraphs.length < MAX_PARAGRAPHS_PER_FIGURE) {
         accumulator.paragraphs.push(normalizedParagraph);
       }
     }
@@ -236,37 +229,28 @@ function collectFigures(
     });
 }
 
-export async function loadPaperSummaryContext(
-  paperId: string,
-): Promise<PaperSummaryContext> {
+export async function loadPaperSummaryContext(paperId: string): Promise<PaperSummaryContext> {
   const [metadataResult, chunkResult, figureResult] = await Promise.allSettled([
     fetchArxivMetadata(paperId).catch((error) => {
-      console.warn(
-        `[summarize] Failed to fetch metadata for ${paperId}`,
-        error,
-      );
+      console.warn(`[summarize] Failed to fetch metadata for ${paperId}`, error);
       return undefined;
     }),
     fetchPaperChunksByPaperId(paperId),
     fetchPaperFiguresByPaperId(paperId),
   ]);
 
-  if (chunkResult.status !== 'fulfilled') {
-    throw chunkResult.reason ?? new Error('Failed to load paper chunks.');
+  if (chunkResult.status !== "fulfilled") {
+    throw chunkResult.reason ?? new Error("Failed to load paper chunks.");
   }
 
   const chunks = chunkResult.value;
 
   if (!chunks.length) {
-    throw new Error(
-      `No content found for paper ${paperId}. Ingest the paper before summarizing.`,
-    );
+    throw new Error(`No content found for paper ${paperId}. Ingest the paper before summarizing.`);
   }
 
-  const metadata =
-    metadataResult.status === 'fulfilled' ? metadataResult.value : undefined;
-  const figures =
-    figureResult.status === 'fulfilled' ? figureResult.value : [];
+  const metadata = metadataResult.status === "fulfilled" ? metadataResult.value : undefined;
+  const figures = figureResult.status === "fulfilled" ? figureResult.value : [];
 
   const { sections, chunkRecords, sectionKeyToId } = collectSections(chunks);
   const figureContexts = collectFigures(figures, chunkRecords, sectionKeyToId);

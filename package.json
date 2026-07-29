@@ -8,15 +8,20 @@
     "start": "next start",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
+    "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
-    "prepare": "simple-git-hooks",
+    "prepare": "node scripts/prepare.mjs",
     "lint-staged": "lint-staged",
     "test:stores": "tsx scripts/test-stores.ts",
+    "test:api": "tsx scripts/test-api-endpoints.ts",
     "db:migrate": "tsx scripts/db-migrate.ts",
     "embeddings:probe": "tsx scripts/probe-embedding.ts",
-    "setup": "tsx scripts/setup.ts"
+    "setup": "tsx scripts/setup.ts",
+    "verify": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm test && pnpm modules:check",
+    "modules:generate": "node scripts/modules/generate-agents.mjs",
+    "modules:check": "node scripts/modules/check.mjs && node scripts/modules/generate-agents.mjs --check"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.4.1",
@@ -61,6 +66,9 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^7.0.0",
+    "@testing-library/react": "^16.3.2",
     "@types/node": "^20",
     "@types/pdfjs-dist": "^2.10.378",
     "@types/pg": "^8.20.0",
@@ -68,6 +76,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.0.0",
+    "jsdom": "^30.0.1",
     "lint-staged": "^15.2.10",
     "prettier": "^3.3.3",
     "simple-git-hooks": "^2.11.1",
@@ -77,11 +86,16 @@
     "vitest": "^2.1.4"
   },
   "lint-staged": {
-    "*.{ts,tsx,js,jsx}": [
+    "*.{ts,tsx,js,jsx,mjs}": [
+      "prettier --write",
       "eslint --fix"
     ],
     "*.{css,md,mdx,json,yml,yaml}": [
       "prettier --write"
+    ],
+    "**/module.{manifest.json,narrative.md}": [
+      null,
+      null
     ]
   },
   "simple-git-hooks": {

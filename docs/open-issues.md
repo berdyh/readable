@@ -1,7 +1,6 @@
 # Open issues and next steps
 
-Working state as of **2026-07-29**, `main`. `pnpm verify` green: 262 tests on `main`
-(292 with PR #21 merged), 0 lint errors, 0 lint warnings. `pnpm test:api -- --live` is
+Working state as of **2026-07-29**, `main`. `pnpm verify` green: 304 tests on `main`, 0 lint errors, 0 lint warnings. `pnpm test:api -- --live` is
 **5/5** — health, qa, summarize, chat session, arXiv ingest.
 
 This file is a **living checklist, not a record** — when an item is done, delete it rather
@@ -75,20 +74,31 @@ is worth building.
 
 ## Verification gaps
 
-### There is still no browser-level check of the six chat flows
+### Two of the six chat flows are still unverified
 
-`pnpm test:api -- --live` now covers the authenticated **API** surface end to end, and it runs
-unattended (it mints its own Clerk session token — see `scripts/lib/clerk-test-session.ts`).
+`pnpm test:api -- --live` covers the authenticated **API** surface end to end and runs
+unattended (it mints its own Clerk session token — `scripts/lib/clerk-test-session.ts`).
+The jsdom project now covers the UI half of four flows:
 
-What it does not cover is anything that only exists once React runs:
+- slash-command dispatch — `commands.test.ts`
+- citation click → block scroll/reveal — `useBlockNavigation.test.tsx`
+- chat tab deletion + confirmation — `ChatTabStrip.test.tsx`
+- insert-answer into the document — exercised through the navigate/intent contracts
 
-- citation click → block scroll/reveal
-- insert-answer into the document
-- chat tab deletion and its confirmation step
-- session persistence across a reload
+**Writing the first of those found a real bug**: the editor replied to a navigate
+request inline, inside the synchronous dispatch, so the caller always subscribed too
+late and a successfully revealed citation timed out into the red "unavailable" state.
+Fixed by deferring the reply to a microtask. Worth remembering as evidence that this
+seam needs rendered tests, not just review — both halves were individually correct and
+only the ordering between them was wrong.
 
-The jsdom vitest project can now render components, so these are reachable as component tests
-rather than needing a full browser.
+Still unverified:
+
+- **sending and receiving a message**
+- **session persistence across a reload**
+
+Both need meaningful fetch orchestration rather than a render, so they are better done
+alongside the ingestion work than bolted on separately.
 
 ## Smaller follow-ups
 

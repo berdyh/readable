@@ -1,50 +1,34 @@
 # Open issues and next steps
 
-Working state as of **2026-07-29**, branch `feat/chat-panel-resizer` (36 commits ahead of
-`main`, nothing pushed, `pnpm verify` green: 29 test files, 230 tests, 0 lint errors).
+Working state as of **2026-07-29**, branch `feat/chat-panel-resizer`. `pnpm verify` green:
+31 test files, 255 tests, 0 lint errors, 0 lint warnings.
 
 This file exists so the state of the work survives between sessions. It is a **living
 checklist, not a record** — when an item is done, delete it from here rather than marking
 it ✅, and put the durable explanation in the doc that owns that subject. Anything frozen
 belongs in [`archive/`](./archive/).
 
-## Blocked on a decision
-
-Two threads are waiting on input and should not be started before it arrives.
-
-### 1. Module/submodule pass — waiting on the humora v2 structure
-
-The intent is to divide this repo into clear modules and submodules following the pattern
-used in the humora v2 monorepo. That pattern is not recorded anywhere on this machine: the
-gstack project state survives under `~/.gstack/projects/humora_v2.uz-mono-humora-v2.0/`,
-but the checkout at `/home/shoh/Projects/gitlab/humora-v2.uz/mono-humora-v2.0/` is gone.
-
-What is needed before the pass can start:
-
-- Is it a real monorepo with workspace packages (`packages/*` + a workspace file), or a
-  single app with enforced internal module boundaries?
-- How are boundaries **enforced** — ESLint `no-restricted-imports`, per-module `index.ts`
-  public surfaces, path aliases, or convention alone?
-
-Why it matters here: `src/app/components/chat/` already has a public surface
-(`chat/index.ts`) and today exactly one outside consumer imports through it. **Nothing
-mechanically prevents a deep import** into `chat/model/` or `chat/hooks/` — the boundary
-holds by discipline. The same is true of `src/server/*`. Whatever humora does to enforce
-this is the thing to copy.
-
-### 2. Product-vision docs — deliberately not written
-
-No roadmap, product-direction, or vision document has been written, and none should be
-invented from the code. This is owned by the user and comes after the module pass.
-
 ## Verification gaps
 
-### The authenticated surface has never been exercised since the restructure
+### The authenticated surface has never been exercised
 
-The largest residual risk in the tree. The chat sidecar restructure was verified by
-typecheck, lint, unit tests, code review, and live browser checks of the **signed-out**
-sidecar, resizer geometry, both themes, mobile reflow, and the paper view. Everything
-behind Clerk sign-in rests on types and review alone:
+Still the largest residual risk in the tree, and it is now a **blocked** gap rather than an
+unattempted one.
+
+A smoke pass was attempted on 2026-07-29 against a local dev server with Postgres and
+Qdrant up. What it established:
+
+- The anonymous surface is verified. All 12 offline route checks pass, plus live
+  `GET /api/health` and `POST /api/editor/ingest/arxiv` against real arXiv + Qdrant.
+- The auth gate itself demonstrably rejects: `/api/qa`, `/api/summarize`, and
+  `/api/chat/session` all returned 401 to a non-session bearer.
+
+What it did **not** establish: anything behind sign-in. The token supplied was a Clerk
+**API key** (`ak_…`), and `requireAuthenticatedUserId()` resolves a Clerk _session_, not a
+bearer API key — so every authenticated check returned the same 401 an anonymous caller
+gets.
+
+These six flows remain unverified since the chat sidecar restructure:
 
 - sending and receiving a message
 - session persistence across a reload
@@ -53,92 +37,85 @@ behind Clerk sign-in rests on types and review alone:
 - citation click → block scroll/reveal
 - insert-answer into the document
 
-The harness already exists — the bearer-token recipe in `README.md` and
-[`API_TESTING.md`](./API_TESTING.md) — so this is a coverage gap, not a tooling gap. One
-signed-in smoke pass covers all six.
+**What would unblock it:** a real session JWT, not an API key. From a signed-in browser,
+`await window.Clerk.session.getToken()` in the console yields one. Then:
 
-### There are no rendering tests
+```bash
+docker compose up -d && pnpm db:migrate
+PORT=3100 pnpm dev
+TEST_BASE_URL=http://localhost:3100 \
+TEST_AUTH_TOKEN=<session-jwt> \
+TEST_LIVE_PAPER_ID=1706.03762v7 \
+pnpm test:api -- --live
+```
 
-`vitest.config.ts` runs in the `node` environment, so component tests exercise pure
-helpers only (`commands`, `parsers`, `blockInteractionUtils`, `blockNavigation`,
-`chat/model/types`). Nothing renders a component. This is a deliberate constraint — it is
-why the citation→block resolver was kept pure and testable — but it means any bug that
-only appears once React runs is invisible to `pnpm verify`.
+Note `TEST_BASE_URL`, not `API_BASE_URL` — passing the wrong one fails as twelve confusing
+404s. And note the port: this worktree's directory is named `main`, so Docker Compose
+derives the project name `main` and can collide with other projects on this machine. One
+was already holding port 3000.
 
 ## Structural
 
-### Oversized files, and the lint findings hiding in them
+### The React Compiler is silently blind inside large components
 
-Two `react-hooks/set-state-in-effect` errors surfaced while `ChatIntegration.tsx` (935
-lines) was being split. They were **not introduced by the split**: the rule had never
-fired because the file was too large for the compiler to analyze. A clean lint run over a
-large component is weak evidence.
+The 2026-07-28 note guessed at this. It is now measured. The same textbook violation —
+`useEffect(() => { setState(true); }, [])` — was injected into two components:
 
-The largest remaining non-test files, most likely to be hiding the same class of finding:
+| File                            | Lines | `react-hooks/set-state-in-effect` |
+| ------------------------------- | ----- | --------------------------------- |
+| `chat/sidecar/ChatAuthGate.tsx` | 58    | **fires**                         |
+| `block-editor/Block.tsx`        | 486   | **silent**                        |
 
-| Lines | File                                                           |
-| ----- | -------------------------------------------------------------- |
-| 744   | `src/server/llm/providers/local-coding-agent.ts`               |
-| 735   | `src/server/db/papers.ts`                                      |
-| 699   | `src/server/ingest/pipeline.ts`                                |
-| 688   | `src/server/summarize/index.ts`                                |
-| 482   | `src/app/components/block-editor/Block.tsx`                    |
-| 477   | `src/app/components/block-editor/parsers.ts`                   |
-| 451   | `src/app/components/workspace/pdf/PdfViewerWithHighlights.tsx` |
-| 442   | `src/server/editor/selection.ts`                               |
+All 17 `react-hooks` rules are configured and `set-state-in-effect` is at error level. The
+compiler bails out on the larger file and reports nothing — `react-hooks/unsupported-syntax`
+does not fire either, so the bailout leaves no trace at all.
 
-Budget for fixing what a split exposes rather than treating it as a regression the split
-caused.
+**A clean lint run over any of these files is worthless.** That is the real reason to split
+them, and it is a much stronger reason than tidiness:
 
-### Module boundaries are unenforced
+| Lines | File                                                           | React rules apply?               |
+| ----- | -------------------------------------------------------------- | -------------------------------- |
+| 744   | `src/server/llm/providers/local-coding-agent.ts`               | no                               |
+| 735   | `src/server/db/papers.ts`                                      | no                               |
+| 699   | `src/server/ingest/pipeline.ts`                                | no                               |
+| 688   | `src/server/summarize/index.ts`                                | no                               |
+| 486   | `src/app/components/block-editor/Block.tsx`                    | **yes — confirmed blind**        |
+| 470   | `src/app/components/block-editor/parsers.ts`                   | no                               |
+| 451   | `src/app/components/workspace/pdf/PdfViewerWithHighlights.tsx` | **yes — untested, likely blind** |
+| 442   | `src/server/editor/selection.ts`                               | no                               |
 
-See [Blocked on a decision](#1-modulesubmodule-pass--waiting-on-the-humora-v2-structure).
-`chat/index.ts` and the `src/server/*` module surfaces are conventions, not rules.
+Start with the two `.tsx` files: those are where splitting buys correctness rather than
+readability. Re-run the probe after each split to confirm the rule has started firing, and
+budget for fixing whatever it then reports. The four server files are a readability job and
+can wait — no compiler analysis is being lost there.
 
-## Code hygiene
-
-- **18 ESLint warnings, 0 errors**, in 10 files — 14 `no-unused-vars` (5 alone in
-  `block-editor/parsers.ts`) and 4 `no-img-element` (`FigureBlock.tsx`,
-  `workspace/pdf/FigureCallouts.tsx`). All pre-existing; none introduced by the 2026-07-28
-  wave.
-- **Prettier does not run on TypeScript.** `lint-staged` runs ESLint on `.ts/.tsx` but
-  Prettier only on css/md/json/yml, so import quoting is split across the codebase (34
-  files single-quoted, 88 double-quoted). Match the file you are editing. Fixing this
-  properly means one formatting-only commit plus a `lint-staged` change — keep it separate
-  from behavior changes.
-- **`src/app/test-block-editor/`** is a dev-only scratch page that ships with the
-  production app.
-- **`.agents/`** is an empty tracked-looking directory at the repo root.
-
-## Design gaps
-
-Found during the design pass on 2026-07-28 and deferred because each is a global decision,
-not a local fix. Full context in [`editor-architecture.md`](./editor-architecture.md).
-
-- The reading column runs to a ~90-character measure. Tightening it needs a `max-w-[70ch]`
-  prose wrapper that figure and table blocks opt out of, so it cannot be a blanket change.
-- Controls are 32px tall (`h-8`) app-wide, below the 44px touch-target guidance. Changing
-  it is a whole-app scale decision.
-- The fixed account chip in the root `layout.tsx` floats over content on **every** route.
-  The reader compensates with padding; the shell itself was not restructured.
+A cheaper partial win worth trying first: find out whether the compiler's bailout can be
+made to report itself. A visible bailout turns "we don't know" into "we know this file is
+unchecked", which is most of the value with none of the refactor.
 
 ## Smaller follow-ups
 
-- **Quote-only citations are dropped silently.** `fromWireMessage()` discards a persisted
-  citation carrying neither a chunk id nor a title/url, because the UI has no way to render
-  one. Correct today — it prevents a blank source row — but there is no telemetry or
-  warning if it ever starts happening in volume.
-- **`prompts.json` still contains `persona_prefix` keys that nothing reads.**
-  `getSystemPrompt()` ignores them, so setting one produces silence rather than an error.
-  See [`prompts-analysis.md`](./prompts-analysis.md).
-- **Auth is opt-in per handler.** There is no `middleware.ts`; a new route under
-  `src/app/api/` is public until its handler calls `requireAuthenticatedUserId()`. Nothing
-  enforces this — worth a lint rule or a route test.
-- **36 commits are unpushed** on `feat/chat-panel-resizer`, with no PR opened.
+- **Selection summaries do not feed the persona graph.** `summarizeSelection()` used to
+  accept a `userId` and ignore it. The dead parameter is gone, but the underlying gap is
+  real: `qa` and `summarize` both call `recordPersonaSignals()` and the selection path does
+  not. Wiring it up needs the selection summary schema to return `concepts` first, so it is
+  a feature rather than a fix.
+- **`docs/editor-architecture.md`** still describes the removed `EditorWorkspace`/Tiptap-ribbon
+  tree. Its "Canonical helper locations" section is current; the component tree and state
+  diagram are historical.
+- **`docs/` is in `.gitignore`** even though files under it are tracked. New files added
+  there are silently untracked — `git add -f` them or fix the ignore rule.
+
+## Blocked on a decision
+
+### Product-vision docs — deliberately not written
+
+No roadmap, product-direction, or vision document has been written, and none should be
+invented from the code. This is owned by the user.
 
 ## Sequenced plan
 
-1. Hand in the humora v2 structure (blocks 2 and 3).
-2. Work through the stale issues and bugs above.
-3. Run the module/submodule pass, adopting humora's boundary-enforcement mechanism.
-4. Write the product-vision docs, and work from them.
+1. Get a Clerk session JWT and run the signed-in smoke pass.
+2. Split `Block.tsx` and `PdfViewerWithHighlights.tsx`, re-probing after each, and fix what
+   the compiler then reports.
+3. Write the product-vision docs, and work from them.

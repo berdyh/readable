@@ -48,3 +48,6 @@ LOG.md
 # clerk configuration (can include secrets)
 /.clerk/
 .gstack/
+
+# graphify knowledge-graph output (regenerable from the repo)
+/graphify-out/

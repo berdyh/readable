@@ -19,7 +19,9 @@
     "db:migrate": "tsx scripts/db-migrate.ts",
     "embeddings:probe": "tsx scripts/probe-embedding.ts",
     "setup": "tsx scripts/setup.ts",
-    "verify": "pnpm lint && pnpm typecheck && pnpm test"
+    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm modules:check",
+    "modules:generate": "node scripts/modules/generate-agents.mjs",
+    "modules:check": "node scripts/modules/check.mjs && node scripts/modules/generate-agents.mjs --check"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.4.1",

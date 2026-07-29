@@ -411,6 +411,8 @@ export async function generateText(
     provider?: LlmProvider;
     taskName?: string;
     config?: LlmConfig;
+    /** Pins `coding-agent` requests to one local CLI. See `generateJson`. */
+    localAgent?: string;
   },
 ): Promise<string> {
   const primaryProvider = options?.provider ?? getDefaultProvider();
@@ -420,6 +422,7 @@ export async function generateText(
     const config: LlmConfig = {
       provider: primaryProvider,
       ...options?.config,
+      ...(options?.localAgent ? { localAgent: options.localAgent } : {}),
     };
     const llm = createLlmProvider(config, options?.taskName);
     return llm.generateText(request);
@@ -428,6 +431,8 @@ export async function generateText(
   return routeRequest((llm) => llm.generateText(request), {
     primaryProvider,
     taskType: options?.taskName,
-    baseConfig: options?.config,
+    baseConfig: options?.localAgent
+      ? { ...options.config, provider: primaryProvider, localAgent: options.localAgent }
+      : options?.config,
   });
 }

@@ -53,6 +53,7 @@ export type FailoverReason =
   | "model_not_found" // 404 — provider doesn't have this model
   | "session_expired" // OAuth token has expired and can be refreshed
   | "empty_response" // 200 OK but no content
+  | "not_installed" // local CLI agent binary is missing or not executable
   | "no_error_details" // non-OK with no body or unparseable body
   | "unclassified" // we got something but couldn't classify it
   | "unknown"; // anything else (network error, abort, etc.)

@@ -98,6 +98,8 @@ describe("failover policy gates", () => {
     expect(shouldAdvanceFallback("auth")).toBe(true);
     expect(shouldAdvanceFallback("model_not_found")).toBe(true);
     expect(shouldAdvanceFallback("unknown")).toBe(true);
+    // A missing binary still advances: the next candidate is a different CLI.
+    expect(shouldAdvanceFallback("not_installed")).toBe(true);
   });
 
   it("shouldAllowCooldownProbeForReason permits transient bumps only", () => {
@@ -111,6 +113,35 @@ describe("failover policy gates", () => {
     expect(shouldAllowCooldownProbeForReason("billing")).toBe(false);
     expect(shouldAllowCooldownProbeForReason("format")).toBe(false);
     expect(shouldAllowCooldownProbeForReason("model_not_found")).toBe(false);
+    // Installing a CLI is a human action; probing on a timer never helps.
+    expect(shouldAllowCooldownProbeForReason("not_installed")).toBe(false);
+  });
+});
+
+describe("local CLI agent failures", () => {
+  it("classifies a missing binary as not_installed", () => {
+    expect(classifyMessage("spawn /usr/bin/codex ENOENT")).toBe("not_installed");
+    expect(classifyMessage("codex: command not found")).toBe("not_installed");
+    expect(classifyMessage("Error: no such file or directory")).toBe("not_installed");
+  });
+
+  it("classifies a signed-out CLI as auth_permanent so the ladder fails fast", () => {
+    // Claude Code's real stderr when $CLAUDE_CONFIG_DIR has no credentials.
+    expect(classifyMessage("Not logged in · Please run /login")).toBe("auth_permanent");
+    // Codex's real failure once its auth.json is unreachable.
+    expect(classifyMessage("failed to connect to websocket: HTTP error: 401 Unauthorized")).toBe(
+      "auth_permanent",
+    );
+    expect(shouldAdvanceFallback(classifyMessage("Not logged in") ?? "unknown")).toBe(false);
+  });
+
+  it("classifies a rejected CLI flag as format rather than unknown", () => {
+    // The regression that started this: `codex exec --ask-for-approval never`
+    // exits 2 with this on stderr, and used to classify as `unknown`, which
+    // advanced the ladder and reported "All providers exhausted (unknown)".
+    expect(classifyMessage("error: unexpected argument '--ask-for-approval' found")).toBe("format");
+    expect(classifyMessage("error: unrecognized option '--nope'")).toBe("format");
+    expect(classifyFailoverSignal({ message: "error: unknown flag: --tools" })).toBe("format");
   });
 });
 

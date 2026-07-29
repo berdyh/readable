@@ -17,6 +17,19 @@ const PERMANENT_AUTH_HINTS = [
   "authentication failed",
   "unauthorized",
   "permission_denied",
+  // Local CLI agents report a missing/expired subscription login as prose on
+  // stderr rather than as an HTTP status. Claude Code prints
+  // "Not logged in · Please run /login"; Codex prints a login hint alongside
+  // its 401. Without these the whole class of "the CLI is installed but you
+  // never signed in" failures classified as `unknown` and burned the ladder.
+  "not logged in",
+  "not authenticated",
+  "please run /login",
+  "please run `codex login`",
+  "run codex login",
+  "codex login",
+  "claude login",
+  "no credentials found",
 ];
 
 const RATE_LIMIT_HINTS = [
@@ -57,6 +70,30 @@ const FORMAT_HINTS = [
   "json_schema",
   "json schema",
   "response_format",
+  // A local CLI rejecting our argv is the same class of bug as a malformed
+  // request body: *we* built it wrong, and no amount of retrying fixes it.
+  // Failing fast is what surfaces it — this is exactly how the stale
+  // `--ask-for-approval never` flag stayed invisible behind "(unknown)".
+  "unexpected argument",
+  "unrecognized option",
+  "unrecognized argument",
+  "unknown option",
+  "unknown flag",
+];
+
+/**
+ * The agent's binary is not there at all. Distinct from `auth` because no
+ * credential change will help, and distinct from `format` because a
+ * *different* agent may still be installed — so the ladder should advance
+ * once and then stop probing this one.
+ */
+const NOT_INSTALLED_HINTS = [
+  "enoent",
+  "command not found",
+  "no such file or directory",
+  "is not recognized as an internal or external command",
+  "eaccess",
+  "permission denied (os error 13)",
 ];
 
 const TIMEOUT_HINTS = [
@@ -166,6 +203,20 @@ export function classifyHttpStatus(status: number, body?: string): FailoverReaso
 }
 
 /**
+ * Does this text carry a permanent-auth marker, regardless of what else is in
+ * it?
+ *
+ * `classifyMessage` is ordered for HTTP bodies, which carry one error. A local
+ * CLI's stderr is a transcript: Codex's 401 arrives wrapped in five
+ * `Reconnecting…` lines, so the `try again` overloaded-hint matches first and
+ * a dead credential reads as a transient blip. Callers holding multi-line
+ * process output should ask this first.
+ */
+export function hasPermanentAuthHint(text: unknown): boolean {
+  return anyHint(lowerSafe(text), PERMANENT_AUTH_HINTS);
+}
+
+/**
  * Classify based on a free-text error message (no status). Useful for
  * SDK-level errors where there's no HTTP status (`fetch failed`,
  * `aborted`, etc.). Returns null if nothing matches.
@@ -174,6 +225,9 @@ export function classifyMessage(message: unknown): FailoverReason | null {
   const lower = lowerSafe(message);
   if (!lower) return null;
 
+  // Checked first: a missing binary is unambiguous, and the same message
+  // ("spawn codex ENOENT") carries no other signal to confuse it with.
+  if (anyHint(lower, NOT_INSTALLED_HINTS)) return "not_installed";
   if (anyHint(lower, RATE_LIMIT_HINTS)) return "rate_limit";
   if (anyHint(lower, BILLING_HINTS)) return "billing";
   if (anyHint(lower, OVERLOADED_HINTS)) return "overloaded";
@@ -241,6 +295,12 @@ export function shouldAdvanceFallback(reason: FailoverReason): boolean {
       // These won't be helped by a different provider — the request shape
       // itself is wrong, or the credential is permanently broken.
       return false;
+    case "not_installed":
+      // A missing binary says nothing about the *next* candidate, which may
+      // be a different CLI entirely. Advance — but see
+      // `shouldAllowCooldownProbeForReason`, which refuses to keep probing
+      // the absent one.
+      return true;
     default:
       return true;
   }
@@ -263,6 +323,11 @@ export function shouldAllowCooldownProbeForReason(reason: FailoverReason | undef
     case "unclassified":
     case "empty_response":
       return true;
+    case "not_installed":
+      // Installing a CLI is a human action, not something that resolves on a
+      // timer. Probing burns a process spawn per request to relearn a fact
+      // that has not changed.
+      return false;
     default:
       return false;
   }

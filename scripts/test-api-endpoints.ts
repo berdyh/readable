@@ -10,9 +10,23 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+import { config as loadEnv } from "dotenv";
+
+import { mintClerkSessionToken } from "./lib/clerk-test-session";
+
+// Only Next.js auto-loads .env.local; standalone tsx scripts do not. Without
+// this, CLERK_SECRET_KEY is absent and the live pass cannot mint a token —
+// which reads as a Clerk problem rather than a missing-env one.
+loadEnv({ path: ".env.local" });
+loadEnv();
+
 const BASE_URL = process.env.TEST_BASE_URL || "http://localhost:3000";
 const LIVE_MODE = process.argv.includes("--live");
-const AUTH_TOKEN = process.env.TEST_AUTH_TOKEN;
+
+// Resolved in liveChecks(): an explicit TEST_AUTH_TOKEN if given, otherwise one
+// minted from CLERK_SECRET_KEY. Session tokens expire in ~60s, so this is
+// deliberately fetched at the last moment rather than at module load.
+let authToken = process.env.TEST_AUTH_TOKEN;
 
 interface TestCase {
   name: string;
@@ -31,7 +45,7 @@ interface TestResult extends TestCase {
 }
 
 function authHeaders(): HeadersInit {
-  return AUTH_TOKEN ? { Authorization: `Bearer ${AUTH_TOKEN}` } : {};
+  return authToken ? { Authorization: `Bearer ${authToken}` } : {};
 }
 
 async function buildRequest(test: TestCase): Promise<RequestInit> {
@@ -193,8 +207,25 @@ async function liveChecks(): Promise<TestCase[]> {
   const paperId = process.env.TEST_LIVE_PAPER_ID;
   const arxivId = process.env.TEST_LIVE_ARXIV_ID ?? "2401.00001";
 
-  if (!AUTH_TOKEN) {
-    throw new Error("TEST_AUTH_TOKEN is required for --live Clerk-protected checks.");
+  if (!authToken) {
+    // No token supplied — mint one. This is what makes the signed-in pass
+    // runnable unattended: previously it needed a human to copy a JWT out of a
+    // browser console within its 60-second lifetime.
+    try {
+      const minted = await mintClerkSessionToken();
+      authToken = minted.token;
+      console.log(
+        `Minted a Clerk session token for ${minted.userId}` +
+          `${minted.createdUser ? " (test user created)" : ""}.\n`,
+      );
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `Could not obtain a Clerk session token for --live checks.\n  ${reason}\n` +
+          "  Set TEST_AUTH_TOKEN to a session JWT, or CLERK_SECRET_KEY to a development key so one can be minted.\n" +
+          "  Note an API key (ak_…) or an M2M token will not work here — auth() only populates userId from a session token.",
+      );
+    }
   }
   if (!paperId) {
     throw new Error("TEST_LIVE_PAPER_ID is required for --live paper-scoped checks.");

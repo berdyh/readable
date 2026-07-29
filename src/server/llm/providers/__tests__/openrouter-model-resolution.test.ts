@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { getModel } from "@/server/llm-config";
+
 import { OpenRouterProvider } from "../openrouter";
 
 const ENV_KEYS = [
@@ -89,9 +91,12 @@ describe("OpenRouterProvider model resolution", () => {
 
     const provider = new OpenRouterProvider({ provider: "openrouter" }, "qa");
 
-    // From models.json — task: qa, provider: openrouter.
+    // Asserted against models.json rather than a literal slug. OpenRouter
+    // retires its :free ids without notice — all three configured here were
+    // 404ing by 2026-07-29 — and this test is meant to prove the catalog is
+    // consulted, not to pin one vendor's model name.
     expect((provider as unknown as { config: { model: string } }).config.model).toBe(
-      "meta-llama/llama-3.3-70b-instruct:free",
+      getModel("openrouter", "qa"),
     );
   });
 

@@ -91,37 +91,38 @@
   },
   "openrouter": {
     "paper_summary": {
-      "model": "deepseek/deepseek-chat-v3.1:free",
-      "rationale": "Free tier on OpenRouter. DeepSeek v3.1 handles long context well; ideal for full-paper summarization without cost.",
+      "model": "nvidia/nemotron-3-super-120b-a12b:free",
+      "rationale": "Free tier on OpenRouter, 262k context — enough to summarise a full paper in one pass. Replaces deepseek/deepseek-chat-v3.1:free, which OpenRouter retired (the paid slug survives; the :free one 404s).",
       "pricing": {
         "input_per_1m": 0,
         "output_per_1m": 0
       }
     },
     "selection_summary": {
-      "model": "qwen/qwen3-235b-a22b:free",
-      "rationale": "Free tier; Qwen3 235B handles short inline summaries with strong fluency.",
+      "model": "nvidia/nemotron-3-nano-30b-a3b:free",
+      "rationale": "Free tier; a selection summary is short and bounded, so the smallest capable model is the right trade. Replaces qwen/qwen3-235b-a22b:free, retired.",
       "pricing": {
         "input_per_1m": 0,
         "output_per_1m": 0
       }
     },
     "qa": {
-      "model": "meta-llama/llama-3.3-70b-instruct:free",
-      "rationale": "Free tier; Llama 3.3 70B is the strongest free reasoning model on OpenRouter for grounded Q&A.",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "rationale": "Free tier and the strongest free reasoning model currently on OpenRouter, with 1M context. Q&A is the task where grounding quality matters most. Replaces meta-llama/llama-3.3-70b-instruct:free, retired.",
       "pricing": {
         "input_per_1m": 0,
         "output_per_1m": 0
       }
     },
     "default": {
-      "model": "meta-llama/llama-3.3-70b-instruct:free",
+      "model": "nvidia/nemotron-3-super-120b-a12b:free",
       "rationale": "Default fallback - free tier on OpenRouter."
     }
   },
   "notes": {
     "selection_strategy": "Models chosen based on cost-effectiveness and task-specific requirements. Summarization tasks prioritize cost while Q&A prioritizes reasoning quality.",
     "customization": "Override specific models by setting environment variables: {PROVIDER}_{TASK}_MODEL (e.g., OPENAI_QA_MODEL=gpt-4o)",
-    "update_date": "2024-12-19"
+    "update_date": "2024-12-19",
+    "openrouter_free_tier": "OpenRouter rotates its :free slugs and retires them without notice — all three models configured here before 2026-07-29 returned 404. If summarize or qa start failing with a 404 naming a paid slug, re-check https://openrouter.ai/api/v1/models for the current :free ids rather than assuming a code fault."
   }
 }

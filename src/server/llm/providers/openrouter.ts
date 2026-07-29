@@ -1,5 +1,5 @@
 import type { LlmProvider, LlmProviderInterface, LlmRequest, LlmConfig } from "../types";
-import { getModel } from "@/server/llm-config/models";
+import { getModel } from "@/server/llm-config";
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";

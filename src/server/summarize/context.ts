@@ -1,4 +1,4 @@
-import { fetchArxivMetadata } from '@/server/ingest/arxiv';
+import { fetchArxivMetadata } from '@/server/ingest';
 import type { ArxivMetadata } from '@/server/ingest/types';
 import {
   fetchPaperFiguresByPaperId,

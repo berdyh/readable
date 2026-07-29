@@ -1,11 +1,11 @@
-import { fetchAr5ivHtml, fetchArxivMetadata } from "@/server/ingest/arxiv";
+import { fetchAr5ivHtml, fetchArxivMetadata } from "@/server/ingest";
 import {
   buildAr5ivHtmlUrl,
   getIngestEnvironment,
   type IngestEnvironmentConfig,
-} from "@/server/ingest/config";
-import { parseAr5ivHtml } from "@/server/ingest/ar5iv";
-import { fetchTextWithTimeout } from "@/server/ingest/utils";
+} from "@/server/ingest";
+import { parseAr5ivHtml } from "@/server/ingest";
+import { fetchTextWithTimeout } from "@/server/ingest";
 
 import type { InlineArxivIngestResult } from "./types";
 

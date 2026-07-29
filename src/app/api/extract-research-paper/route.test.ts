@@ -14,7 +14,7 @@ const authMock = vi.hoisted(() => {
   return { AUTH_REQUIRED_MESSAGE, AuthenticationRequiredError };
 });
 
-vi.mock("@/server/auth/user", () => ({
+vi.mock("@/server/auth", () => ({
   AUTH_REQUIRED_MESSAGE: authMock.AUTH_REQUIRED_MESSAGE,
   AuthenticationRequiredError: authMock.AuthenticationRequiredError,
   isAuthenticationRequiredError: vi.fn(
@@ -23,15 +23,11 @@ vi.mock("@/server/auth/user", () => ({
   requireAuthenticatedUserId: vi.fn(),
 }));
 
-vi.mock("@/server/ingest/config", () => ({
+// One factory per module path: repeated vi.mock() calls on the same specifier
+// replace each other rather than merging.
+vi.mock("@/server/ingest", () => ({
   getIngestEnvironment: vi.fn(),
-}));
-
-vi.mock("@/server/ingest/ocr", () => ({
   runDeepSeekOcr: vi.fn(),
-}));
-
-vi.mock("@/server/ingest/pdf", () => ({
   extractPdfText: vi.fn(),
   shouldUseOcr: vi.fn(),
 }));
@@ -40,10 +36,10 @@ import {
   AUTH_REQUIRED_MESSAGE,
   AuthenticationRequiredError,
   requireAuthenticatedUserId,
-} from "@/server/auth/user";
-import { getIngestEnvironment } from "@/server/ingest/config";
-import { runDeepSeekOcr } from "@/server/ingest/ocr";
-import { extractPdfText, shouldUseOcr } from "@/server/ingest/pdf";
+} from "@/server/auth";
+import { getIngestEnvironment } from "@/server/ingest";
+import { runDeepSeekOcr } from "@/server/ingest";
+import { extractPdfText, shouldUseOcr } from "@/server/ingest";
 import type { PdfExtractionResult } from "@/server/ingest/types";
 
 import { POST } from "./route";

@@ -1,6 +1,6 @@
 import { loadQuestionEvidence } from './context';
 import { generateJson } from '@/server/llm';
-import { recordPersonaSignals } from '@/server/persona/record';
+import { recordPersonaSignals } from '@/server/persona';
 import type {
   AnswerCitation,
   AnswerResult,
@@ -395,3 +395,14 @@ export async function answerPaperQuestion(
     trust,
   };
 }
+
+/**
+ * Public surface of the qa module.
+ *
+ * `answerPaperQuestion()` above is the main entry point. These two are also
+ * public because the editor's selection actions and the `/api/qa` route need to
+ * parse a selection and load evidence without answering a question.
+ */
+export { loadQuestionEvidence } from './context';
+export { parseQuestionSelection } from './selection';
+export type * from './types';

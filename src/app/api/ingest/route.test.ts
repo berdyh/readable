@@ -14,7 +14,7 @@ const authMock = vi.hoisted(() => {
   return { AUTH_REQUIRED_MESSAGE, AuthenticationRequiredError };
 });
 
-vi.mock("@/server/auth/user", () => ({
+vi.mock("@/server/auth", () => ({
   AUTH_REQUIRED_MESSAGE: authMock.AUTH_REQUIRED_MESSAGE,
   AuthenticationRequiredError: authMock.AuthenticationRequiredError,
   isAuthenticationRequiredError: vi.fn(
@@ -31,7 +31,7 @@ import {
   AUTH_REQUIRED_MESSAGE,
   AuthenticationRequiredError,
   requireAuthenticatedUserId,
-} from "@/server/auth/user";
+} from "@/server/auth";
 import { ingestPaper } from "@/server/ingest";
 
 import { POST } from "./route";

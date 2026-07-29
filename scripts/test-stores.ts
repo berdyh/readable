@@ -5,7 +5,7 @@ import { ensureSchema, pingPostgres, closePgPool } from '@/server/db';
 import {
   ensureQdrantCollection,
   pingQdrant,
-} from '@/server/vector/qdrant';
+} from '@/server/vector';
 
 loadEnv({ path: '.env.local' });
 loadEnv();

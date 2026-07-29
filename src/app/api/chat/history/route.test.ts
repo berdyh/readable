@@ -2,10 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
 import { GET, POST } from "./route";
-import { requireAuthenticatedUserId } from "@/server/auth/user";
+import { requireAuthenticatedUserId } from "@/server/auth";
 import { getChatMessagesForSession, saveChatMessages } from "@/server/db";
 
-vi.mock("@/server/auth/user", () => ({
+vi.mock("@/server/auth", () => ({
   AUTH_REQUIRED_MESSAGE: "Sign in to use personalized reading features.",
   isAuthenticationRequiredError: vi.fn(() => false),
   requireAuthenticatedUserId: vi.fn(),

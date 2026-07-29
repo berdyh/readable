@@ -1,4 +1,4 @@
-import { parseQuestionSelection } from "@/server/qa/selection";
+import { parseQuestionSelection } from "@/server/qa";
 import type { QuestionSelection } from "@/server/qa/types";
 
 export interface SelectionRequestPayload {

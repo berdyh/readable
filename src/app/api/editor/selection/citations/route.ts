@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { getSelectionCitations } from '@/server/editor/selection';
+import { getSelectionCitations } from '@/server/editor';
 
 import { parseSelectionRequest } from '../utils';
 

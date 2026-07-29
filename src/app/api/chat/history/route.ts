@@ -4,8 +4,8 @@ import {
   AUTH_REQUIRED_MESSAGE,
   isAuthenticationRequiredError,
   requireAuthenticatedUserId,
-} from "@/server/auth/user";
-import { InvalidChatPayloadError, parseChatMessage, toApiMessage } from "@/server/chat/messages";
+} from "@/server/auth";
+import { InvalidChatPayloadError, parseChatMessage, toApiMessage } from "@/server/chat";
 import {
   ChatSessionOwnershipError,
   deleteChatSession,

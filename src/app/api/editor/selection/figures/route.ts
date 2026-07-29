@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { getSelectionFigures } from '@/server/editor/selection';
+import { getSelectionFigures } from '@/server/editor';
 
 import { parseSelectionRequest } from '../utils';
 

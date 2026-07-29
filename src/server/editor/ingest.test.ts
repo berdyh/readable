@@ -6,15 +6,14 @@ const mocks = vi.hoisted(() => ({
   fetchTextWithTimeout: vi.fn(),
 }));
 
-vi.mock("@/server/ingest/arxiv", () => ({
-  fetchArxivMetadata: mocks.fetchArxivMetadata,
-  fetchAr5ivHtml: mocks.fetchAr5ivHtml,
-}));
-
-vi.mock("@/server/ingest/utils", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/server/ingest/utils")>();
+// One factory per module path: repeated vi.mock() calls on the same specifier
+// replace each other rather than merging.
+vi.mock("@/server/ingest", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/server/ingest")>();
   return {
     ...actual,
+    fetchArxivMetadata: mocks.fetchArxivMetadata,
+    fetchAr5ivHtml: mocks.fetchAr5ivHtml,
     fetchTextWithTimeout: mocks.fetchTextWithTimeout,
   };
 });

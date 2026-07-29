@@ -1,6 +1,6 @@
 import { loadPaperSummaryContext } from './context';
 import { generateJson } from '@/server/llm';
-import { recordPersonaSignals } from '@/server/persona/record';
+import { recordPersonaSignals } from '@/server/persona';
 import type {
   PageSpan,
   SummaryFigure,

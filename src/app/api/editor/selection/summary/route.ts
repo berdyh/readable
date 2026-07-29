@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { summarizeSelection } from "@/server/editor/selection";
+import { summarizeSelection } from "@/server/editor";
 import {
   AUTH_REQUIRED_MESSAGE,
   isAuthenticationRequiredError,
   requireAuthenticatedUserId,
-} from "@/server/auth/user";
+} from "@/server/auth";
 import { parseSelectionRequest } from "../utils";
 
 function mapErrorStatus(error: unknown): number {

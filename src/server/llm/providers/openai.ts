@@ -4,7 +4,7 @@ import type {
   LlmRequest,
   LlmConfig,
 } from '../types';
-import { getModel } from '@/server/llm-config/models';
+import { getModel } from '@/server/llm-config';
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 

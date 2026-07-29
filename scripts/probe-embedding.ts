@@ -13,7 +13,7 @@ import { config as loadDotenv } from 'dotenv';
 loadDotenv({ path: '.env.local' });
 loadDotenv();
 
-import { probeEmbeddingDimensions } from '@/server/vector/embeddings';
+import { probeEmbeddingDimensions } from '@/server/vector';
 
 async function main() {
   try {

@@ -4,10 +4,10 @@ import {
   AUTH_REQUIRED_MESSAGE,
   isAuthenticationRequiredError,
   requireAuthenticatedUserId,
-} from "@/server/auth/user";
-import { getIngestEnvironment } from "@/server/ingest/config";
-import { runDeepSeekOcr } from "@/server/ingest/ocr";
-import { extractPdfText, shouldUseOcr } from "@/server/ingest/pdf";
+} from "@/server/auth";
+import { getIngestEnvironment } from "@/server/ingest";
+import { runDeepSeekOcr } from "@/server/ingest";
+import { extractPdfText, shouldUseOcr } from "@/server/ingest";
 
 const TEXT_THRESHOLD = Number(process.env.INGEST_PDF_TEXT_THRESHOLD ?? 1_000);
 

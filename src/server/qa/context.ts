@@ -1,4 +1,4 @@
-import { fetchArxivMetadata } from '@/server/ingest/arxiv';
+import { fetchArxivMetadata } from '@/server/ingest';
 import type { ArxivMetadata } from '@/server/ingest/types';
 import {
   fetchPaperCitationsByPaperId,
@@ -9,11 +9,11 @@ import {
 import {
   enrichCitation as enrichWithSemanticScholar,
   type SemanticScholarPaper,
-} from '@/server/external/semantic-scholar';
+} from '@/server/external';
 import {
   hybridPaperChunkSearch,
   type HybridPaperChunkHit,
-} from '@/server/search/hybrid';
+} from '@/server/search';
 
 import type {
   NormalizedSelection,

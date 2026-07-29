@@ -1,5 +1,5 @@
-import { loadQuestionEvidence } from '@/server/qa/context';
-import { parseQuestionSelection } from '@/server/qa/selection';
+import { loadQuestionEvidence } from '@/server/qa';
+import { parseQuestionSelection } from '@/server/qa';
 import type {
   AnswerCitation,
   QuestionSelection,

@@ -4,7 +4,7 @@ import {
   AUTH_REQUIRED_MESSAGE,
   isAuthenticationRequiredError,
   requireAuthenticatedUserId,
-} from "@/server/auth/user";
+} from "@/server/auth";
 import { listPersonaConceptsForUser } from "@/server/db";
 
 export const dynamic = "force-dynamic";

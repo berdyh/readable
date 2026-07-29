@@ -1,15 +1,15 @@
 import type { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/server/editor/ingest", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/server/editor/ingest")>();
+vi.mock("@/server/editor", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/server/editor")>();
   return {
     ...actual,
     ingestArxivInline: vi.fn(),
   };
 });
 
-import { ingestArxivInline } from "@/server/editor/ingest";
+import { ingestArxivInline } from "@/server/editor";
 
 import { POST } from "./route";
 

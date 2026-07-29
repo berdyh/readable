@@ -5,11 +5,11 @@ import {
   type PaperChunk,
   type PaperChunkTextSearchHit,
 } from '@/server/db';
-import { embedQuery } from '@/server/vector/embeddings';
+import { embedQuery } from '@/server/vector';
 import {
   searchPaperChunkVectors,
   type QdrantSearchHit,
-} from '@/server/vector/qdrant';
+} from '@/server/vector';
 
 export interface HybridPaperChunkQueryOptions {
   paperId: string;

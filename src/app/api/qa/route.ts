@@ -2,13 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { answerPaperQuestion } from "@/server/qa";
 import type { AnswerResult, QuestionSelection } from "@/server/qa/types";
-import { parseQuestionSelection } from "@/server/qa/selection";
-import { classifyFailoverSignal } from "@/server/llm/routing/failover-classifier";
+import { parseQuestionSelection } from "@/server/qa";
+import { classifyFailoverSignal } from "@/server/llm/routing";
 import {
   AUTH_REQUIRED_MESSAGE,
   isAuthenticationRequiredError,
   requireAuthenticatedUserId,
-} from "@/server/auth/user";
+} from "@/server/auth";
 
 interface QaRequestPayload {
   paperId: string;

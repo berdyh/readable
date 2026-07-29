@@ -4,7 +4,7 @@ import {
   InlineArxivIngestError,
   ingestArxivInline,
   normalizeArxivTarget,
-} from "@/server/editor/ingest";
+} from "@/server/editor";
 
 interface InlineArxivRequest {
   target: string;

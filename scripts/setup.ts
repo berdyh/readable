@@ -36,7 +36,7 @@ import {
 import {
   listAvailableLocalCodingAgents,
   type CodingAgentId,
-} from "@/server/llm/providers/local-coding-agent";
+} from "@/server/llm";
 
 const ENV_FILE = path.join(process.cwd(), ".env.local");
 

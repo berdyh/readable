@@ -6,13 +6,13 @@ import {
   type PaperChunk,
   type PaperRecord,
 } from "@/server/db";
-import { embedTexts, getEmbeddingEnvironment } from "@/server/vector/embeddings";
+import { embedTexts, getEmbeddingEnvironment } from "@/server/vector";
 import {
   deletePaperChunkVectorsByPaper,
   ensureQdrantCollection,
   upsertPaperChunkVectors,
   type PaperChunkVectorPoint,
-} from "@/server/vector/qdrant";
+} from "@/server/vector";
 
 import { fetchAr5ivHtml, fetchArxivMetadata, fetchArxivPdf } from "./arxiv";
 import { parseAr5ivHtml } from "./ar5iv";

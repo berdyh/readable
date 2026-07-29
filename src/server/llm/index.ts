@@ -38,4 +38,8 @@ export { OpenAiProvider } from "./providers/openai";
 export { AnthropicProvider } from "./providers/anthropic";
 export { GeminiProvider } from "./providers/gemini";
 export { OpenRouterProvider } from "./providers/openrouter";
-export { LocalCodingAgentProvider } from "./providers/local-coding-agent";
+export {
+  LocalCodingAgentProvider,
+  listAvailableLocalCodingAgents,
+  type CodingAgentId,
+} from "./providers/local-coding-agent";

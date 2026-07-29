@@ -4,7 +4,7 @@ import { AnthropicProvider } from "./providers/anthropic";
 import { GeminiProvider } from "./providers/gemini";
 import { OpenRouterProvider } from "./providers/openrouter";
 import { LocalCodingAgentProvider } from "./providers/local-coding-agent";
-import { getModel } from "@/server/llm-config/models";
+import { getModel } from "@/server/llm-config";
 import {
   buildAuthProfileStore,
   FailoverError,

@@ -455,6 +455,93 @@ printf 'creds=%s' "$(cat "\${CLAUDE_CONFIG_DIR:-/nonexistent}/.credentials.json"
     expect(output).not.toContain("mcpOAuth");
   });
 
+  it("writes a mid-call Codex token refresh back to the real auth file", async () => {
+    const authFile = path.join(tempDir, "codex-auth.json");
+    await writeFile(authFile, JSON.stringify({ tokens: { access_token: "old-token" } }), "utf8");
+    // The fake CLI refreshes its token: it rewrites the staged auth.json the
+    // way Codex does when the access token has expired.
+    const agent = await makeAgentScript(
+      tempDir,
+      "codex.sh",
+      `
+cat >/dev/null
+printf '{"tokens":{"access_token":"new-token"}}' > "\${CODEX_HOME}/auth.json"
+printf 'answer'
+`,
+    );
+
+    process.env.LLM_LOCAL_AGENTS = "codex-cli";
+    process.env.LLM_AGENT_CODEX_COMMAND = agent;
+    process.env.LLM_AGENT_CODEX_AUTH_FILE = authFile;
+
+    const provider = new LocalCodingAgentProvider({ provider: "coding-agent" });
+    await provider.generateText({ systemPrompt: "Be concise.", userPrompt: "Refresh." });
+
+    const persisted = JSON.parse(await readFile(authFile, "utf8"));
+    expect(persisted.tokens.access_token).toBe("new-token");
+  });
+
+  it("does not clobber a real auth file that changed mid-call", async () => {
+    const authFile = path.join(tempDir, "codex-auth.json");
+    await writeFile(authFile, JSON.stringify({ tokens: { access_token: "old-token" } }), "utf8");
+    // Simulate a concurrent `codex login` racing the invocation: the fake CLI
+    // rewrites the REAL file (as the user's login would) and refreshes its
+    // staged copy. The user's newer login must win over our write-back.
+    const agent = await makeAgentScript(
+      tempDir,
+      "codex.sh",
+      `
+cat >/dev/null
+printf '{"tokens":{"access_token":"user-relogin"}}' > ${JSON.stringify(authFile)}
+printf '{"tokens":{"access_token":"stale-refresh"}}' > "\${CODEX_HOME}/auth.json"
+printf 'answer'
+`,
+    );
+
+    process.env.LLM_LOCAL_AGENTS = "codex-cli";
+    process.env.LLM_AGENT_CODEX_COMMAND = agent;
+    process.env.LLM_AGENT_CODEX_AUTH_FILE = authFile;
+
+    const provider = new LocalCodingAgentProvider({ provider: "coding-agent" });
+    await provider.generateText({ systemPrompt: "Be concise.", userPrompt: "Race." });
+
+    const persisted = JSON.parse(await readFile(authFile, "utf8"));
+    expect(persisted.tokens.access_token).toBe("user-relogin");
+  });
+
+  it("merges a Claude refresh back without dropping mcpOAuth tokens", async () => {
+    const credsFile = path.join(tempDir, "claude-credentials.json");
+    await writeFile(
+      credsFile,
+      JSON.stringify({
+        claudeAiOauth: { accessToken: "old-token", subscriptionType: "max" },
+        mcpOAuth: { "plugin:vercel": { accessToken: "third-party-secret" } },
+      }),
+      "utf8",
+    );
+    const agent = await makeAgentScript(
+      tempDir,
+      "claude.sh",
+      `
+cat >/dev/null
+printf '{"claudeAiOauth":{"accessToken":"new-token","subscriptionType":"max"}}' > "\${CLAUDE_CONFIG_DIR}/.credentials.json"
+printf 'answer'
+`,
+    );
+
+    process.env.LLM_LOCAL_AGENTS = "claude-code";
+    process.env.LLM_AGENT_CLAUDE_CODE_COMMAND = agent;
+    process.env.LLM_AGENT_CLAUDE_CODE_AUTH_FILE = credsFile;
+
+    const provider = new LocalCodingAgentProvider({ provider: "coding-agent" });
+    await provider.generateText({ systemPrompt: "Be concise.", userPrompt: "Refresh." });
+
+    const persisted = JSON.parse(await readFile(credsFile, "utf8"));
+    expect(persisted.claudeAiOauth.accessToken).toBe("new-token");
+    // The block that never entered the sandbox survives the write-back.
+    expect(persisted.mcpOAuth["plugin:vercel"].accessToken).toBe("third-party-secret");
+  });
+
   it("reports a signed-out agent as auth_permanent instead of unknown", async () => {
     const agent = await makeAgentScript(
       tempDir,

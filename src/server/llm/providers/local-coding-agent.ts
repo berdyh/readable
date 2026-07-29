@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { accessSync, constants, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -45,6 +45,8 @@ interface InvocationSpec {
   stdin?: string;
   outputFile?: string;
   cleanupDir?: string;
+  /** Write a mid-call token refresh back to the real credential file. */
+  persistCredentials?: () => Promise<void>;
 }
 
 /**
@@ -694,20 +696,42 @@ function buildLocalAgentEnv(tempDir: string): NodeJS.ProcessEnv {
  * MCP server definitions, session transcripts, skills and plugins. Staging a
  * lone `auth.json` gives it strictly less.
  *
- * Known trade-off: the staged copy is write-through-to-nowhere. If the agent
- * refreshes its OAuth token mid-call it writes the new one into the temp dir,
- * which we then delete, so the refresh is discarded and the next invocation
- * starts from the same on-disk token. That is correct but wasteful — a
- * long-expired access token means one refresh round-trip per request — and it
- * would become a real problem if the upstream ever rotated refresh tokens on
- * use. Re-running `codex login` / `claude login` repairs it either way.
+ * A refresh the agent performs mid-call lands in the staged copy, which used
+ * to be deleted with the temp dir — correct but wasteful (one refresh
+ * round-trip per request once the access token expired), and a real problem
+ * the day upstream rotates refresh tokens on use. Each stager therefore
+ * returns a `persistRefresh` closure that copies a changed staged credential
+ * back to the real file after the invocation, guarded so it never overwrites
+ * a file that changed underneath it. Codex copies the file verbatim (it is
+ * the CLI's own format either way); Claude Code merges only the
+ * `claudeAiOauth` block back, so the `mcpOAuth` tokens that never entered the
+ * sandbox cannot be dropped by the write.
  */
 interface StagedCredentials {
   env: Record<string, string>;
   staged: boolean;
+  /**
+   * Copy a token refresh the agent wrote inside the sandbox back to the real
+   * credential file. Best-effort: it must never fail the request, and it
+   * refuses to write when the real file changed mid-call (a concurrent
+   * `codex login`, another invocation's write-back) — a lost refresh only
+   * costs one extra refresh round-trip, a clobbered login costs the user a
+   * re-auth.
+   */
+  persistRefresh?: () => Promise<void>;
 }
 
 const NO_CREDENTIALS: StagedCredentials = { env: {}, staged: false };
+
+/**
+ * Replace a credential file atomically (write-then-rename) so a crash
+ * mid-write can never leave the user's real auth file half-written.
+ */
+async function replacePrivateFile(filePath: string, contents: string): Promise<void> {
+  const tmpPath = `${filePath}.${process.pid}.tmp`;
+  await writeFile(tmpPath, contents, { encoding: "utf8", mode: 0o600 });
+  await rename(tmpPath, filePath);
+}
 
 function resolveAgentAuthFile(agent: CodingAgentId): string | undefined {
   const explicit = getAgentEnvValue(agent, "AUTH_FILE");
@@ -757,8 +781,19 @@ async function stageCodexCredentials(tempDir: string): Promise<StagedCredentials
   if (!raw) return NO_CREDENTIALS;
 
   const codexHome = path.join(tempDir, "codex-home");
-  await writePrivateFile(path.join(codexHome, "auth.json"), raw);
-  return { env: { CODEX_HOME: codexHome }, staged: true };
+  const stagedPath = path.join(codexHome, "auth.json");
+  await writePrivateFile(stagedPath, raw);
+  return {
+    env: { CODEX_HOME: codexHome },
+    staged: true,
+    persistRefresh: async () => {
+      const refreshed = await readFile(stagedPath, "utf8").catch(() => undefined);
+      if (!refreshed || refreshed === raw) return;
+      const current = await readFile(source, "utf8").catch(() => undefined);
+      if (current !== raw) return;
+      await replacePrivateFile(source, refreshed);
+    },
+  };
 }
 
 /**
@@ -778,11 +813,29 @@ async function stageClaudeCredentials(tempDir: string): Promise<StagedCredential
   if (!oauth || typeof oauth !== "object") return NO_CREDENTIALS;
 
   const configDir = path.join(tempDir, "claude-home");
-  await writePrivateFile(
-    path.join(configDir, ".credentials.json"),
-    JSON.stringify({ claudeAiOauth: oauth }),
-  );
-  return { env: { CLAUDE_CONFIG_DIR: configDir }, staged: true };
+  const stagedPath = path.join(configDir, ".credentials.json");
+  const originalOauth = JSON.stringify(oauth);
+  await writePrivateFile(stagedPath, JSON.stringify({ claudeAiOauth: oauth }));
+  return {
+    env: { CLAUDE_CONFIG_DIR: configDir },
+    staged: true,
+    persistRefresh: async () => {
+      const staged = await readJsonFile(stagedPath);
+      const refreshed = staged?.claudeAiOauth;
+      if (!refreshed || typeof refreshed !== "object") return;
+      if (JSON.stringify(refreshed) === originalOauth) return;
+      // Merge into the *current* file, not the one read at staging time, so
+      // keys that never entered the sandbox (mcpOAuth) survive — but only if
+      // Claude's own block is still the one we staged from.
+      const currentSource = await readJsonFile(source);
+      if (!currentSource) return;
+      if (JSON.stringify(currentSource.claudeAiOauth ?? null) !== originalOauth) return;
+      await replacePrivateFile(
+        source,
+        JSON.stringify({ ...currentSource, claudeAiOauth: refreshed }),
+      );
+    },
+  };
 }
 
 async function stageAgentCredentials(
@@ -922,6 +975,7 @@ async function buildInvocation(
       stdin: prompt,
       outputFile,
       cleanupDir: tempDir,
+      persistCredentials: credentials.persistRefresh,
     };
   }
 
@@ -949,6 +1003,7 @@ async function buildInvocation(
         env,
         stdin: prompt,
         cleanupDir: tempDir,
+        persistCredentials: credentials.persistRefresh,
       };
     case "codex-cli":
       return {
@@ -978,6 +1033,7 @@ async function buildInvocation(
         stdin: prompt,
         outputFile,
         cleanupDir: tempDir,
+        persistCredentials: credentials.persistRefresh,
       };
     case "gemini-cli":
       return {
@@ -1244,6 +1300,9 @@ async function invokeLocalAgent(
     const stdout = await runProcess(spec, timeoutMs);
     return (await readAgentOutput(spec, stdout)).trim();
   } finally {
+    // Runs on failure too — a call can refresh the token and then fail on
+    // the model, and the refresh is still worth keeping.
+    await spec.persistCredentials?.().catch(() => undefined);
     if (spec.cleanupDir) {
       await rm(spec.cleanupDir, { recursive: true, force: true }).catch(() => undefined);
     }

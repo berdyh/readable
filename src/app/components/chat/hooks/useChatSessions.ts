@@ -36,6 +36,7 @@ export function useChatSessions({
   enabled,
   selection,
   onSelectionClear,
+  localAgent,
 }: {
   paperId: string;
   isOpen: boolean;
@@ -43,6 +44,8 @@ export function useChatSessions({
   enabled: boolean;
   selection?: QuestionSelection;
   onSelectionClear?: () => void;
+  /** Local CLI agent chosen in the picker; ignored on hosted providers. */
+  localAgent?: string;
 }) {
   const { isLoaded, isSignedIn } = useUser();
 
@@ -237,6 +240,7 @@ export function useChatSessions({
           paperId,
           question,
           selection: selectedText ? selection : undefined,
+          localAgent,
           fallbackError: "Failed to answer the question.",
         });
 
@@ -287,7 +291,16 @@ export function useChatSessions({
         setIsSubmitting(false);
       }
     },
-    [activeTab, isSignedIn, isSubmitting, onSelectionClear, paperId, selectedText, selection],
+    [
+      activeTab,
+      isSignedIn,
+      isSubmitting,
+      localAgent,
+      onSelectionClear,
+      paperId,
+      selectedText,
+      selection,
+    ],
   );
 
   return {

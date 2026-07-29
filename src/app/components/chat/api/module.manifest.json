@@ -4,7 +4,9 @@
   "parent": "web.chat",
   "path": "src/app/components/chat/api",
   "goal": "Talks to the chat and QA HTTP endpoints.",
-  "owns": ["src/app/components/chat/api"],
+  "owns": [
+    "src/app/components/chat/api"
+  ],
   "interface": {
     "entrypoint": "chatApi.ts",
     "exports": [
@@ -12,11 +14,16 @@
       "createChatSession",
       "deleteChatSession",
       "fetchChatHistory",
+      "fetchLocalAgents",
       "saveChatMessage"
     ]
   },
-  "constraints": ["fetch to /api/chat/* and /api/qa"],
-  "checks": ["pnpm vitest run src/app/components/chat"],
+  "constraints": [
+    "fetch to /api/chat/*, /api/qa and /api/llm/local-agents"
+  ],
+  "checks": [
+    "pnpm vitest run src/app/components/chat"
+  ],
   "uses": [
     {
       "module": "server.qa",

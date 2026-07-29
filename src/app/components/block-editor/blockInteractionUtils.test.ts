@@ -4,6 +4,7 @@ import type { Block } from "./types";
 import {
   getDeletionFocusTarget,
   isBlockContentEmpty,
+  isFullBleedBlock,
   resolveDropReorder,
 } from "./blockInteractionUtils";
 
@@ -71,5 +72,19 @@ describe("block boundary interactions", () => {
     const blocks = [block("a"), block("b")];
     expect(resolveDropReorder(blocks, "a", "a", "before")).toBeNull();
     expect(resolveDropReorder(blocks, "x", "a", "before")).toBeNull();
+  });
+});
+
+describe("isFullBleedBlock", () => {
+  it("caps running prose at the reading measure", () => {
+    for (const type of ["paragraph", "heading_1", "quote", "callout", "summary_section"] as const) {
+      expect(isFullBleedBlock(type)).toBe(false);
+    }
+  });
+
+  it("lets figures, code, dividers and chat messages span the column", () => {
+    for (const type of ["figure", "code", "divider", "chat_message"] as const) {
+      expect(isFullBleedBlock(type)).toBe(true);
+    }
   });
 });

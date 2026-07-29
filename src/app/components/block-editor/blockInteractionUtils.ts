@@ -1,4 +1,4 @@
-import type { Block } from "./types";
+import type { Block, BlockType } from "./types";
 
 export function isBlockContentEmpty(content: string | undefined): boolean {
   const blockContent = content?.trim() || "";
@@ -57,4 +57,24 @@ export function getDeletionFocusTarget(
 
   const previousId = blocks[index - 1]?.id;
   return previousId ? { blockId: previousId, position: "end" } : null;
+}
+
+/**
+ * Block types that must span the full column rather than the ~70ch prose
+ * measure.
+ *
+ * The measure exists because past roughly 70 characters the eye loses the start
+ * of the next line on the return sweep. That reasoning only applies to running
+ * prose — none of these are prose:
+ *
+ * - `figure`   a figure narrowed to 70ch is unreadable.
+ * - `code`     code wraps badly; horizontal scroll is the expected behaviour.
+ * - `divider`  a rule that stops short of the column edge reads as a rendering
+ *              bug rather than a divider.
+ * - `chat_message`  carries its own bubble layout and padding.
+ */
+const FULL_BLEED_BLOCK_TYPES = new Set<BlockType>(["figure", "code", "divider", "chat_message"]);
+
+export function isFullBleedBlock(type: BlockType): boolean {
+  return FULL_BLEED_BLOCK_TYPES.has(type);
 }

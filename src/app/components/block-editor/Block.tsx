@@ -20,6 +20,7 @@ import { FigureBlock } from "./blocks/FigureBlock";
 import {
   getDeletionFocusTarget,
   isBlockContentEmpty,
+  isFullBleedBlock,
   resolveDropReorder,
 } from "./blockInteractionUtils";
 
@@ -434,7 +435,7 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
             e.stopPropagation();
             handleToggleLock();
           }}
-          className="flex h-6 w-6 items-center justify-center rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 active:scale-95 transition-all duration-150 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+          className="touch-target relative flex h-6 w-6 items-center justify-center rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 active:scale-95 transition-all duration-150 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
           title={isLocked ? "Click to unlock and edit" : "Click to lock (make read-only)"}
         >
           {isLocked ? <Edit2 className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
@@ -446,7 +447,7 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
           <button
             type="button"
             onClick={handleAddClick}
-            className="flex h-6 w-6 items-center justify-center rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 active:scale-95 transition-all duration-150 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 pointer-events-auto"
+            className="touch-target relative flex h-6 w-6 items-center justify-center rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 active:scale-95 transition-all duration-150 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 pointer-events-auto"
             title="Add block"
           >
             <Plus className="h-4 w-4" />
@@ -457,7 +458,7 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
           draggable
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
-          className="flex h-6 w-6 items-center justify-center rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 active:scale-95 transition-all duration-150 cursor-move text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 pointer-events-auto"
+          className="touch-target relative flex h-6 w-6 items-center justify-center rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 active:scale-95 transition-all duration-150 cursor-move text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 pointer-events-auto"
           title="Drag to reorder"
         >
           <GripVertical className="h-4 w-4" />
@@ -468,7 +469,17 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
           min-content width, so one long unbreakable token in a paper (inline
           LaTeX, a URL) widens the whole page and the phone scrolls sideways. */}
       <div className="min-w-0 flex-1" onFocus={handleFocus}>
-        {renderBlock()}
+        {/* Prose is capped at a ~70ch measure. Past roughly that width the eye
+            loses the start of the next line on the return sweep, which is the
+            single thing that makes a long paper tiring to read.
+
+            It cannot be a blanket cap on the column, because the blocks in
+            FULL_BLEED_BLOCK_TYPES are not prose: a figure narrowed to 70ch is
+            unreadable, and a rule that stops short of the column edge reads as
+            a rendering bug rather than a divider. */}
+        <div className={isFullBleedBlock(block.type) ? undefined : "max-w-[70ch]"}>
+          {renderBlock()}
+        </div>
       </div>
     </div>
   );

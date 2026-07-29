@@ -6,6 +6,7 @@ import {
   isAuthenticationRequiredError,
   requireAuthenticatedUserId,
 } from "@/server/auth";
+import { parseLocalAgentPin } from "@/server/llm";
 import { parseSelectionRequest } from "../utils";
 
 function mapErrorStatus(error: unknown): number {
@@ -22,9 +23,12 @@ function mapErrorStatus(error: unknown): number {
 
 export async function POST(request: NextRequest) {
   let payload: ReturnType<typeof parseSelectionRequest>;
+  let localAgent: string | undefined;
 
   try {
-    payload = parseSelectionRequest(await request.json());
+    const data: unknown = await request.json();
+    payload = parseSelectionRequest(data);
+    localAgent = parseLocalAgentPin((data as Record<string, unknown>).localAgent);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Invalid request payload.";
     return NextResponse.json({ error: message }, { status: 400 });
@@ -33,7 +37,7 @@ export async function POST(request: NextRequest) {
   try {
     // The route still gates on auth — only the unused userId hand-off is gone.
     await requireAuthenticatedUserId();
-    const result = await summarizeSelection(payload.paperId, payload.selection);
+    const result = await summarizeSelection(payload.paperId, payload.selection, { localAgent });
 
     return NextResponse.json(result, { status: 200 });
   } catch (error) {

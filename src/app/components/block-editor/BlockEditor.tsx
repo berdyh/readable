@@ -80,7 +80,7 @@ function BlockEditorContent({
   showChatButton: boolean;
   paperId: string;
 }) {
-  const { state, insertBlock } = useEditorStore();
+  const { state, insertBlock, setLocalAgent } = useEditorStore();
 
   // Auto-clear status messages after 3 seconds
   useEffect(() => {
@@ -193,6 +193,7 @@ function BlockEditorContent({
         onToggle={onChatToggle}
         selection={chatSelection}
         onSelectionClear={onChatSelectionClear}
+        onLocalAgentChange={setLocalAgent}
         onInsertBlocks={(blocks) => {
           // Insert blocks after the last block
           blocks.forEach((block, i) => {

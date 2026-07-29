@@ -30,6 +30,13 @@ interface EditorContextValue {
   registerBlockFocusApi: (blockId: string, api: BlockFocusApi) => void;
   unregisterBlockFocusApi: (blockId: string) => void;
   focusBlock: (blockId: string, position?: "start" | "end") => void;
+  /**
+   * The chat picker's local-agent pin, shared so slash commands hit the same
+   * agent the user chose for chat. Ref-backed: a pick change must not
+   * re-render every block, and commands only need the value at execute time.
+   */
+  setLocalAgent: (agentId: string | undefined) => void;
+  getLocalAgent: () => string | undefined;
 }
 
 function scheduleFocusRetry(focusFn: () => boolean, onExhausted: () => void, retries = 5) {
@@ -77,6 +84,13 @@ export function EditorProvider({ children, paperId, initialBlocks = [] }: Editor
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const blockFocusApisRef = useRef<Map<string, BlockFocusApi>>(new Map());
   const pendingFocusRef = useRef<{ blockId: string; position: "start" | "end" } | null>(null);
+  const localAgentRef = useRef<string | undefined>(undefined);
+
+  const setLocalAgent = useCallback((agentId: string | undefined) => {
+    localAgentRef.current = agentId;
+  }, []);
+
+  const getLocalAgent = useCallback(() => localAgentRef.current, []);
 
   // Sync blocks when initialBlocks change (e.g., when HTML/summary loads)
   // This ensures that when ReaderWorkspace loads HTML or summary content,
@@ -276,6 +290,8 @@ export function EditorProvider({ children, paperId, initialBlocks = [] }: Editor
     registerBlockFocusApi,
     unregisterBlockFocusApi,
     focusBlock,
+    setLocalAgent,
+    getLocalAgent,
   };
 
   return <EditorContext.Provider value={value}>{children}</EditorContext.Provider>;

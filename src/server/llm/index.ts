@@ -49,6 +49,7 @@ export {
   describeLocalCodingAgents,
   isLocalAgentRuntime,
   listAvailableLocalCodingAgents,
+  parseLocalAgentPin,
   type CodingAgentId,
   type LocalAgentUnavailableReason,
   type LocalCodingAgentStatus,

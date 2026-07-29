@@ -9,6 +9,7 @@ import {
   describeLocalCodingAgents,
   LocalAgentInvocationError,
   LocalCodingAgentProvider,
+  parseLocalAgentPin,
   resetLocalAgentAuthProbeCache,
 } from "./local-coding-agent";
 import { resetCliCredentialCache } from "../routing";
@@ -522,6 +523,24 @@ exit 1
         }),
       ),
     ).toBe("auth_permanent");
+  });
+});
+
+describe("parseLocalAgentPin", () => {
+  it("accepts safe built-in agents, normalizing aliases", () => {
+    expect(parseLocalAgentPin("claude-code")).toBe("claude-code");
+    expect(parseLocalAgentPin("claude")).toBe("claude-code");
+    expect(parseLocalAgentPin("Codex")).toBe("codex-cli");
+  });
+
+  it("rejects everything that is not a safe built-in", () => {
+    // The value selects a binary to spawn, so tool-capable agents and free
+    // text must never pass — even ones the provider knows about.
+    expect(parseLocalAgentPin("gemini-cli")).toBeUndefined();
+    expect(parseLocalAgentPin("opencode")).toBeUndefined();
+    expect(parseLocalAgentPin("/usr/bin/evil")).toBeUndefined();
+    expect(parseLocalAgentPin(42)).toBeUndefined();
+    expect(parseLocalAgentPin(undefined)).toBeUndefined();
   });
 });
 

@@ -116,6 +116,20 @@ function normalizeAgentId(value: string): CodingAgentId | undefined {
   return AGENT_ALIASES[value.trim().toLowerCase()];
 }
 
+/**
+ * Validate a client-supplied agent pin down to the safe built-in ids.
+ *
+ * Route handlers share this instead of keeping their own allowlists: the value
+ * ends up selecting a binary to spawn, so it is allowlisted rather than passed
+ * through — and one allowlist that every route uses cannot drift out of sync
+ * with the agents the provider actually considers safe.
+ */
+export function parseLocalAgentPin(value: unknown): CodingAgentId | undefined {
+  if (typeof value !== "string") return undefined;
+  const agent = normalizeAgentId(value);
+  return agent && SAFE_BUILT_IN_AGENTS.has(agent) ? agent : undefined;
+}
+
 function splitAgentList(value: string | undefined): CodingAgentId[] {
   const raw = value?.trim();
   if (!raw) {

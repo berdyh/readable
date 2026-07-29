@@ -348,11 +348,14 @@ function buildCalloutResult(
 // NOTE: this used to accept `options: { userId?: string }`, which it never read.
 // The route authenticates and passed a real userId in, so selection summaries
 // looked like they fed the persona graph the way qa and summarize do — they
-// never have. The dead parameter is removed rather than left to imply otherwise;
-// wiring up persona recording here is tracked in docs/open-issues.md.
+// never have. The dead parameter was removed rather than left to imply otherwise;
+// wiring up persona recording here is tracked in docs/open-issues.md. The
+// options parameter below is new and genuinely read — it carries the chat
+// picker's local-agent pin into the LLM call.
 export async function summarizeSelection(
   paperId: string,
   selectionInput: QuestionSelection,
+  options: { localAgent?: string } = {},
 ): Promise<SelectionSummaryResult> {
   const selection = parseQuestionSelection(selectionInput);
   if (!selection?.text) {
@@ -376,6 +379,7 @@ export async function summarizeSelection(
     },
     {
       taskName: "selection_summary",
+      localAgent: options.localAgent,
     },
   );
 

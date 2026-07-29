@@ -137,6 +137,8 @@ interface LlmSummaryPayload {
 
 interface SummarizeOptions {
   userId?: string;
+  /** Pin the LLM call to a specific local coding agent (the chat picker's choice). */
+  localAgent?: string;
 }
 
 function truncateText(text: string, maxLength = PROMPT_LIMITS.text_truncate): string {
@@ -607,6 +609,7 @@ export async function summarizePaper(
     },
     {
       taskName: "summary",
+      localAgent: options.localAgent,
     },
   );
 

@@ -95,6 +95,10 @@ const FigureCallouts = ({ figures, onShow, className }: FigureCalloutsProps) => 
                         className="group overflow-hidden rounded-md border border-zinc-200 bg-white text-left transition hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-700"
                         aria-label={`Preview ${figure.label ?? figure.id}`}
                       >
+                        {/* eslint-disable-next-line @next/next/no-img-element -- figure images come from
+                            arbitrary arXiv/ar5iv hosts extracted at ingest time. next/image needs each
+                            host declared in remotePatterns up front, which is impossible for a URL set
+                            that is only known once a paper is ingested. */}
                         <img
                           src={figure.imageUrl}
                           alt={figure.label ?? `Figure ${figure.id}`}
@@ -158,6 +162,10 @@ const FigureCallouts = ({ figures, onShow, className }: FigureCalloutsProps) => 
               </button>
             </div>
             <div className="min-h-0 overflow-auto bg-white p-4">
+              {/* eslint-disable-next-line @next/next/no-img-element -- figure images come from
+                  arbitrary arXiv/ar5iv hosts extracted at ingest time. next/image needs each
+                  host declared in remotePatterns up front, which is impossible for a URL set
+                  that is only known once a paper is ingested. */}
               <img
                 src={previewFigure.imageUrl}
                 alt={previewFigure.caption}

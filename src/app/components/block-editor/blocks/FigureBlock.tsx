@@ -9,7 +9,6 @@ interface FigureBlockProps {
   block: Block;
   paperId?: string;
   isLocked?: boolean;
-  onUpdate?: (content: string) => void;
 }
 
 /**
@@ -20,7 +19,6 @@ export function FigureBlock({
   block,
   paperId,
   isLocked = false,
-  onUpdate,
 }: FigureBlockProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [imageError, setImageError] = useState(false);
@@ -100,6 +98,10 @@ export function FigureBlock({
               )}
               onClick={handleImageClick}
             >
+              {/* eslint-disable-next-line @next/next/no-img-element -- figure images come from
+                  arbitrary arXiv/ar5iv hosts extracted at ingest time. next/image needs each
+                  host declared in remotePatterns up front, which is impossible for a URL set
+                  that is only known once a paper is ingested. */}
               <img
                 src={imageUrl}
                 alt={caption || `Figure ${figureId || ""}`}
@@ -187,6 +189,10 @@ export function FigureBlock({
             </button>
 
             {/* Full-size image */}
+            {/* eslint-disable-next-line @next/next/no-img-element -- figure images come from
+                arbitrary arXiv/ar5iv hosts extracted at ingest time. next/image needs each
+                host declared in remotePatterns up front, which is impossible for a URL set
+                that is only known once a paper is ingested. */}
             <img
               src={imageUrl}
               alt={caption || `Figure ${figureId || ""}`}

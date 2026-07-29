@@ -53,6 +53,27 @@ const eslintConfig = defineConfig([
   },
 
   {
+    // A leading underscore already meant "required by the signature, unused
+    // here" throughout this codebase — in ProseMirror callbacks that take fixed
+    // positional args, and in provider methods that must match
+    // LlmProviderInterface. The rule just did not know the convention, so it
+    // reported them as findings. Recognising it keeps the signature documented
+    // instead of forcing params to be deleted.
+    files: ["src/**/*.ts", "src/**/*.tsx", "scripts/**/*.ts", "scripts/**/*.mjs"],
+    rules: {
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+          destructuredArrayIgnorePattern: "^_",
+        },
+      ],
+    },
+  },
+
+  {
     // Tests may reach past a module's public surface. Isolating a pipeline by
     // mocking the specific internals it calls (see src/server/e2e/pipeline.test.ts,
     // which runs the real ingestPaper() against stubbed arxiv/pdf/ocr modules) is

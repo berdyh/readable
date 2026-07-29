@@ -1,4 +1,4 @@
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -9,6 +9,7 @@ import {
   describeLocalCodingAgents,
   LocalAgentInvocationError,
   LocalCodingAgentProvider,
+  resetLocalAgentAuthProbeCache,
 } from "./local-coding-agent";
 import { resetCliCredentialCache } from "../routing";
 
@@ -31,6 +32,7 @@ const ENV_KEYS = [
   "LLM_LOCAL_AGENT_ALLOW_UNSAFE",
   "LLM_LOCAL_AGENT_ENV_ALLOWLIST",
   "LLM_LOCAL_AGENT_TIMEOUT_MS",
+  "LLM_LOCAL_AGENT_PROBE_TIMEOUT_MS",
   "CUSTOM_ALLOWED_AGENT_ENV",
   "DATABASE_URL",
   "OPENROUTER_API_KEY",
@@ -501,7 +503,9 @@ describe("describeLocalCodingAgents", () => {
   beforeEach(async () => {
     original = snapshotEnv();
     tempDir = await mkdtemp(path.join(os.tmpdir(), "readable-agent-status-"));
+    process.env.LLM_LOCAL_AGENT_PROBE_TIMEOUT_MS = "5000";
     resetCliCredentialCache();
+    resetLocalAgentAuthProbeCache();
   });
 
   afterEach(async () => {
@@ -540,7 +544,14 @@ describe("describeLocalCodingAgents", () => {
   });
 
   it("marks an installed-but-signed-out agent as not_authenticated", async () => {
-    const codexBinary = await makeAgentScript(tempDir, "codex.sh", "exit 0");
+    const codexBinary = await makeAgentScript(
+      tempDir,
+      "codex.sh",
+      `
+if [ "$1 $2" = "login status" ]; then printf 'Not logged in\\n'; exit 1; fi
+exit 0
+`,
+    );
     process.env.LLM_LOCAL_AGENTS = "codex-cli";
     process.env.LLM_AGENT_CODEX_COMMAND = codexBinary;
     process.env.LLM_AGENT_CODEX_AUTH_FILE = path.join(tempDir, "no-such-auth.json");
@@ -552,5 +563,103 @@ describe("describeLocalCodingAgents", () => {
       authenticated: false,
       unavailableReason: "not_authenticated",
     });
+  });
+
+  it("trusts the CLI's signed-in answer over the credential file's shape", async () => {
+    // The macOS-Keychain scenario: no readable credential file at all, but the
+    // CLI itself says it is signed in. Shape-checking greyed this out; the
+    // probe must not.
+    const codexBinary = await makeAgentScript(
+      tempDir,
+      "codex.sh",
+      `
+if [ "$1 $2" = "login status" ]; then printf 'Logged in using ChatGPT\\n'; exit 0; fi
+exit 0
+`,
+    );
+    process.env.LLM_LOCAL_AGENTS = "codex-cli";
+    process.env.LLM_AGENT_CODEX_COMMAND = codexBinary;
+    process.env.LLM_AGENT_CODEX_AUTH_FILE = path.join(tempDir, "no-such-auth.json");
+
+    const [codex] = await describeLocalCodingAgents();
+
+    expect(codex).toMatchObject({
+      installed: true,
+      authenticated: true,
+      unavailableReason: null,
+    });
+  });
+
+  it("falls back to the credential file when the CLI has no status subcommand", async () => {
+    // An older codex that predates `login status` exits 2 with a usage error.
+    // That is not a signed-out verdict — the file shape-check decides instead.
+    const codexBinary = await makeAgentScript(
+      tempDir,
+      "codex.sh",
+      `
+if [ "$1 $2" = "login status" ]; then printf "error: unrecognized subcommand 'login'\\n" >&2; exit 2; fi
+exit 0
+`,
+    );
+    const authFile = path.join(tempDir, "codex-auth.json");
+    await writeFile(authFile, JSON.stringify({ tokens: { access_token: "t" } }), "utf8");
+
+    process.env.LLM_LOCAL_AGENTS = "codex-cli";
+    process.env.LLM_AGENT_CODEX_COMMAND = codexBinary;
+    process.env.LLM_AGENT_CODEX_AUTH_FILE = authFile;
+
+    const [codex] = await describeLocalCodingAgents();
+
+    expect(codex).toMatchObject({ installed: true, authenticated: true });
+  });
+
+  it("lets Claude's JSON loggedIn verdict override the exit code", async () => {
+    // `claude auth status` prints {"loggedIn": ...} JSON. The boolean is the
+    // CLI's own answer and must win even when the exit code disagrees.
+    const claudeBinary = await makeAgentScript(
+      tempDir,
+      "claude.sh",
+      `
+if [ "$1 $2" = "auth status" ]; then printf '{"loggedIn": false, "authMethod": "none"}\\n'; exit 0; fi
+exit 0
+`,
+    );
+    const credsFile = path.join(tempDir, "claude-credentials.json");
+    await writeFile(credsFile, JSON.stringify({ claudeAiOauth: { accessToken: "t" } }), "utf8");
+
+    process.env.LLM_LOCAL_AGENTS = "claude-code";
+    process.env.LLM_AGENT_CLAUDE_CODE_COMMAND = claudeBinary;
+    process.env.LLM_AGENT_CLAUDE_CODE_AUTH_FILE = credsFile;
+
+    const [claude] = await describeLocalCodingAgents();
+
+    expect(claude).toMatchObject({
+      installed: true,
+      authenticated: false,
+      unavailableReason: "not_authenticated",
+    });
+  });
+
+  it("caches the probe verdict instead of re-spawning the CLI per call", async () => {
+    const counterFile = path.join(tempDir, "probe-count");
+    const codexBinary = await makeAgentScript(
+      tempDir,
+      "codex.sh",
+      `
+if [ "$1 $2" = "login status" ]; then echo probe >> ${JSON.stringify(counterFile)}; exit 0; fi
+exit 0
+`,
+    );
+    process.env.LLM_LOCAL_AGENTS = "codex-cli";
+    process.env.LLM_AGENT_CODEX_COMMAND = codexBinary;
+    // Point staging away from any real ~/.codex so the probe sandbox never
+    // sees the developer's credential and the mtime input stays stable.
+    process.env.LLM_AGENT_CODEX_AUTH_FILE = path.join(tempDir, "no-such-auth.json");
+
+    await describeLocalCodingAgents();
+    await describeLocalCodingAgents();
+
+    const probes = (await readFile(counterFile, "utf8")).trim().split("\n");
+    expect(probes).toHaveLength(1);
   });
 });

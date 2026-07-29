@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { accessSync, constants, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -294,7 +294,7 @@ export interface LocalCodingAgentStatus {
   displayName: string;
   /** The binary resolved on PATH, in the npx cache, or via LLM_AGENT_*_COMMAND. */
   installed: boolean;
-  /** A usable credential file exists for it. */
+  /** The CLI reports itself signed in (probe-first, credential-file fallback). */
   authenticated: boolean;
   /** The model this agent would run with, or "default" to let the CLI decide. */
   model: string;
@@ -303,21 +303,215 @@ export interface LocalCodingAgentStatus {
   hint?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Auth probing
+// ---------------------------------------------------------------------------
+
 /**
- * Has this agent got a credential we can stage?
- *
- * Reuses `cli-detect`'s parsers rather than re-implementing the auth-file
- * formats — they already know that Codex keeps tokens under `tokens.access_token`
- * and Claude Code under `claudeAiOauth.accessToken`, and they mtime-cache the
- * reads so calling this per request is cheap.
+ * The CLI's own "am I signed in" subcommand, per agent. Verified against
+ * codex-cli 0.145.0 (`codex login status`: exit 0 / "Not logged in" + exit 1)
+ * and claude 2.1.220 (`claude auth status`: JSON with a `loggedIn` boolean).
  */
-async function isAgentAuthenticated(agent: CodingAgentId): Promise<boolean> {
-  const explicit = getAgentEnvValue(agent, "AUTH_FILE");
+const AGENT_AUTH_PROBE_ARGS: Partial<Record<CodingAgentId, string[]>> = {
+  "codex-cli": ["login", "status"],
+  "claude-code": ["auth", "status"],
+};
+
+const DEFAULT_AUTH_PROBE_TIMEOUT_MS = 15_000;
+/** A signed-in verdict only goes stale if the credential rotates underneath us. */
+const AUTH_PROBE_SIGNED_IN_TTL_MS = 10 * 60_000;
+/**
+ * A signed-out verdict expires fast: signing in mid-session usually touches
+ * the credential file (which invalidates by mtime), but not always — macOS
+ * Keychain logins leave no file to watch.
+ */
+const AUTH_PROBE_SIGNED_OUT_TTL_MS = 30_000;
+
+/** `"indeterminate"` = the probe could not run or its output fit no known shape. */
+type AuthProbeVerdict = boolean | "indeterminate";
+
+interface AuthProbeCacheEntry {
+  value: boolean;
+  credentialMtimeMs: number | null;
+  expiresAt: number;
+}
+
+const authProbeCache = new Map<string, AuthProbeCacheEntry>();
+const pendingAuthProbes = new Map<string, Promise<AuthProbeVerdict>>();
+
+/** Forget cached probe verdicts — for tests and the setup CLI. */
+export function resetLocalAgentAuthProbeCache(): void {
+  authProbeCache.clear();
+  pendingAuthProbes.clear();
+}
+
+async function credentialFileMtime(agent: CodingAgentId): Promise<number | null> {
+  const filePath = resolveAgentAuthFile(agent);
+  if (!filePath) return null;
+  try {
+    return (await stat(filePath)).mtimeMs;
+  } catch {
+    return null;
+  }
+}
+
+interface AuthProbeProcessResult {
+  exitCode: number | null;
+  stdout: string;
+  stderr: string;
+}
+
+/**
+ * Unlike `runProcess`, a non-zero exit here is an answer, not an error —
+ * "Not logged in" comes back as exit 1 — so all three streams are returned
+ * for interpretation instead of being folded into a thrown message.
+ */
+function runAuthProbeProcess(
+  command: string,
+  args: string[],
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  timeoutMs: number,
+): Promise<AuthProbeProcessResult> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    const timer = setTimeout(() => {
+      child.kill("SIGKILL");
+      reject(new Error(`auth probe timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString("utf8");
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString("utf8");
+    });
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.on("close", (exitCode) => {
+      clearTimeout(timer);
+      resolve({ exitCode, stdout, stderr });
+    });
+  });
+}
+
+function interpretAuthProbe(
+  agent: CodingAgentId,
+  result: AuthProbeProcessResult,
+): AuthProbeVerdict {
+  if (agent === "claude-code") {
+    // `claude auth status` prints JSON with a boolean `loggedIn` when the
+    // subcommand exists. That is the CLI's own answer — it wins over the exit
+    // code (and over whatever the credential file looks like).
+    try {
+      const json = extractBalancedJson(result.stdout);
+      if (json) {
+        const parsed = JSON.parse(json) as { loggedIn?: unknown };
+        if (typeof parsed.loggedIn === "boolean") {
+          return parsed.loggedIn;
+        }
+      }
+    } catch {
+      // Not JSON — fall through to the generic interpretation.
+    }
+  }
+
+  if (/not logged in/i.test(`${result.stdout}\n${result.stderr}`)) {
+    return false;
+  }
+  if (result.exitCode === 0) {
+    return true;
+  }
+  // Non-zero exit without a recognisable signed-out message: most likely an
+  // older/newer CLI that does not know the subcommand. Not a verdict.
+  return "indeterminate";
+}
+
+/**
+ * Ask the CLI itself whether it is signed in.
+ *
+ * The probe runs in the same sandbox a real invocation gets (staged
+ * credential, redirected HOME), so the verdict is by construction "would a
+ * real call authenticate" — including on macOS, where Claude Code may hold
+ * its credential in the Keychain and no file exists to shape-check.
+ */
+async function probeAgentAuthStatus(
+  agent: CodingAgentId,
+  command: string,
+): Promise<AuthProbeVerdict> {
+  const probeArgs = AGENT_AUTH_PROBE_ARGS[agent];
+  if (!probeArgs) return "indeterminate";
+  const timeoutMs = Number(
+    process.env.LLM_LOCAL_AGENT_PROBE_TIMEOUT_MS ?? DEFAULT_AUTH_PROBE_TIMEOUT_MS,
+  );
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "readable-agent-probe-"));
+  try {
+    await prepareInvocationDirs(tempDir);
+    const credentials = await stageAgentCredentials(agent, tempDir);
+    const env = { ...buildLocalAgentEnv(tempDir), ...credentials.env };
+    const result = await runAuthProbeProcess(command, probeArgs, tempDir, env, timeoutMs);
+    return interpretAuthProbe(agent, result);
+  } catch {
+    return "indeterminate";
+  } finally {
+    await rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
+async function probeAgentAuthStatusCached(
+  agent: CodingAgentId,
+  command: string,
+): Promise<AuthProbeVerdict> {
+  const key = `${agent}:${command}`;
+  const credentialMtimeMs = await credentialFileMtime(agent);
+  const cached = authProbeCache.get(key);
+  if (cached && cached.expiresAt > Date.now() && cached.credentialMtimeMs === credentialMtimeMs) {
+    return cached.value;
+  }
+
+  let pending = pendingAuthProbes.get(key);
+  if (!pending) {
+    pending = probeAgentAuthStatus(agent, command).finally(() => pendingAuthProbes.delete(key));
+    pendingAuthProbes.set(key, pending);
+  }
+  const verdict = await pending;
+  if (verdict !== "indeterminate") {
+    authProbeCache.set(key, {
+      value: verdict,
+      credentialMtimeMs,
+      expiresAt:
+        Date.now() + (verdict ? AUTH_PROBE_SIGNED_IN_TTL_MS : AUTH_PROBE_SIGNED_OUT_TTL_MS),
+    });
+  }
+  return verdict;
+}
+
+/**
+ * Is this agent signed in?
+ *
+ * Probe-first: the CLI's own status subcommand is the authority, because only
+ * the CLI tracks its own credential formats. Shape-checking the credential
+ * file — the previous implementation — is kept solely as the fallback for
+ * when the probe is indeterminate (a CLI too old or too new to know the
+ * subcommand, a spawn failure, a timeout). That fallback reuses `cli-detect`'s
+ * parsers, which mtime-cache their reads.
+ */
+async function isAgentAuthenticated(agent: CodingAgentId, command: string): Promise<boolean> {
   switch (agent) {
     case "codex-cli":
-      return (await readCodexCliCredentials(explicit).catch(() => null)) !== null;
-    case "claude-code":
-      return (await readClaudeCliCredentials(explicit).catch(() => null)) !== null;
+    case "claude-code": {
+      const probed = await probeAgentAuthStatusCached(agent, command);
+      if (probed !== "indeterminate") {
+        return probed;
+      }
+      const explicit = getAgentEnvValue(agent, "AUTH_FILE");
+      return agent === "codex-cli"
+        ? (await readCodexCliCredentials(explicit).catch(() => null)) !== null
+        : (await readClaudeCliCredentials(explicit).catch(() => null)) !== null;
+    }
     default:
       // Opt-in agents manage their own credentials; we cannot verify them, so
       // we do not claim they are broken either.
@@ -343,8 +537,9 @@ export async function describeLocalCodingAgents(
       const displayName = AGENT_DISPLAY_NAMES[agent];
       const model = getAgentModelName(agent);
       const enabled = canUseLocalAgent(agent);
-      const installed = enabled && resolveAgentCommand(agent) !== undefined;
-      const authenticated = installed && (await isAgentAuthenticated(agent));
+      const resolution = enabled ? resolveAgentCommand(agent) : undefined;
+      const installed = resolution !== undefined;
+      const authenticated = installed && (await isAgentAuthenticated(agent, resolution.command));
 
       const unavailableReason: LocalAgentUnavailableReason | null = !enabled
         ? "not_enabled"

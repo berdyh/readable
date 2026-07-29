@@ -1,7 +1,6 @@
 import type { LlmProvider, LlmProviderInterface, LlmRequest, LlmConfig } from "../types";
 import { getModel } from "@/server/llm-config";
-
-const DEFAULT_TIMEOUT_MS = 60_000;
+import { getTimeout } from "@/server/config";
 
 interface OpenAiProviderConfig {
   apiKey: string;
@@ -57,7 +56,9 @@ function getOpenAiConfig(config?: LlmConfig, taskType?: string): OpenAiProviderC
     organization: (config?.organization as string) ?? process.env.OPENAI_ORGANIZATION,
     project: (config?.project as string) ?? process.env.OPENAI_PROJECT,
     timeoutMs:
-      (config?.timeoutMs as number) ?? Number(process.env.OPENAI_TIMEOUT_MS ?? DEFAULT_TIMEOUT_MS),
+      (config?.timeoutMs as number) ??
+      // getTimeout() applies the OPENAI_TIMEOUT_MS override itself.
+      getTimeout("openai", "OPENAI_TIMEOUT_MS"),
   };
 }
 

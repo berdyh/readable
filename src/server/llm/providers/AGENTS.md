@@ -25,6 +25,7 @@ Anything not listed here is internal to this module:
 
 Read only the *interface* of these — never their internals.
 
+- **server.config** via `getTimeout`
 - **server.llm-config** via `getModel`
 
 ## Constraints

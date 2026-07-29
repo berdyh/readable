@@ -6,7 +6,7 @@
   "goal": "Serves timeouts and base URLs, checking env overrides first.",
   "owns": ["src/server/config"],
   "interface": {
-    "entrypoint": "defaults.ts",
+    "entrypoint": "index.ts",
     "exports": ["getTimeout", "getUrl", "DEFAULT_TIMEOUTS", "DEFAULT_URLS"]
   },
   "constraints": ["timeouts", "base URLs"],

@@ -1,7 +1,6 @@
 import type { LlmProvider, LlmProviderInterface, LlmRequest, LlmConfig } from "../types";
 import { getModel } from "@/server/llm-config";
-
-const DEFAULT_TIMEOUT_MS = 60_000;
+import { getTimeout } from "@/server/config";
 
 interface GeminiProviderConfig {
   apiKey: string;
@@ -55,7 +54,9 @@ function getGeminiConfig(config?: LlmConfig, taskType?: string): GeminiProviderC
     baseUrl: baseUrl.replace(/\/+$/, ""),
     model,
     timeoutMs:
-      (config?.timeoutMs as number) ?? Number(process.env.GEMINI_TIMEOUT_MS ?? DEFAULT_TIMEOUT_MS),
+      (config?.timeoutMs as number) ??
+      // getTimeout() applies the GEMINI_TIMEOUT_MS override itself.
+      getTimeout("gemini", "GEMINI_TIMEOUT_MS"),
   };
 }
 

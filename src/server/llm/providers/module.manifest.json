@@ -19,6 +19,10 @@
     {
       "module": "server.llm-config",
       "via": "getModel"
+    },
+    {
+      "module": "server.config",
+      "via": "getTimeout"
     }
   ],
   "constraints": ["one class per upstream API", "request/response translation"],

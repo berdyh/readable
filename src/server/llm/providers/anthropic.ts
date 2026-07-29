@@ -1,7 +1,6 @@
 import type { LlmProvider, LlmProviderInterface, LlmRequest, LlmConfig } from "../types";
 import { getModel } from "@/server/llm-config";
-
-const DEFAULT_TIMEOUT_MS = 60_000;
+import { getTimeout } from "@/server/config";
 
 interface AnthropicProviderConfig {
   apiKey: string;
@@ -49,7 +48,8 @@ function getAnthropicConfig(config?: LlmConfig, taskType?: string): AnthropicPro
     model,
     timeoutMs:
       (config?.timeoutMs as number) ??
-      Number(process.env.ANTHROPIC_TIMEOUT_MS ?? DEFAULT_TIMEOUT_MS),
+      // getTimeout() applies the ANTHROPIC_TIMEOUT_MS override itself.
+      getTimeout("anthropic", "ANTHROPIC_TIMEOUT_MS"),
   };
 }
 

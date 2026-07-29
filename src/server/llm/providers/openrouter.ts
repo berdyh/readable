@@ -1,7 +1,7 @@
 import type { LlmProvider, LlmProviderInterface, LlmRequest, LlmConfig } from "../types";
 import { getModel } from "@/server/llm-config";
+import { getTimeout } from "@/server/config";
 
-const DEFAULT_TIMEOUT_MS = 60_000;
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
 const DEFAULT_REFERER = "https://github.com/berdyh/readable";
 const DEFAULT_TITLE = "Readable";
@@ -126,7 +126,8 @@ function getOpenRouterConfig(config?: LlmConfig, taskType?: string): OpenRouterP
     title: (config?.title as string) ?? process.env.OPENROUTER_X_TITLE ?? DEFAULT_TITLE,
     timeoutMs:
       (config?.timeoutMs as number) ??
-      Number(process.env.OPENROUTER_TIMEOUT_MS ?? DEFAULT_TIMEOUT_MS),
+      // getTimeout() applies the OPENROUTER_TIMEOUT_MS override itself.
+      getTimeout("openrouter", "OPENROUTER_TIMEOUT_MS"),
   };
 }
 

@@ -12,7 +12,7 @@ argument, so adding a knob means naming it here.
 
 ## Interface
 
-Entrypoint: `defaults.ts`
+Entrypoint: `index.ts`
 
 Anything not listed here is internal to this module:
 

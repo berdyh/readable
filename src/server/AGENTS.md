@@ -41,6 +41,7 @@ Route by goal — you should not need to open more than one.
 - **server.qa** (`src/server/qa`) — Answers a question about a paper with grounded citations.
 - **server.search** (`src/server/search`) — Fuses vector and full-text hits into one ranked chunk list.
 - **server.summarize** (`src/server/summarize`) — Produces a structured summary of a stored paper.
+- **server.text** (`src/server/text`) — Truncates text without splitting a Unicode surrogate pair.
 - **server.vector** (`src/server/vector`) — Maintains the per-model Qdrant collection that backs vector search.
 
 ## Constraints

@@ -11,7 +11,13 @@ export const DEFAULT_TIMEOUTS = {
   openai: 60_000,
   anthropic: 60_000,
   gemini: 60_000,
-  openrouter: 60_000,
+
+  // OpenRouter gets longer than the direct providers. It is a broker, so a call
+  // can queue behind a busy upstream before generation even starts, and the
+  // free-tier models this app defaults to are the most contended. Summarising a
+  // whole paper through a 550B model exceeded 60s reliably enough that
+  // /api/summarize returned "This operation was aborted" rather than an answer.
+  openrouter: 180_000,
 
   // Postgres statement timeout (20 seconds for relational queries)
   postgres: 20_000,

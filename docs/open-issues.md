@@ -1,119 +1,109 @@
 # Open issues and next steps
 
-Working state as of **2026-07-29**, branch `feat/chat-panel-resizer`. `pnpm verify` green:
-31 test files, 255 tests, 0 lint errors, 0 lint warnings.
+Working state as of **2026-07-29**, `main`. `pnpm verify` green: 262 tests on `main`
+(292 with PR #21 merged), 0 lint errors, 0 lint warnings. `pnpm test:api -- --live` is
+**5/5** — health, qa, summarize, chat session, arXiv ingest.
 
-This file exists so the state of the work survives between sessions. It is a **living
-checklist, not a record** — when an item is done, delete it from here rather than marking
-it ✅, and put the durable explanation in the doc that owns that subject. Anything frozen
-belongs in [`archive/`](./archive/).
+This file is a **living checklist, not a record** — when an item is done, delete it rather
+than marking it ✅, and put the durable explanation in the doc that owns that subject.
+Anything frozen belongs in [`archive/`](./archive/).
+
+## Next session — start here
+
+Two items, both deliberately deferred rather than rushed.
+
+### 1. Make local coding-agent detection self-correcting
+
+`isAgentAuthenticated()` in `src/server/llm/providers/local-coding-agent.ts` decides whether
+you are signed in by **reading and shape-checking the CLI's credential file**. It never asks
+the CLI. That makes the whole feature pinned to the file formats of `codex-cli 0.145.0` and
+`claude 2.1.220`.
+
+That assumption has already broken once: `codex exec --ask-for-approval never` used to be
+valid, the flag moved, and the resulting exit-2 was the original reason
+`LLM_PROVIDER=coding-agent` failed for everyone.
+
+What is genuinely portable today (verified by reading the code, not by running it elsewhere):
+
+- No hardcoded paths — `os.homedir()`, and `CODEX_HOME` / `CLAUDE_CONFIG_DIR` are honoured.
+- `PATH` discovery splits on `path.delimiter`, so it is not Unix-only.
+- A missing or unparseable credential file returns `null`, so the agent renders **greyed out**
+  rather than crashing. The failure mode is safe.
+
+Where it will silently misreport on another machine:
+
+- **macOS** — Claude Code may hold credentials in the Keychain rather than
+  `~/.claude/.credentials.json`. You would be signed in and the picker would grey it out.
+- **Any future format change** in either CLI — same false negative, no diagnostic.
+
+**The fix:** probe rather than parse. Run the CLI's own status (or a trivial `exec`) once,
+cache it for the session, and trust _its_ answer. That survives format changes by
+construction, which file-shape checking cannot.
+
+Related, from the same work and worth doing at the same time:
+
+- The picker only reaches `/api/qa`. `/api/summarize` and `/api/editor/selection/*` still use
+  the configured order, so "I picked Claude Code" is scoped to chat only.
+- Credential refresh is write-through-to-nowhere: an agent refreshing its OAuth token mid-call
+  writes into the temp `CODEX_HOME` we then delete. Correct, but it repeats the refresh
+  round-trip every request, and would become a real problem if upstream ever rotated refresh
+  tokens on use.
+- `--tools ""` on Claude Code is a variadic flag — the empty string must stay last or it
+  swallows the following argument.
+
+### 2. Stop sending the whole paper to the model
+
+`/api/summarize` currently assembles the entire paper into one prompt. That is wrong on cost,
+on latency, and on quality — the relevant couple of kB is buried in ~24kB of noise.
+
+**Measure before designing.** The one number that matters is not yet known: how much of the
+prompt is paper text versus assembled scaffolding. `gemma-4-26b:free` summarised the raw 24kB
+paper standalone in 47s, but `/api/summarize` still hit a 180s timeout with the same model —
+so the real prompt is _substantially_ larger than the paper and nobody has measured the
+difference. Get that number first; it should drive the design rather than assumptions.
+
+Directions worth weighing once it is known, not before:
+
+- **Retrieval-scoped summarisation** — `server.search` already does hybrid retrieval. Summarise
+  the top-k chunks rather than everything.
+- **Section-wise map-reduce** — summarise per section, cache those, reduce to a paper summary.
+  Plays well with the existing `paper_chunks` section metadata.
+- **Cheap-model triage** — a fast pass selects what the expensive pass reads.
+
+Each has a different cost/quality trade-off, and the prompt-composition number decides which
+is worth building.
 
 ## Verification gaps
 
-### The authenticated surface has never been exercised
+### There is still no browser-level check of the six chat flows
 
-Still the largest residual risk in the tree, and it is now a **blocked** gap rather than an
-unattempted one.
+`pnpm test:api -- --live` now covers the authenticated **API** surface end to end, and it runs
+unattended (it mints its own Clerk session token — see `scripts/lib/clerk-test-session.ts`).
 
-A smoke pass was attempted on 2026-07-29 against a local dev server with Postgres and
-Qdrant up. What it established:
+What it does not cover is anything that only exists once React runs:
 
-- The anonymous surface is verified. All 12 offline route checks pass, plus live
-  `GET /api/health` and `POST /api/editor/ingest/arxiv` against real arXiv + Qdrant.
-- The auth gate itself demonstrably rejects: `/api/qa`, `/api/summarize`, and
-  `/api/chat/session` all returned 401 to a non-session bearer.
-
-What it did **not** establish: anything behind sign-in. The token supplied was a Clerk
-**API key** (`ak_…`), and `requireAuthenticatedUserId()` resolves a Clerk _session_, not a
-bearer API key — so every authenticated check returned the same 401 an anonymous caller
-gets.
-
-These six flows remain unverified since the chat sidecar restructure:
-
-- sending and receiving a message
-- session persistence across a reload
-- chat tab deletion and its confirmation step
-- slash-command dispatch
 - citation click → block scroll/reveal
 - insert-answer into the document
+- chat tab deletion and its confirmation step
+- session persistence across a reload
 
-**What would unblock it:** a real session JWT, not an API key. From a signed-in browser,
-`await window.Clerk.session.getToken()` in the console yields one. Then:
-
-```bash
-docker compose up -d && pnpm db:migrate
-PORT=3100 pnpm dev
-TEST_BASE_URL=http://localhost:3100 \
-TEST_AUTH_TOKEN=<session-jwt> \
-TEST_LIVE_PAPER_ID=1706.03762v7 \
-pnpm test:api -- --live
-```
-
-Note `TEST_BASE_URL`, not `API_BASE_URL` — passing the wrong one fails as twelve confusing
-404s. And note the port: this worktree's directory is named `main`, so Docker Compose
-derives the project name `main` and can collide with other projects on this machine. One
-was already holding port 3000.
-
-## Structural
-
-### Oversized files — a readability job, not a correctness one
-
-The 2026-07-28 note assumed a clean lint run over a large component was weak evidence
-because "the file was too large for the compiler to analyze". That was half right: the
-compiler really was silently skipping `Block.tsx`, but **file size was not the cause and
-splitting would not have fixed it**.
-
-The cause was one line — `await import("./apiHandlers")` inside a `useCallback`. A dynamic
-import makes the React Compiler bail out on the whole component, so none of the 17
-`react-hooks` rules ran on it. Measured by injecting the same violation
-(`useEffect(() => { setState(true); }, [])`) into several files:
-
-| Case                                                            | `set-state-in-effect` |
-| --------------------------------------------------------------- | --------------------- |
-| 7-line component                                                | fires                 |
-| 7-line component + `await import()` in a callback               | **silent**            |
-| 7-line component + `createRange`/`getSelection` DOM work        | fires                 |
-| `Block.tsx` at 486 lines                                        | **silent**            |
-| `Block.tsx` at 419 lines (drag extracted, import still dynamic) | **silent**            |
-| `Block.tsx` with the import hoisted                             | fires                 |
-| `PdfViewerWithHighlights.tsx`, 451 lines, no dynamic import     | fires                 |
-
-The import is now static and `Block.tsx` reports clean — which finally means something. It
-was the only `await import()` in application code, so no other component was ever affected,
-and the large files below are all being analysed (or are server code the React rules never
-applied to in the first place).
-
-**So this is now purely a readability item, with no correctness argument behind it:**
-
-| Lines | File                                                           |
-| ----- | -------------------------------------------------------------- |
-| 744   | `src/server/llm/providers/local-coding-agent.ts`               |
-| 735   | `src/server/db/papers.ts`                                      |
-| 699   | `src/server/ingest/pipeline.ts`                                |
-| 688   | `src/server/summarize/index.ts`                                |
-| 470   | `src/app/components/block-editor/parsers.ts`                   |
-| 451   | `src/app/components/workspace/pdf/PdfViewerWithHighlights.tsx` |
-| 442   | `src/server/editor/selection.ts`                               |
-
-Worth doing eventually; not worth prioritising over anything that changes behaviour.
-
-The lasting lesson is the general one: **a dynamic import inside a component silently
-disables every react-hooks rule for that component.** If one is ever reintroduced, the file
-stops being checked and nothing says so. Probing with a deliberate violation is the only
-way to tell — consider it whenever a component's lint looks suspiciously clean.
+The jsdom vitest project can now render components, so these are reachable as component tests
+rather than needing a full browser.
 
 ## Smaller follow-ups
 
-- **Selection summaries do not feed the persona graph.** `summarizeSelection()` used to
-  accept a `userId` and ignore it. The dead parameter is gone, but the underlying gap is
-  real: `qa` and `summarize` both call `recordPersonaSignals()` and the selection path does
-  not. Wiring it up needs the selection summary schema to return `concepts` first, so it is
-  a feature rather than a fix.
+- **Selection summaries do not feed the persona graph.** `qa` and `summarize` both call
+  `recordPersonaSignals()`; the selection path does not. Needs the selection summary schema to
+  return `concepts` first, so it is a feature rather than a fix.
 - **`docs/editor-architecture.md`** still describes the removed `EditorWorkspace`/Tiptap-ribbon
   tree. Its "Canonical helper locations" section is current; the component tree and state
   diagram are historical.
-- **`docs/` is in `.gitignore`** even though files under it are tracked. New files added
-  there are silently untracked — `git add -f` them or fix the ignore rule.
+- **`docs/` is in `.gitignore`** even though files under it are tracked. New files added there
+  are silently untracked — `git add -f` them or fix the ignore rule.
+- **Oversized files** are a readability item only. The React Compiler blindness that made it
+  look like a correctness issue was caused by a dynamic `import()` inside a component, not by
+  file size, and that is fixed. Re-read the note in `git log` for `Restore React Compiler
+analysis of Block.tsx` before reopening it.
 
 ## Blocked on a decision
 
@@ -122,7 +112,12 @@ way to tell — consider it whenever a component's lint looks suspiciously clean
 No roadmap, product-direction, or vision document has been written, and none should be
 invented from the code. This is owned by the user.
 
-## Sequenced plan
+## Environment notes worth keeping
 
-1. Get a Clerk session JWT and run the signed-in smoke pass.
-2. Write the product-vision docs, and work from them.
+- `docker-compose.yml` pins `name: readable`. Without it Compose derives the project name from
+  the directory, and this repo's worktrees are called `main` — another project on the same
+  machine with a `main` directory then shares the namespace and its `docker compose up`
+  deletes these containers.
+- OpenRouter's `:free` slugs rotate and are retired without notice; every model configured
+  before 2026-07-29 had 404'd. The paid `deepseek-v4-flash` entries in `models.json` are
+  deliberate — see the `openrouter_cost` note there.

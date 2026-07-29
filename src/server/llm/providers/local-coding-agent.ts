@@ -1,5 +1,14 @@
 import { spawn } from "node:child_process";
-import { accessSync, constants, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import {
+  accessSync,
+  closeSync,
+  constants,
+  existsSync,
+  openSync,
+  readdirSync,
+  readSync,
+  statSync,
+} from "node:fs";
 import { mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -176,9 +185,20 @@ function findOnPath(command: string): string | undefined {
 }
 
 function isLikelyNpxWrapper(command: string): boolean {
+  // Read only the head of the file. `readFileSync().slice(4096)` loaded the
+  // whole binary first, and the resolved `claude` command is a >100MB native
+  // executable — that one line cost ~1.5s of blocked event loop on every
+  // agent-status call.
   try {
-    const content = readFileSync(command, "utf8").slice(0, 4096);
-    return content.includes("npx") && content.includes("--prefer-online");
+    const fd = openSync(command, "r");
+    try {
+      const head = Buffer.alloc(4096);
+      const bytesRead = readSync(fd, head, 0, head.length, 0);
+      const content = head.toString("utf8", 0, bytesRead);
+      return content.includes("npx") && content.includes("--prefer-online");
+    } finally {
+      closeSync(fd);
+    }
   } catch {
     return false;
   }

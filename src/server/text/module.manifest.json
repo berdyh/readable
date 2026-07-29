@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "server.text",
+  "parent": "server",
+  "path": "src/server/text",
+  "goal": "Truncates text without splitting a Unicode surrogate pair.",
+  "owns": ["src/server/text"],
+  "interface": {
+    "entrypoint": "index.ts",
+    "exports": ["truncateSafely", "truncateWithEllipsis"]
+  },
+  "constraints": ["string-level rules", "no I/O", "no framework code"],
+  "checks": ["pnpm vitest run src/server/text"]
+}

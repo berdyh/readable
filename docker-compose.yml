@@ -1,3 +1,12 @@
+# Pin the Compose project name. Without it Compose derives the name from the
+# directory, and this repo is checked out as a bare-repo container whose
+# worktrees are named `main`, `dev`, and so on. Any other project on the machine
+# whose directory is also called `main` then shares the project namespace, and
+# its `docker compose up` recreates or stops these containers — which showed up
+# here as Postgres repeatedly dying mid-test with ECONNREFUSED, and as another
+# project's container already holding port 3000.
+name: readable
+
 services:
   postgres:
     image: postgres:16-alpine

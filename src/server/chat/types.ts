@@ -19,12 +19,20 @@ export interface ChatCitation {
   quote?: string;
 }
 
+export type ChatSourceLabel = "model_knowledge" | "cited_text";
+
 export interface ChatTrustMetadata {
   status: ChatTrustStatus;
   hasEvidence: boolean;
   validCitationCount: number;
   invalidCitationCount: number;
   warnings: string[];
+  /**
+   * Explanation source label (server-validated upstream): whether the
+   * answer content came from the model's own knowledge or retrieved
+   * cited text. Optional — older persisted rows predate it.
+   */
+  source?: ChatSourceLabel;
   retrieval: {
     vector: {
       status: ChatVectorRetrievalStatus;

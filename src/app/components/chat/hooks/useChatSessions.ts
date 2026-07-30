@@ -17,6 +17,7 @@ import {
   createLocalId,
   fromWireMessage,
   titleFromQuestion,
+  withSourceLabel,
   type ChatMessage,
   type ChatTab,
 } from "../model/types";
@@ -250,7 +251,7 @@ export function useChatSessions({
           content: result.answer,
           citations: result.cites,
           reasoning: result.reasoning,
-          trust: result.trust,
+          trust: withSourceLabel(result.trust, result.source),
           createdAt: Date.now(),
         };
 

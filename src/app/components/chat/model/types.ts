@@ -91,6 +91,22 @@ export interface ChatAnswerResponse {
   cites?: Source[];
   reasoning?: string;
   trust?: TrustDisplayMetadata;
+  /** Server-validated source label; folded into `trust` for display. */
+  source?: "model_knowledge" | "cited_text";
+}
+
+/**
+ * Lifts the answer-level source label into the trust display block so
+ * the trust strip is the single place that renders provenance.
+ */
+export function withSourceLabel(
+  trust: TrustDisplayMetadata | undefined,
+  source: ChatAnswerResponse["source"],
+): TrustDisplayMetadata | undefined {
+  if (!source) {
+    return trust;
+  }
+  return { ...(trust ?? {}), source };
 }
 
 export function createLocalId(prefix: string): string {

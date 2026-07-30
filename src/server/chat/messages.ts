@@ -4,6 +4,7 @@ import type {
   ChatCitation,
   ChatMessage,
   ChatMessageMetadata,
+  ChatSourceLabel,
   ChatTextRetrievalStatus,
   ChatTrustStatus,
   ChatVectorRetrievalStatus,
@@ -36,6 +37,11 @@ const TEXT_RETRIEVAL_STATUSES = new Set<ChatTextRetrievalStatus>([
   "unavailable",
   "unknown",
 ]);
+const SOURCE_LABELS = new Set<ChatSourceLabel>(["model_knowledge", "cited_text"]);
+
+function sanitizeSourceLabel(value: unknown): ChatSourceLabel | undefined {
+  return SOURCE_LABELS.has(value as ChatSourceLabel) ? (value as ChatSourceLabel) : undefined;
+}
 
 type ChatMessageRecordWithMetadata = ChatMessageRecord & {
   metadata?: unknown;
@@ -122,6 +128,7 @@ export function parseChatMetadata(value: unknown): ChatMessageMetadata {
       validCitationCount: sanitizeCount(trust.validCitationCount),
       invalidCitationCount: sanitizeCount(trust.invalidCitationCount),
       warnings: sanitizeWarnings(trust.warnings),
+      source: sanitizeSourceLabel(trust.source),
       retrieval: {
         vector: {
           status: vectorStatus,

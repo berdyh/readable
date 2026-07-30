@@ -71,6 +71,39 @@ describe("AnswerCard trust strip", () => {
     expect(screen.getByText("Source proof unavailable")).toBeInTheDocument();
   });
 
+  it("shows a cited-text source chip when the label says so", () => {
+    render(
+      <AnswerCard
+        paperId="2301.00001"
+        content="Grounded in a cited paper."
+        trust={{ status: "sourced", source: "cited_text" }}
+        citations={[{ chunkId: "c1", page: 3, quote: "evidence" }]}
+      />,
+    );
+
+    expect(screen.getByTestId("source-label-chip")).toHaveTextContent("Cited text");
+  });
+
+  it("shows a model-knowledge chip for model-sourced explanations", () => {
+    render(
+      <AnswerCard
+        paperId="2301.00001"
+        content="Explained from model knowledge."
+        trust={{ status: "sourced", source: "model_knowledge" }}
+      />,
+    );
+
+    expect(screen.getByTestId("source-label-chip")).toHaveTextContent("Model knowledge");
+  });
+
+  it("renders no source chip for answers without a label (older rows)", () => {
+    render(
+      <AnswerCard paperId="2301.00001" content="Legacy answer." trust={{ status: "sourced" }} />,
+    );
+
+    expect(screen.queryByTestId("source-label-chip")).not.toBeInTheDocument();
+  });
+
   it("surfaces the first warning instead of the generic detail line", () => {
     render(
       <AnswerCard

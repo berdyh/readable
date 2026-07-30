@@ -30,7 +30,9 @@ export function parseSummaryToBlocks(summary: SummaryResult): Block[] {
     });
   }
 
-  // Parse sections
+  // Parse sections. All explanation-contract fields (hook, mechanism via
+  // reasoning, evidence, new_terms, source) are optional — older
+  // persisted summaries lack them and must keep rendering unchanged.
   if (summary.sections) {
     for (const section of summary.sections) {
       // Section heading
@@ -41,11 +43,25 @@ export function parseSummaryToBlocks(summary: SummaryResult): Block[] {
         metadata: {
           section: section.section_id,
           page: section.page_span?.start,
+          // Server-validated provenance label, carried for chip rendering.
+          sourceLabel: section.source,
           locked: true, // Generated blocks are locked by default
         },
       });
 
-      // Section summary paragraph
+      // Hook: the motivating question that opens the teaching unit.
+      if (section.hook) {
+        blocks.push({
+          id: uuidv4(),
+          type: "paragraph",
+          content: `*${section.hook}*`,
+          metadata: {
+            locked: true,
+          },
+        });
+      }
+
+      // Section summary paragraph (the plain-language claim)
       if (section.summary) {
         blocks.push({
           id: uuidv4(),
@@ -55,6 +71,46 @@ export function parseSummaryToBlocks(summary: SummaryResult): Block[] {
             locked: true, // Generated blocks are locked by default
           },
         });
+      }
+
+      // Mechanism (contract) — carried in `reasoning` for wire compat.
+      if (section.reasoning && section.hook) {
+        blocks.push({
+          id: uuidv4(),
+          type: "paragraph",
+          content: section.reasoning,
+          metadata: {
+            locked: true,
+          },
+        });
+      }
+
+      // Evidence pointer.
+      if (section.evidence) {
+        blocks.push({
+          id: uuidv4(),
+          type: "paragraph",
+          content: `**Evidence:** ${section.evidence}`,
+          metadata: {
+            locked: true,
+          },
+        });
+      }
+
+      // Glossary of new terms introduced by the section.
+      if (section.new_terms && section.new_terms.length > 0) {
+        for (const term of section.new_terms) {
+          const citedSuffix = term.source === "cited_text" ? " *(from cited text)*" : "";
+          blocks.push({
+            id: uuidv4(),
+            type: "bullet_list",
+            content: `**${term.term}** — ${term.definition}${citedSuffix}`,
+            metadata: {
+              sourceLabel: term.source,
+              locked: true,
+            },
+          });
+        }
       }
 
       // Key points as bullet list

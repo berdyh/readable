@@ -6,6 +6,7 @@ import {
   type PaperChunk,
   type PaperRecord,
 } from "@/server/db";
+import { enrichCitationsBatch, type SemanticScholarPaper } from "@/server/external";
 import { embedTexts, getEmbeddingEnvironment } from "@/server/vector";
 import {
   deletePaperChunkVectorsByPaper,
@@ -507,6 +508,69 @@ function toCitationRecords(paperId: string, references: PaperReference[]): Citat
   }));
 }
 
+/**
+ * Merges Semantic Scholar batch results into citation records. Stored
+ * bibliography fields win when present; enrichment fills the gaps and
+ * owns the S2-specific columns. `enrichedAt` is stamped only on rows
+ * that actually got a hit.
+ */
+export function applyCitationEnrichment(
+  citations: Citation[],
+  enrichment: Map<string, SemanticScholarPaper>,
+): Citation[] {
+  const enrichedAt = new Date().toISOString();
+
+  return citations.map((citation) => {
+    const paper = enrichment.get(citation.citationId);
+    if (!paper) {
+      return citation;
+    }
+
+    return {
+      ...citation,
+      title: citation.title?.trim() ? citation.title : (paper.title ?? citation.title),
+      authors: citation.authors?.length ? citation.authors : paper.authors,
+      year: citation.year ?? paper.year,
+      doi: citation.doi ?? paper.doi,
+      arxivId: citation.arxivId ?? paper.arxivId,
+      url: citation.url ?? paper.openAccessPdfUrl ?? paper.url,
+      abstract: paper.abstract ?? citation.abstract,
+      venue: paper.venue ?? citation.venue,
+      citationCount: paper.citationCount ?? citation.citationCount,
+      openAccessPdfUrl: paper.openAccessPdfUrl ?? citation.openAccessPdfUrl,
+      enrichedAt,
+    };
+  });
+}
+
+/**
+ * Ingest-time enrichment (S2 hygiene): one batch call per ingest,
+ * persisted to Postgres so runtime explanation paths never touch the
+ * Semantic Scholar API. Best-effort — when S2 is down the flows work
+ * with unenriched citations and the next re-ingest retries.
+ */
+async function enrichCitationsAtIngest(citations: Citation[]): Promise<Citation[]> {
+  if (citations.length === 0) {
+    return citations;
+  }
+
+  try {
+    const enrichment = await enrichCitationsBatch(
+      citations.map((citation) => ({
+        key: citation.citationId,
+        arxivId: citation.arxivId,
+        doi: citation.doi,
+        title: citation.title || undefined,
+        year: citation.year,
+      })),
+    );
+    return applyCitationEnrichment(citations, enrichment);
+  } catch (error) {
+    console.warn("[ingest] Citation enrichment failed; storing unenriched citations.", error);
+    return citations;
+  }
+}
+
 async function indexChunkVectors(
   paperId: string,
   chunks: PaperChunk[],
@@ -677,12 +741,16 @@ export async function ingestPaper(
     pages,
   };
 
+  const citationRecords = await enrichCitationsAtIngest(
+    toCitationRecords(metadata.id, referencesWithChunks),
+  );
+
   await replacePaperIngestData(
     {
       paper: paperRecord,
       chunks,
       figures: toFigureRecords(metadata.id, figuresWithChunks),
-      citations: toCitationRecords(metadata.id, referencesWithChunks),
+      citations: citationRecords,
     },
     {
       afterCommit: async ({ chunkIds: committedChunkIds }) => {

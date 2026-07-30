@@ -41,6 +41,12 @@ interface PaperCitationRow {
   doi: string | null;
   url: string | null;
   chunk_ids: string[] | null;
+  abstract: string | null;
+  arxiv_id: string | null;
+  venue: string | null;
+  citation_count: number | null;
+  open_access_pdf_url: string | null;
+  enriched_at: Date | null;
 }
 
 /**
@@ -115,6 +121,12 @@ function mapCitationRow(row: PaperCitationRow): Citation {
     doi: row.doi ?? undefined,
     url: row.url ?? undefined,
     chunkIds: row.chunk_ids ?? undefined,
+    abstract: row.abstract ?? undefined,
+    arxivId: row.arxiv_id ?? undefined,
+    venue: row.venue ?? undefined,
+    citationCount: typeof row.citation_count === "number" ? row.citation_count : undefined,
+    openAccessPdfUrl: row.open_access_pdf_url ?? undefined,
+    enrichedAt: row.enriched_at?.toISOString(),
   };
 }
 
@@ -522,6 +534,10 @@ async function upsertCitationsWithClient(
   for (const citation of citations) {
     const id = citation.id ?? buildCitationUuid(citation.paperId, citation.citationId);
 
+    // COALESCE semantics on enrichment fields: an unenriched re-ingest
+    // must never null-overwrite persisted Semantic Scholar enrichment.
+    // Base bibliographic fields also prefer the fresh non-null value but
+    // keep the stored one when ingest produced nothing.
     await client.query(
       `
         INSERT INTO paper_citations (
@@ -534,16 +550,31 @@ async function upsertCitationsWithClient(
           source,
           doi,
           url,
-          chunk_ids
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+          chunk_ids,
+          abstract,
+          arxiv_id,
+          venue,
+          citation_count,
+          open_access_pdf_url,
+          enriched_at
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
         ON CONFLICT (paper_id, citation_id) DO UPDATE SET
-          title = EXCLUDED.title,
-          authors = EXCLUDED.authors,
-          year = EXCLUDED.year,
-          source = EXCLUDED.source,
-          doi = EXCLUDED.doi,
-          url = EXCLUDED.url,
-          chunk_ids = EXCLUDED.chunk_ids
+          title = COALESCE(NULLIF(EXCLUDED.title, ''), paper_citations.title),
+          authors = CASE
+            WHEN array_length(EXCLUDED.authors, 1) IS NULL THEN paper_citations.authors
+            ELSE EXCLUDED.authors
+          END,
+          year = COALESCE(EXCLUDED.year, paper_citations.year),
+          source = COALESCE(EXCLUDED.source, paper_citations.source),
+          doi = COALESCE(EXCLUDED.doi, paper_citations.doi),
+          url = COALESCE(EXCLUDED.url, paper_citations.url),
+          chunk_ids = EXCLUDED.chunk_ids,
+          abstract = COALESCE(EXCLUDED.abstract, paper_citations.abstract),
+          arxiv_id = COALESCE(EXCLUDED.arxiv_id, paper_citations.arxiv_id),
+          venue = COALESCE(EXCLUDED.venue, paper_citations.venue),
+          citation_count = COALESCE(EXCLUDED.citation_count, paper_citations.citation_count),
+          open_access_pdf_url = COALESCE(EXCLUDED.open_access_pdf_url, paper_citations.open_access_pdf_url),
+          enriched_at = COALESCE(EXCLUDED.enriched_at, paper_citations.enriched_at)
         `,
       [
         id,
@@ -556,6 +587,12 @@ async function upsertCitationsWithClient(
         citation.doi ?? null,
         citation.url ?? null,
         cleanIntArray(citation.chunkIds),
+        citation.abstract ?? null,
+        citation.arxivId ?? null,
+        citation.venue ?? null,
+        typeof citation.citationCount === "number" ? citation.citationCount : null,
+        citation.openAccessPdfUrl ?? null,
+        citation.enrichedAt ?? null,
       ],
     );
     ids.push(id);
@@ -651,7 +688,8 @@ export async function fetchPaperCitationsByPaperId(paperId: string): Promise<Cit
   await ensureSchema();
   return withPgClient(async (client) => {
     const { rows } = await client.query<PaperCitationRow>(
-      `SELECT id, paper_id, citation_id, title, authors, year, source, doi, url, chunk_ids
+      `SELECT id, paper_id, citation_id, title, authors, year, source, doi, url, chunk_ids,
+              abstract, arxiv_id, venue, citation_count, open_access_pdf_url, enriched_at
        FROM paper_citations
        WHERE paper_id = $1
        ORDER BY citation_id ASC`,

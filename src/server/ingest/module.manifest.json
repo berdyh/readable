@@ -27,6 +27,10 @@
     {
       "module": "server.vector",
       "via": "upsertPaperChunkVectors"
+    },
+    {
+      "module": "server.external",
+      "via": "enrichCitationsBatch"
     }
   ],
   "constraints": ["source fetching", "text and figure extraction", "chunking"],

@@ -27,6 +27,8 @@ const mocks = vi.hoisted(() => {
     lockHeld = false;
   };
 
+  const statements: string[] = [];
+
   const createClient = () => {
     const clientId = nextClientId;
     nextClientId += 1;
@@ -34,6 +36,7 @@ const mocks = vi.hoisted(() => {
     return {
       query: vi.fn(async (statement: string) => {
         const sql = statement.replace(/\s+/g, " ").trim();
+        statements.push(sql);
 
         if (sql.includes("pg_advisory_lock")) {
           await acquireLock(clientId);
@@ -56,12 +59,13 @@ const mocks = vi.hoisted(() => {
 
   const reset = () => {
     events.length = 0;
+    statements.length = 0;
     nextClientId = 1;
     lockHeld = false;
     lockWaiters = [];
   };
 
-  return { createClient, events, reset };
+  return { createClient, events, statements, reset };
 });
 
 vi.mock("./migrate", () => ({
@@ -75,7 +79,41 @@ vi.mock("./postgres", () => ({
   ),
 }));
 
-import { compareChunksByDocumentOrder, replacePaperIngestData } from "./papers";
+import { compareChunksByDocumentOrder, replacePaperIngestData, upsertCitations } from "./papers";
+
+describe("upsertCitations", () => {
+  beforeEach(() => {
+    mocks.reset();
+  });
+
+  it("preserves persisted enrichment on unenriched re-ingest (COALESCE semantics)", async () => {
+    await upsertCitations([
+      {
+        paperId: "2401.00001",
+        citationId: "bib.bib1",
+        title: "Layer normalization",
+      },
+    ]);
+
+    const upsert = mocks.statements.find((sql) => sql.startsWith("INSERT INTO paper_citations"));
+    expect(upsert).toBeDefined();
+
+    for (const column of [
+      "abstract",
+      "arxiv_id",
+      "venue",
+      "citation_count",
+      "open_access_pdf_url",
+      "enriched_at",
+    ]) {
+      expect(upsert).toContain(`${column} = COALESCE(EXCLUDED.${column}, paper_citations.${column})`);
+    }
+
+    // Base fields must not null-overwrite stored values either.
+    expect(upsert).toContain("title = COALESCE(NULLIF(EXCLUDED.title, ''), paper_citations.title)");
+    expect(upsert).toContain("year = COALESCE(EXCLUDED.year, paper_citations.year)");
+  });
+});
 
 describe("compareChunksByDocumentOrder", () => {
   it("orders by token_start ordinal when both rows carry one", () => {

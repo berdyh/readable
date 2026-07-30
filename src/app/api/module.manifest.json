@@ -35,6 +35,10 @@
       "via": "toApiMessage"
     },
     {
+      "module": "server.persona",
+      "via": "recordExposureSignal"
+    },
+    {
       "module": "server.db",
       "via": "createChatSession"
     },

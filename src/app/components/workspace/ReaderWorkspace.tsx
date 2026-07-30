@@ -10,7 +10,7 @@ import { BlockEditor } from "../block-editor/BlockEditor";
 import PdfPanel from "./pdf/PdfPanel";
 import { SkillsPanel } from "./SkillsPanel";
 import { ThreePassBar } from "./ThreePassBar";
-import { usePaperContent } from "./usePaperContent";
+import { resolvePaperId, usePaperContent } from "./usePaperContent";
 import { usePassState } from "./usePassState";
 import { useWorkspaceStatus } from "./useWorkspaceStatus";
 
@@ -29,6 +29,12 @@ const ReaderWorkspace = ({ paperId, pdfUrl }: ReaderWorkspaceProps) => {
   const { setTheme, resolvedTheme } = useTheme();
   const [isResearchChatOpen, setIsResearchChatOpen] = useState(false);
 
+  // Pass state first: the pass decides whether the explanation contract
+  // (pass 1) or the paper HTML (passes 2–3) is the primary reading
+  // surface. Same id resolution as usePaperContent so the persisted
+  // pass keeps its per-paper key.
+  const { pass, setPass } = usePassState({ paperId: resolvePaperId(paperId) });
+
   const {
     resolvedPaperId,
     resolvedPdfUrl,
@@ -37,9 +43,7 @@ const ReaderWorkspace = ({ paperId, pdfUrl }: ReaderWorkspaceProps) => {
     arxivHtmlContent,
     initialBlocks,
     htmlError,
-  } = usePaperContent({ paperId, pdfUrl });
-
-  const { pass, setPass } = usePassState({ paperId: resolvedPaperId });
+  } = usePaperContent({ paperId, pdfUrl, pass });
 
   const { statusMessage, setStatusMessage, clearStatus } = useWorkspaceStatus();
   const showPersonalizedFeatureGate = summaryError === PERSONALIZED_FEATURES_AUTH_MESSAGE;

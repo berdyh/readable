@@ -25,6 +25,7 @@ Read only the *interface* of these — never their internals.
 - **server.editor** via `summarizeSelection`
 - **server.ingest** via `ingestPaper`
 - **server.llm.routing** via `classifyFailoverSignal`
+- **server.persona** via `recordExposureSignal`
 - **server.qa** via `answerPaperQuestion`
 - **server.summarize** via `summarizePaper`
 

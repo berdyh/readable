@@ -29,7 +29,15 @@ export type {
   ReplacePaperIngestDataResult,
   UpsertPaperChunksOptions,
 } from "./papers";
-export { upsertPersonaConcepts, upsertInteractions, listPersonaConceptsForUser } from "./persona";
+export {
+  upsertPersonaConcepts,
+  upsertInteractions,
+  listPersonaConceptsForUser,
+  recordConceptSignal,
+  fetchConceptLedgerForUser,
+} from "./persona";
+export type { RecordConceptSignalArgs } from "./persona";
+export { upsertConcepts, upsertConceptEdges, fetchConceptEdgesByFromKeys } from "./concepts";
 export {
   ChatSessionOwnershipError,
   createChatSession,

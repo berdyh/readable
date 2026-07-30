@@ -45,6 +45,48 @@ export interface Citation {
   doi?: string;
   url?: string;
   chunkIds?: string[];
+  /** Semantic Scholar enrichment, persisted at ingest. */
+  abstract?: string;
+  arxivId?: string;
+  venue?: string;
+  citationCount?: number;
+  openAccessPdfUrl?: string;
+  /** When the row was last enriched; undefined means never. */
+  enrichedAt?: string;
+}
+
+/** Typed persona signals. Weights live in server/explain, not here. */
+export type ConceptSignalType =
+  | "summary_exposure"
+  | "selection_explained"
+  | "qa_asked"
+  | "explicit_confirmed";
+
+/** Global concept-graph node, keyed by normalized "{domain}:{key}". */
+export interface ConceptRecord {
+  conceptKey: string;
+  displayName: string;
+  description?: string;
+}
+
+export interface ConceptEdgeRecord {
+  fromKey: string;
+  toKey: string;
+  relation?: "depends_on";
+  confidence?: number;
+  source: "llm" | "citation";
+}
+
+/** Per-user mastery ledger row (evolved persona_concepts). */
+export interface ConceptLedgerEntry {
+  userId: string;
+  conceptKey: string;
+  displayName?: string;
+  description?: string;
+  exposureCount: number;
+  distinctPaperIds: string[];
+  lastSeenAt?: string;
+  signalCounts: Partial<Record<ConceptSignalType, number>>;
 }
 
 export interface PersonaConcept {

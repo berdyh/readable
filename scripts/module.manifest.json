@@ -24,6 +24,18 @@
     {
       "module": "server.llm",
       "via": "listAvailableLocalCodingAgents"
+    },
+    {
+      "module": "server.llm-config",
+      "via": "getSystemPrompt (eval judge)"
+    },
+    {
+      "module": "server.explain",
+      "via": "PersonaSplit fixtures"
+    },
+    {
+      "module": "server.summarize",
+      "via": "summarizePaperFromContext"
     }
   ],
   "constraints": ["operational scripts", "no app imports of this directory"],

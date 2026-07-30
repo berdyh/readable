@@ -1,0 +1,173 @@
+{
+  "id": "transformer-ml",
+  "domain": "ml",
+  "paperId": "eval:1706.03762",
+  "metadata": {
+    "title": "Attention Is All You Need",
+    "abstract": "We propose the Transformer, a model architecture relying entirely on attention mechanisms, dispensing with recurrence and convolutions entirely.",
+    "authors": ["Ashish Vaswani", "Noam Shazeer"]
+  },
+  "sections": [
+    {
+      "title": "Introduction",
+      "paragraphs": [
+        "Recurrent neural networks process sequences token by token, which prevents parallelization within training examples and becomes critical at longer sequence lengths.",
+        "The Transformer eschews recurrence and instead relies entirely on an attention mechanism to draw global dependencies between input and output."
+      ]
+    },
+    {
+      "title": "Model Architecture",
+      "paragraphs": [
+        "The encoder is composed of a stack of six identical layers, each with a multi-head self-attention mechanism and a position-wise feed-forward network, wrapped in residual connections and layer normalization.",
+        "Scaled dot-product attention computes the dot products of the query with all keys, divides each by the square root of the key dimension, and applies a softmax to obtain the weights on the values.",
+        "Multi-head attention allows the model to jointly attend to information from different representation subspaces at different positions."
+      ],
+      "figureIds": ["F1"]
+    },
+    {
+      "title": "Training",
+      "paragraphs": [
+        "We trained on the standard WMT 2014 English-German dataset consisting of about 4.5 million sentence pairs, using byte-pair encoding with a shared vocabulary of about 37000 tokens.",
+        "Training used the Adam optimizer with a learning rate schedule that increases linearly for warmup steps and decreases proportionally to the inverse square root of the step number."
+      ]
+    },
+    {
+      "title": "Results",
+      "paragraphs": [
+        "On WMT 2014 English-to-German translation, the big Transformer model achieves 28.4 BLEU, establishing a new state of the art at a fraction of the training cost of previous models.",
+        "The base model surpasses all previously published models and ensembles on English-to-French as well."
+      ],
+      "figureIds": ["F2"]
+    },
+    {
+      "title": "Conclusion",
+      "paragraphs": [
+        "The Transformer is the first sequence transduction model based entirely on attention, and we are excited about applying it to other modalities."
+      ]
+    }
+  ],
+  "figures": [
+    {
+      "id": "F1",
+      "caption": "The Transformer model architecture with encoder and decoder stacks."
+    },
+    { "id": "F2", "caption": "BLEU scores versus training cost compared to prior architectures." }
+  ],
+  "citations": [
+    {
+      "citationId": "bib.bib1",
+      "title": "Neural Machine Translation by Jointly Learning to Align and Translate",
+      "year": 2015,
+      "citationCount": 30000,
+      "arxivId": "1409.0473",
+      "abstract": "We conjecture that a fixed-length vector is a bottleneck and propose to let a model automatically soft-search for parts of a source sentence relevant to predicting a target word."
+    },
+    {
+      "citationId": "bib.bib2",
+      "title": "A Niche Regularization Trick for Attention Stability",
+      "year": 2017,
+      "citationCount": 12,
+      "abstract": "We describe a little-known regularization approach improving attention stability in deep stacks."
+    }
+  ],
+  "cannedSummary": {
+    "sections": [
+      {
+        "section_id": "S1",
+        "title": "Why drop recurrence?",
+        "hook": "Why is reading a sentence one word at a time a problem for a neural network?",
+        "claim": "The Transformer removes the word-by-word bottleneck: every position looks at every other position at once.",
+        "mechanism": "Imagine a room where each word can ask every other word a question simultaneously, instead of passing notes down a line. That is attention: each token computes how relevant every other token is and mixes their information in one parallel step.",
+        "evidence": "Supported by S1 and the parallelization argument in the introduction.",
+        "new_terms": [
+          {
+            "term": "self-attention",
+            "definition": "Each element of a sequence weighs every other element to build its representation.",
+            "familiarity": "high"
+          }
+        ],
+        "source": "model_knowledge"
+      },
+      {
+        "section_id": "S2",
+        "title": "How the machine is built",
+        "hook": "How do you stack attention into a working translator?",
+        "claim": "Six identical encoder layers each mix attention with a small feed-forward network, held together by residual connections.",
+        "mechanism": "Scaled dot-product attention is a lookup: queries are compared against keys, scores are softmaxed into weights, and values are averaged accordingly. Multiple heads run this lookup in parallel subspaces, like several readers skimming the same page for different things.",
+        "evidence": "Supported by S2 and Figure F1.",
+        "new_terms": [
+          {
+            "term": "multi-head attention",
+            "definition": "Several attention lookups run in parallel over different learned projections.",
+            "familiarity": "high"
+          }
+        ],
+        "source": "model_knowledge"
+      },
+      {
+        "section_id": "S4",
+        "title": "Did it work?",
+        "hook": "Does removing recurrence cost translation quality?",
+        "claim": "No — the Transformer set a new state of the art of 28.4 BLEU on English-German at lower training cost.",
+        "mechanism": "Because attention parallelizes, the same hardware sees far more data per hour, so quality rises while cost falls; Figure F2 plots this trade.",
+        "evidence": "Supported by S4 and Figure F2.",
+        "new_terms": [
+          {
+            "term": "BLEU",
+            "definition": "An automatic score comparing machine translation output against human references.",
+            "familiarity": "high"
+          }
+        ],
+        "source": "model_knowledge"
+      }
+    ],
+    "key_findings": [
+      {
+        "statement": "Attention alone can replace recurrence for sequence transduction.",
+        "evidence": "28.4 BLEU on WMT14 English-German at reduced training cost.",
+        "supporting_sections": ["S4"],
+        "related_figures": ["F2"]
+      },
+      {
+        "statement": "Parallelism is the mechanism behind the cost win.",
+        "evidence": "Every position attends simultaneously instead of sequentially.",
+        "supporting_sections": ["S1"],
+        "related_figures": []
+      },
+      {
+        "statement": "The architecture is a uniform stack of identical layers.",
+        "evidence": "Six encoder layers of attention plus feed-forward blocks.",
+        "supporting_sections": ["S2"],
+        "related_figures": ["F1"]
+      }
+    ],
+    "figures": [
+      {
+        "figure_id": "F1",
+        "caption_summary": "Encoder-decoder stack",
+        "insight": "The figure shows the whole model is nothing but repeated attention and feed-forward blocks."
+      },
+      {
+        "figure_id": "F2",
+        "caption_summary": "Quality vs cost",
+        "insight": "The figure proves the Transformer reaches higher BLEU at lower training cost than recurrent baselines."
+      }
+    ],
+    "concepts": [
+      {
+        "concept": "attention mechanism",
+        "domain": "ml",
+        "description": "Weighting scheme over sequence elements",
+        "depends_on": ["dot product", "softmax"],
+        "confidence": 0.9
+      },
+      {
+        "concept": "residual connection",
+        "domain": "ml",
+        "description": "Shortcut adding a layer's input to its output",
+        "depends_on": [],
+        "confidence": 0.8
+      }
+    ]
+  }
+}

@@ -18,7 +18,7 @@
  * `CACHE_TTL_MS`. Adequate for warm Next.js workers; cold starts re-fetch.
  */
 
-import { getTimeout, getUrl } from "@/server/config/defaults";
+import { getTimeout, getUrl } from "@/server/config";
 
 const CACHE_TTL_MS = 24 * 60 * 60_000; // 24h
 const BATCH_LIMIT = 500;
@@ -311,9 +311,7 @@ export async function searchByTitle(
  * "DOI:10.1000/xyz"). Returns a map keyed by the input id; misses are
  * absent. Best-effort — a failed chunk contributes nothing.
  */
-export async function fetchPapersBatch(
-  ids: string[],
-): Promise<Map<string, SemanticScholarPaper>> {
+export async function fetchPapersBatch(ids: string[]): Promise<Map<string, SemanticScholarPaper>> {
   const results = new Map<string, SemanticScholarPaper>();
   const cleaned = ids.map((id) => id.trim()).filter(Boolean);
   if (cleaned.length === 0) {

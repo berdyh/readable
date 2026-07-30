@@ -18,8 +18,11 @@ Entrypoint: `(invoked via package.json scripts)`
 Read only the *interface* of these — never their internals.
 
 - **server.db** via `ensureSchema`
+- **server.explain** via `PersonaSplit fixtures`
 - **server.llm** via `listAvailableLocalCodingAgents`
+- **server.llm-config** via `getSystemPrompt (eval judge)`
 - **server.llm.routing** via `buildAuthProfileStore`
+- **server.summarize** via `summarizePaperFromContext`
 - **server.vector** via `pingQdrant`
 
 ## Constraints

@@ -24,6 +24,10 @@
         "output_per_1m": 0.6
       }
     },
+    "eval_judge": {
+      "model": "gpt-4o-2024-11-20",
+      "rationale": "Pinned eval judge: a dated snapshot so rubric scores stay comparable across runs. Judge drift is a failure mode the eval baseline guards against \u2014 never point this at a floating alias."
+    },
     "default": {
       "model": "gpt-4o-mini",
       "rationale": "Default fallback model for any task type not explicitly configured."
@@ -53,6 +57,10 @@
         "input_per_1m": 3.0,
         "output_per_1m": 15.0
       }
+    },
+    "eval_judge": {
+      "model": "claude-3-5-sonnet-20241022",
+      "rationale": "Pinned eval judge: a dated snapshot so rubric scores stay comparable across runs. Judge drift is a failure mode the eval baseline guards against \u2014 never point this at a floating alias."
     },
     "default": {
       "model": "claude-3-haiku-20240307",
@@ -84,6 +92,10 @@
         "output_per_1m": 5.0
       }
     },
+    "eval_judge": {
+      "model": "gemini-1.5-pro-002",
+      "rationale": "Pinned eval judge: a dated snapshot so rubric scores stay comparable across runs. Judge drift is a failure mode the eval baseline guards against \u2014 never point this at a floating alias."
+    },
     "default": {
       "model": "gemini-1.5-flash",
       "rationale": "Default fallback - most cost-effective option."
@@ -114,6 +126,10 @@
         "output_per_1m": 0.28
       }
     },
+    "eval_judge": {
+      "model": "openai/gpt-4o-2024-11-20",
+      "rationale": "Pinned eval judge: a dated snapshot so rubric scores stay comparable across runs. Judge drift is a failure mode the eval baseline guards against \u2014 never point this at a floating alias."
+    },
     "default": {
       "model": "deepseek/deepseek-v4-flash",
       "rationale": "Default fallback."
@@ -123,8 +139,8 @@
     "selection_strategy": "Models chosen based on cost-effectiveness and task-specific requirements. Summarization tasks prioritize cost while Q&A prioritizes reasoning quality.",
     "customization": "Override specific models by setting environment variables: {PROVIDER}_{TASK}_MODEL (e.g., OPENAI_QA_MODEL=gpt-4o)",
     "update_date": "2024-12-19",
-    "openrouter_free_tier": "OpenRouter rotates and retires :free slugs without notice — every model configured here before 2026-07-29 returned 404. If summarize or qa fail with a 404 naming a paid slug, re-check https://openrouter.ai/api/v1/models for current :free ids rather than assuming a code fault.",
-    "openrouter_model_selection": "Pick on two measured properties, not on parameter count or blog rankings. (1) The model must honour response_format json_schema — this app calls generateJson everywhere. The catalogue's supported_parameters field is unreliable in BOTH directions: openai/gpt-oss-20b advertises structured_outputs and returns ```json-fenced markdown, while nemotron-3-ultra advertises neither and complies correctly. (2) It must still do the work on a realistic payload. nemotron-3-super passes a toy prompt but returns an empty findings array on a real 13.8kB paper. Always test with real chunk text. Payload size changes the winner: nemotron-3-ultra handles a 14kB excerpt in 8s but hits free-tier ResourceExhausted on a full 25kB paper, so paper_summary and qa deliberately use different models. Test at the size the task actually sends.",
+    "openrouter_free_tier": "OpenRouter rotates and retires :free slugs without notice \u2014 every model configured here before 2026-07-29 returned 404. If summarize or qa fail with a 404 naming a paid slug, re-check https://openrouter.ai/api/v1/models for current :free ids rather than assuming a code fault.",
+    "openrouter_model_selection": "Pick on two measured properties, not on parameter count or blog rankings. (1) The model must honour response_format json_schema \u2014 this app calls generateJson everywhere. The catalogue's supported_parameters field is unreliable in BOTH directions: openai/gpt-oss-20b advertises structured_outputs and returns ```json-fenced markdown, while nemotron-3-ultra advertises neither and complies correctly. (2) It must still do the work on a realistic payload. nemotron-3-super passes a toy prompt but returns an empty findings array on a real 13.8kB paper. Always test with real chunk text. Payload size changes the winner: nemotron-3-ultra handles a 14kB excerpt in 8s but hits free-tier ResourceExhausted on a full 25kB paper, so paper_summary and qa deliberately use different models. Test at the size the task actually sends.",
     "openrouter_cost": "The openrouter entries are intentionally PAID. Free slugs were tried first and are still the fallback (OPENROUTER_FALLBACK_MODELS=google/gemma-4-26b-a4b-it:free): the free tier works but is 3-8x slower, rate-limits under load, and rotates without notice. deepseek-v4-flash costs about $0.001 per summary or question. Revisit if a free model matches it on the full-paper benchmark."
   }
 }

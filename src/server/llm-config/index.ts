@@ -5,6 +5,7 @@ export interface PromptConfig {
   system: {
     paper_summary: { base: string };
     term_grounding: { base: string };
+    eval_judge: { base: string };
     selection_summary: { base: string };
     qa: { base: string };
   };
@@ -35,7 +36,7 @@ export interface PromptConfig {
  * than an error. They are gone now — the base prompt is returned as-is.
  */
 export function getSystemPrompt(
-  taskType: "paper_summary" | "term_grounding" | "selection_summary" | "qa",
+  taskType: "paper_summary" | "term_grounding" | "eval_judge" | "selection_summary" | "qa",
 ): string {
   return promptsData.system[taskType].base;
 }

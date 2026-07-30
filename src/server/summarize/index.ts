@@ -1,4 +1,4 @@
-import { loadPaperSummaryContext } from "./context";
+import { loadPaperSummaryContext, type PaperSummaryContext } from "./context";
 import { generateJson } from "@/server/llm";
 import { recordConceptGraph, recordPersonaSignals } from "@/server/persona";
 import { fetchPaperCitationsByPaperId, listIngestedPaperIds, type Citation } from "@/server/db";
@@ -13,6 +13,7 @@ import {
   selectGroundingTerms,
   validateSourceLabel,
   type CitationCandidate,
+  type PersonaSplit,
 } from "@/server/explain";
 import type {
   PageSpan,
@@ -50,14 +51,24 @@ const SUMMARY_SCHEMA: Record<string, unknown> = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["section_id", "title", "hook", "claim", "mechanism", "evidence", "new_terms", "source"],
+        required: [
+          "section_id",
+          "title",
+          "hook",
+          "claim",
+          "mechanism",
+          "evidence",
+          "new_terms",
+          "source",
+        ],
         properties: {
           section_id: { type: "string" },
           title: { type: "string" },
           hook: {
             type: "string",
             maxLength: 400,
-            description: "The motivating question or problem this section answers, in 1-2 sentences.",
+            description:
+              "The motivating question or problem this section answers, in 1-2 sentences.",
           },
           claim: {
             type: "string",
@@ -194,7 +205,8 @@ const TERM_GROUNDING_SCHEMA: Record<string, unknown> = {
           definition: {
             type: ["string", "null"],
             maxLength: 320,
-            description: "Grounded plain-language definition, or null when the passages do not cover the term.",
+            description:
+              "Grounded plain-language definition, or null when the passages do not cover the term.",
           },
           depends_on: {
             type: "array",
@@ -928,15 +940,31 @@ async function groundLowFamiliarityTerms(
   }
 }
 
-export async function summarizePaper(
-  paperId: string,
-  options: SummarizeOptions = {},
+export interface SummarizeFromContextOptions extends SummarizeOptions {
+  /** Pre-built persona split (eval fixtures); loaded from the ledger when omitted. */
+  personaSplit?: PersonaSplit;
+  /** Pre-built citation candidates (eval fixtures); loaded from Postgres when omitted. */
+  citationCandidates?: CitationCandidate[];
+  /** Library paper ids for the router's ingested-lookup trigger. */
+  ingestedPaperIds?: string[];
+  /** Skip graph/interaction recording entirely (eval harness). */
+  skipRecording?: boolean;
+}
+
+/**
+ * The LLM half of summarize, split from the Postgres half so the eval
+ * harness can drive it from fixtures without a database. Production
+ * traffic goes through `summarizePaper`, which loads everything.
+ */
+export async function summarizePaperFromContext(
+  context: PaperSummaryContext,
+  options: SummarizeFromContextOptions = {},
 ): Promise<SummaryResult> {
-  const [context, personaSplit, citationCandidates, ingestedIds] = await Promise.all([
-    loadPaperSummaryContext(paperId),
-    loadPersonaSplit(options.userId),
-    loadCitationCandidates(paperId),
-    loadIngestedIdsSafe(),
+  const paperId = context.paperId;
+  const [personaSplit, citationCandidates, ingestedIds] = await Promise.all([
+    options.personaSplit ?? loadPersonaSplit(options.userId),
+    options.citationCandidates ?? loadCitationCandidates(paperId),
+    options.ingestedPaperIds ?? loadIngestedIdsSafe(),
   ]);
 
   // Citation router (no question in the summarize flow): retrieval fires
@@ -973,6 +1001,10 @@ export async function summarizePaper(
   const primaryDomain = llmSummary.concepts.find((concept) => concept.domain)?.domain;
   await groundLowFamiliarityTerms(result, citationCandidates, primaryDomain, options);
 
+  if (options.skipRecording) {
+    return result;
+  }
+
   // Graph + interaction recording is fire-and-forget; never block the
   // summary on it. NOTE skipLedger: an auto-generated summary is not
   // reader exposure — the reader surface records summary_exposure only
@@ -999,6 +1031,14 @@ export async function summarizePaper(
   return result;
 }
 
+export async function summarizePaper(
+  paperId: string,
+  options: SummarizeOptions = {},
+): Promise<SummaryResult> {
+  const context = await loadPaperSummaryContext(paperId);
+  return summarizePaperFromContext(context, options);
+}
+
 export type {
   SummaryResult,
   SummarySection,
@@ -1008,4 +1048,5 @@ export type {
   SummaryTerm,
   SummarySource,
 } from "./types";
+export type { PaperSummaryContext } from "./context";
 export type { SummarizeOptions };

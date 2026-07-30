@@ -106,7 +106,10 @@ function formatPage(page?: number): string | undefined {
 }
 
 function formatChunk(chunk: QaChunkContext, index: number, label: string): string {
-  const meta = [formatPage(chunk.pageNumber), chunk.section ? `section: ${chunk.section}` : undefined]
+  const meta = [
+    formatPage(chunk.pageNumber),
+    chunk.section ? `section: ${chunk.section}` : undefined,
+  ]
     .filter(Boolean)
     .join(" · ");
   const header = `${label} ${index + 1}: chunk_id=${chunk.chunkId}${meta ? ` (${meta})` : ""}`;

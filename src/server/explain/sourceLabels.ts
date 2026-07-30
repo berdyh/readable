@@ -10,10 +10,7 @@
 
 export type ExplanationSource = "model_knowledge" | "cited_text";
 
-export const EXPLANATION_SOURCES: readonly ExplanationSource[] = [
-  "model_knowledge",
-  "cited_text",
-];
+export const EXPLANATION_SOURCES: readonly ExplanationSource[] = ["model_knowledge", "cited_text"];
 
 /** JSON-schema fragment for a `source` field. Spread into item schemas. */
 export const SOURCE_LABEL_SCHEMA: Record<string, unknown> = {

@@ -1,12 +1,7 @@
 import { buildInteractionUuid, buildPersonaConceptUuid } from "./ids";
 import { ensureSchema } from "./migrate";
 import { withPgClient } from "./postgres";
-import type {
-  ConceptLedgerEntry,
-  ConceptSignalType,
-  Interaction,
-  PersonaConcept,
-} from "./types";
+import type { ConceptLedgerEntry, ConceptSignalType, Interaction, PersonaConcept } from "./types";
 
 export async function listPersonaConceptsForUser(
   userId: string,

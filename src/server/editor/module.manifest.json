@@ -4,9 +4,7 @@
   "parent": "server",
   "path": "src/server/editor",
   "goal": "Serves the editor's selection-scoped actions.",
-  "owns": [
-    "src/server/editor"
-  ],
+  "owns": ["src/server/editor"],
   "interface": {
     "entrypoint": "index.ts",
     "exports": [
@@ -48,11 +46,6 @@
       "via": "truncateWithEllipsis"
     }
   ],
-  "constraints": [
-    "selection-scoped retrieval",
-    "inline arXiv ingest"
-  ],
-  "checks": [
-    "pnpm vitest run src/server/editor src/app/api/editor"
-  ]
+  "constraints": ["selection-scoped retrieval", "inline arXiv ingest"],
+  "checks": ["pnpm vitest run src/server/editor src/app/api/editor"]
 }

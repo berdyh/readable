@@ -38,10 +38,10 @@ Route by goal — you should not need to open more than one.
 - **server.ingest** (`src/server/ingest`) — Converts a source paper into the stored records the rest of the app reads.
 - **server.llm** (`src/server/llm`) — Answers a prompt using whichever model provider is currently reachable.
 - **server.llm-config** (`src/server/llm-config`) — Serves the prompt text and model id for a given task.
-- **server.persona** (`src/server/persona`) — Records which concepts a user has been exposed to.
+- **server.persona** (`src/server/persona`) — Records the concept graph, typed mastery-ledger signals, and interactions.
 - **server.qa** (`src/server/qa`) — Answers a question about a paper with grounded citations.
 - **server.search** (`src/server/search`) — Fuses vector and full-text hits into one ranked chunk list.
-- **server.summarize** (`src/server/summarize`) — Produces a structured summary of a stored paper.
+- **server.summarize** (`src/server/summarize`) — Produces a teaching-contract explanation of a stored paper (hook, claim, mechanism, evidence, glossary).
 - **server.text** (`src/server/text`) — Truncates text without splitting a Unicode surrogate pair.
 - **server.vector** (`src/server/vector`) — Maintains the per-model Qdrant collection that backs vector search.
 

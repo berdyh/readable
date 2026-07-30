@@ -30,7 +30,7 @@ const SELECTION_SUMMARY_SCHEMA: Record<string, unknown> = {
       type: "array",
       maxItems: 4,
       description:
-        'Concepts the reader was exposed to while this selection was explained. Terse domain phrases only — never people or paper titles.',
+        "Concepts the reader was exposed to while this selection was explained. Terse domain phrases only — never people or paper titles.",
       items: {
         type: "object",
         additionalProperties: false,

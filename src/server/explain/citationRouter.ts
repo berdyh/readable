@@ -29,10 +29,7 @@ export interface CitationCandidate {
   abstract?: string;
 }
 
-export type CitationRouteReason =
-  | "source_specific_ask"
-  | "obscure_or_recent"
-  | "already_ingested";
+export type CitationRouteReason = "source_specific_ask" | "obscure_or_recent" | "already_ingested";
 
 export interface CitationRouteDecision {
   citationId: string;

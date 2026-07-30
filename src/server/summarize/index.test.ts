@@ -39,11 +39,31 @@ const baseContext: PaperSummaryContext = {
   paperId: PAPER_ID,
   metadata: { title: "Attention Is All You Need" },
   sections: [
-    { id: "S1", title: "Introduction", paragraphs: ["a"], totalParagraphCount: 1, referencedFigureIds: [] },
-    { id: "S2", title: "Architecture", paragraphs: ["b"], totalParagraphCount: 1, referencedFigureIds: ["F1"] },
-    { id: "S3", title: "Results", paragraphs: ["c"], totalParagraphCount: 1, referencedFigureIds: [] },
+    {
+      id: "S1",
+      title: "Introduction",
+      paragraphs: ["a"],
+      totalParagraphCount: 1,
+      referencedFigureIds: [],
+    },
+    {
+      id: "S2",
+      title: "Architecture",
+      paragraphs: ["b"],
+      totalParagraphCount: 1,
+      referencedFigureIds: ["F1"],
+    },
+    {
+      id: "S3",
+      title: "Results",
+      paragraphs: ["c"],
+      totalParagraphCount: 1,
+      referencedFigureIds: [],
+    },
   ],
-  figures: [{ id: "F1", caption: "Architecture diagram", pageNumber: 3, referencedSectionIds: ["S2"] }],
+  figures: [
+    { id: "F1", caption: "Architecture diagram", pageNumber: 3, referencedSectionIds: ["S2"] },
+  ],
   coverage: { totalParagraphs: 3, includedParagraphs: 3, charBudget: 40000, truncated: false },
 };
 

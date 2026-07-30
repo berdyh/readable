@@ -9,7 +9,10 @@ import {
 
 const fetchMock = vi.fn();
 
-const jsonResponse = (body: unknown, init: { status?: number; headers?: Record<string, string> } = {}) =>
+const jsonResponse = (
+  body: unknown,
+  init: { status?: number; headers?: Record<string, string> } = {},
+) =>
   new Response(JSON.stringify(body), {
     status: init.status ?? 200,
     headers: { "Content-Type": "application/json", ...init.headers },

@@ -51,7 +51,11 @@ const contractSummary: SummaryResult = {
       hook: "Why can attention replace recurrence?",
       evidence: "Supported by S1 and F1.",
       new_terms: [
-        { term: "self-attention", definition: "Each token weighs the others.", familiarity: "high" },
+        {
+          term: "self-attention",
+          definition: "Each token weighs the others.",
+          familiarity: "high",
+        },
         {
           term: "flux capacitor",
           definition: "Grounded definition.",
@@ -87,7 +91,9 @@ const contractSummary: SummaryResult = {
     },
   ],
   figures: [{ figure_id: "F1", caption: "A figure", insight: "Declarative takeaway." }],
-  concepts: [{ concept: "attention mechanism", domain: "ml", concept_key: "ml:attention mechanism" }],
+  concepts: [
+    { concept: "attention mechanism", domain: "ml", concept_key: "ml:attention mechanism" },
+  ],
 };
 
 describe("parseSummaryToBlocks", () => {
@@ -113,9 +119,7 @@ describe("parseSummaryToBlocks", () => {
 
   it("tolerates summaries with entirely missing optional fields", () => {
     const minimal: SummaryResult = {
-      sections: [
-        { section_id: "S1", title: "Only Section", summary: "Claim.", reasoning: "Why." },
-      ],
+      sections: [{ section_id: "S1", title: "Only Section", summary: "Claim.", reasoning: "Why." }],
       key_findings: [],
       figures: [],
     };

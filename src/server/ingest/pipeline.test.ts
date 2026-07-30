@@ -63,10 +63,7 @@ describe("applyCitationEnrichment", () => {
   };
 
   it("fills gaps from enrichment, keeps stored bibliography fields, and stamps enrichedAt", () => {
-    const [enriched] = applyCitationEnrichment(
-      [baseCitation],
-      new Map([["bib.bib1", ssPaper]]),
-    );
+    const [enriched] = applyCitationEnrichment([baseCitation], new Map([["bib.bib1", ssPaper]]));
 
     // Stored bibliography title wins over the S2 one.
     expect(enriched.title).toBe("Layer normalization");

@@ -126,7 +126,10 @@ function mapFigureToContext(figure: Figure | undefined): QaFigureContext | undef
  * abstract, venue, citation counts, arXiv ids — was persisted at ingest.
  * The QA hot path no longer calls arXiv or Semantic Scholar.
  */
-function mapCitationToContext(citationId: string, citation: Citation | undefined): QaCitationContext {
+function mapCitationToContext(
+  citationId: string,
+  citation: Citation | undefined,
+): QaCitationContext {
   return {
     citationId,
     title: citation?.title,

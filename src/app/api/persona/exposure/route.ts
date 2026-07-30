@@ -36,8 +36,7 @@ function parsePayload(data: unknown): ExposurePayload {
         return undefined;
       }
       const conceptRecord = entry as Record<string, unknown>;
-      const concept =
-        typeof conceptRecord.concept === "string" ? conceptRecord.concept.trim() : "";
+      const concept = typeof conceptRecord.concept === "string" ? conceptRecord.concept.trim() : "";
       if (!concept) {
         return undefined;
       }

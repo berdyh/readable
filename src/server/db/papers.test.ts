@@ -106,7 +106,9 @@ describe("upsertCitations", () => {
       "open_access_pdf_url",
       "enriched_at",
     ]) {
-      expect(upsert).toContain(`${column} = COALESCE(EXCLUDED.${column}, paper_citations.${column})`);
+      expect(upsert).toContain(
+        `${column} = COALESCE(EXCLUDED.${column}, paper_citations.${column})`,
+      );
     }
 
     // Base fields must not null-overwrite stored values either.

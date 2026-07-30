@@ -4,16 +4,10 @@
   "parent": "server",
   "path": "src/server/qa",
   "goal": "Answers a question about a paper with grounded citations.",
-  "owns": [
-    "src/server/qa"
-  ],
+  "owns": ["src/server/qa"],
   "interface": {
     "entrypoint": "index.ts",
-    "exports": [
-      "answerPaperQuestion",
-      "loadQuestionEvidence",
-      "parseQuestionSelection"
-    ]
+    "exports": ["answerPaperQuestion", "loadQuestionEvidence", "parseQuestionSelection"]
   },
   "uses": [
     {
@@ -45,12 +39,6 @@
       "via": "truncateWithEllipsis"
     }
   ],
-  "constraints": [
-    "evidence assembly",
-    "grounded answering",
-    "citation validity"
-  ],
-  "checks": [
-    "pnpm vitest run src/server/qa"
-  ]
+  "constraints": ["evidence assembly", "grounded answering", "citation validity"],
+  "checks": ["pnpm vitest run src/server/qa"]
 }

@@ -49,9 +49,12 @@ function stubRoutes(options: StubOptions = {}) {
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     }
     if (url.startsWith("/api/chat/session")) {
-      return new Response(JSON.stringify({ session: { id: "session-1", paperId: "p", createdAt: "" } }), {
-        status: 200,
-      });
+      return new Response(
+        JSON.stringify({ session: { id: "session-1", paperId: "p", createdAt: "" } }),
+        {
+          status: 200,
+        },
+      );
     }
     if (url.startsWith("/api/qa")) {
       if (options.qaFails) {

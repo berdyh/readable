@@ -13,6 +13,7 @@ export interface PromptConfig {
     };
   };
   limits: {
+    context_char_budget: number;
     section: number;
     paragraph: number;
     figure: number;

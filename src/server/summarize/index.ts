@@ -13,8 +13,6 @@ import { getSystemPrompt, getPaperSummaryRequirements, getPromptLimits } from "@
 import { truncateWithEllipsis } from "@/server/text";
 
 const PROMPT_LIMITS = getPromptLimits();
-const PROMPT_SECTION_LIMIT = PROMPT_LIMITS.section;
-const PROMPT_PARAGRAPH_LIMIT = PROMPT_LIMITS.paragraph;
 const PROMPT_FIGURE_LIMIT = PROMPT_LIMITS.figure;
 
 const SUMMARY_SCHEMA: Record<string, unknown> = {
@@ -149,11 +147,13 @@ function truncateText(text: string, maxLength = PROMPT_LIMITS.text_truncate): st
   return truncateWithEllipsis(text, maxLength);
 }
 
-function formatPageSpan(span: PageSpan | undefined): string {
-  if (!span?.start && !span?.end) {
-    return "page ?";
-  }
-
+/**
+ * Renders a page span only when real page data exists. The ar5iv ingest
+ * path stores no page numbers, and rendering "(page ?)" on every section
+ * taught the model to echo unusable anchors — so unknown pages are now
+ * simply omitted.
+ */
+function formatPageSpan(span: PageSpan | undefined): string | undefined {
   const start = span?.start;
   const end = span?.end;
 
@@ -172,7 +172,7 @@ function formatPageSpan(span: PageSpan | undefined): string {
     return `page ${end}`;
   }
 
-  return "page ?";
+  return undefined;
 }
 
 function formatPageAnchorFromSpan(span: PageSpan | undefined): string | undefined {
@@ -199,20 +199,20 @@ function buildSectionOutlinePrompt(
     referencedFigureIds: string[];
   }>,
 ): string {
+  // No section cap and no per-section paragraph cap: the coverage +
+  // deepening fill in context.ts already selected content under the char
+  // budget. Slicing here is what used to drop the paper's back half.
   return sections
-    .slice(0, PROMPT_SECTION_LIMIT)
     .map((section) => {
-      const header = `- [${section.id}] ${section.title} (${formatPageSpan(section.pageSpan)})`;
+      const pageLabel = formatPageSpan(section.pageSpan);
+      const header = `- [${section.id}] ${section.title}${pageLabel ? ` (${pageLabel})` : ""}`;
       const figuresLine = section.referencedFigureIds.length
         ? `    Figures: ${section.referencedFigureIds.join(", ")}`
         : undefined;
 
-      const highlights = section.paragraphs
-        .slice(0, PROMPT_PARAGRAPH_LIMIT)
-        .map(
-          (paragraph, index) =>
-            `    Key ${index + 1}: ${truncateText(paragraph, PROMPT_LIMITS.paragraph_truncate)}`,
-        );
+      const highlights = section.paragraphs.map(
+        (paragraph, index) => `    Para ${index + 1}: ${paragraph}`,
+      );
 
       return [header, figuresLine, ...highlights].filter(Boolean).join("\n");
     })
@@ -225,30 +225,27 @@ function buildFigureContextPrompt(
     caption?: string;
     pageNumber?: number;
     referencedSectionIds: string[];
-    supportingParagraphs: string[];
   }>,
 ): string {
   if (!figures.length) {
     return "No figures were extracted for this paper.";
   }
 
+  // Captions + section references only. The old "Context N" lines were
+  // verbatim copies of section paragraphs already present in the outline.
   return figures
     .slice(0, PROMPT_FIGURE_LIMIT)
     .map((figure) => {
+      const pageAnchor = formatPageAnchor(figure.pageNumber);
       const header = `- [${figure.id}] ${truncateText(
         figure.caption ?? "No caption available",
         PROMPT_LIMITS.figure_caption_truncate,
-      )} (${formatPageAnchor(figure.pageNumber) ?? "page ?"})`;
+      )}${pageAnchor ? ` ${pageAnchor}` : ""}`;
       const sectionsLine = figure.referencedSectionIds.length
         ? `    Sections: ${figure.referencedSectionIds.join(", ")}`
         : undefined;
 
-      const contextLines = figure.supportingParagraphs.map(
-        (paragraph, index) =>
-          `    Context ${index + 1}: ${truncateText(paragraph, PROMPT_LIMITS.figure_context_truncate)}`,
-      );
-
-      return [header, sectionsLine, ...contextLines].filter(Boolean).join("\n");
+      return [header, sectionsLine].filter(Boolean).join("\n");
     })
     .join("\n");
 }
@@ -303,6 +300,7 @@ function buildUserPrompt(context: Awaited<ReturnType<typeof loadPaperSummaryCont
     metadataBlock,
     "",
     "# Section Outline",
+    ...(context.coverage.truncationNote ? [`(${context.coverage.truncationNote})`] : []),
     sectionOutline,
     "",
     "# Figure Context",

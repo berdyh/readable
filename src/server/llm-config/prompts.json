@@ -24,6 +24,7 @@
     }
   },
   "limits": {
+    "context_char_budget": 40000,
     "section": 10,
     "paragraph": 3,
     "figure": 6,

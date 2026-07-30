@@ -1,12 +1,9 @@
 import { fetchArxivMetadata } from "@/server/ingest";
-import type { ArxivMetadata } from "@/server/ingest/types";
-import { fetchPaperFiguresByPaperId, fetchPaperChunksByPaperId } from "@/server/db";
+import { fetchPaperFiguresByPaperId, fetchPaperChunksByPaperId, getPaper } from "@/server/db";
 import type { Figure, PaperChunk } from "@/server/db";
+import { getPromptLimits } from "@/server/llm-config";
 
 import type { PageSpan } from "./types";
-
-const MAX_PARAGRAPHS_PER_SECTION = 8;
-const MAX_PARAGRAPHS_PER_FIGURE = 4;
 
 interface SectionAccumulator {
   title: string;
@@ -19,14 +16,11 @@ interface SectionContextRecord {
   id: string;
   title: string;
   pageSpan?: PageSpan;
+  /** Paragraphs selected by the coverage+deepening fill, in document order. */
   paragraphs: string[];
+  /** How many paragraphs the section holds in storage (before budget fill). */
+  totalParagraphCount: number;
   referencedFigureIds: string[];
-}
-
-interface FigureAccumulator {
-  figure: Figure;
-  sections: Set<string>;
-  paragraphs: string[];
 }
 
 export type SectionContext = SectionContextRecord;
@@ -36,19 +30,45 @@ export interface FigureContext {
   caption?: string;
   pageNumber?: number;
   referencedSectionIds: string[];
-  supportingParagraphs: string[];
+}
+
+export interface PaperSummaryMetadata {
+  title?: string;
+  abstract?: string;
+  authors?: string[];
+  primaryCategory?: string;
+  publishedAt?: string;
+  updatedAt?: string;
+}
+
+export interface SummaryCoverage {
+  /** Total paragraphs stored for the paper. */
+  totalParagraphs: number;
+  /** Paragraphs that made it into the context under the char budget. */
+  includedParagraphs: number;
+  /** Char budget applied to the deepening round. */
+  charBudget: number;
+  truncated: boolean;
+  /** Present only when truncated — rendered into the prompt so the model knows. */
+  truncationNote?: string;
 }
 
 export interface PaperSummaryContext {
   paperId: string;
-  metadata?: ArxivMetadata;
+  metadata?: PaperSummaryMetadata;
   sections: SectionContext[];
   figures: FigureContext[];
+  coverage: SummaryCoverage;
 }
 
 interface ChunkRecord {
   chunk: PaperChunk;
   sectionKey: string;
+}
+
+export interface LoadPaperSummaryContextOptions {
+  /** Overrides the config-driven context char budget (mainly for tests). */
+  charBudget?: number;
 }
 
 function normalizeSectionKey(value: string | undefined): string {
@@ -83,10 +103,104 @@ function buildPageSpan(pages: Set<number>): PageSpan | undefined {
   };
 }
 
-function collectSections(chunks: PaperChunk[]): {
+interface ParagraphCandidate {
+  sectionKey: string;
+  /** Position within the section, so selected paragraphs re-render in document order. */
+  index: number;
+  text: string;
+}
+
+/**
+ * Coverage + deepening fill.
+ *
+ * Round 1 (coverage): every section contributes its lead paragraph
+ * unconditionally, so no part of the paper is silently invisible to the
+ * model — the defect this replaces dropped Training/Results/Conclusion
+ * entirely.
+ *
+ * Round 2 (deepening): the remaining paragraphs across all sections,
+ * longest first, are added while the total stays under the char budget.
+ * Selected paragraphs are re-emitted in document order within their
+ * section.
+ */
+function selectParagraphsUnderBudget(
+  sectionOrder: string[],
+  sectionParagraphs: Map<string, string[]>,
+  charBudget: number,
+): { selected: Map<string, string[]>; coverage: SummaryCoverage } {
+  const selected = new Map<string, Set<number>>();
+  let usedChars = 0;
+  let totalParagraphs = 0;
+
+  const deepeningCandidates: ParagraphCandidate[] = [];
+
+  for (const key of sectionOrder) {
+    const paragraphs = sectionParagraphs.get(key) ?? [];
+    totalParagraphs += paragraphs.length;
+    const picks = new Set<number>();
+
+    if (paragraphs.length > 0) {
+      picks.add(0);
+      usedChars += paragraphs[0].length;
+    }
+
+    for (let index = 1; index < paragraphs.length; index += 1) {
+      deepeningCandidates.push({ sectionKey: key, index, text: paragraphs[index] });
+    }
+
+    selected.set(key, picks);
+  }
+
+  deepeningCandidates.sort((a, b) => b.text.length - a.text.length);
+
+  let includedParagraphs = sectionOrder.reduce(
+    (count, key) => count + (selected.get(key)?.size ?? 0),
+    0,
+  );
+
+  for (const candidate of deepeningCandidates) {
+    if (usedChars + candidate.text.length > charBudget) {
+      continue;
+    }
+    selected.get(candidate.sectionKey)?.add(candidate.index);
+    usedChars += candidate.text.length;
+    includedParagraphs += 1;
+  }
+
+  const truncated = includedParagraphs < totalParagraphs;
+
+  const orderedSelection = new Map<string, string[]>();
+  for (const key of sectionOrder) {
+    const paragraphs = sectionParagraphs.get(key) ?? [];
+    const picks = selected.get(key) ?? new Set<number>();
+    orderedSelection.set(
+      key,
+      paragraphs.filter((_, index) => picks.has(index)),
+    );
+  }
+
+  return {
+    selected: orderedSelection,
+    coverage: {
+      totalParagraphs,
+      includedParagraphs,
+      charBudget,
+      truncated,
+      truncationNote: truncated
+        ? `Input truncated to fit the context budget: ${includedParagraphs} of ${totalParagraphs} paragraphs included. Every section keeps its lead paragraph; deepening preferred longer passages.`
+        : undefined,
+    },
+  };
+}
+
+function collectSections(
+  chunks: PaperChunk[],
+  charBudget: number,
+): {
   sections: SectionContext[];
   chunkRecords: ChunkRecord[];
   sectionKeyToId: Map<string, string>;
+  coverage: SummaryCoverage;
 } {
   const sectionMap = new Map<string, SectionAccumulator>();
   const sectionOrder: string[] = [];
@@ -109,7 +223,7 @@ function collectSections(chunks: PaperChunk[]): {
     }
 
     const normalizedParagraph = normalizeParagraph(chunk.text);
-    if (normalizedParagraph && accumulator.paragraphs.length < MAX_PARAGRAPHS_PER_SECTION) {
+    if (normalizedParagraph) {
       accumulator.paragraphs.push(normalizedParagraph);
     }
 
@@ -124,6 +238,17 @@ function collectSections(chunks: PaperChunk[]): {
     });
   }
 
+  const sectionParagraphs = new Map<string, string[]>();
+  for (const key of sectionOrder) {
+    sectionParagraphs.set(key, sectionMap.get(key)?.paragraphs ?? []);
+  }
+
+  const { selected, coverage } = selectParagraphsUnderBudget(
+    sectionOrder,
+    sectionParagraphs,
+    charBudget,
+  );
+
   const sectionKeyToId = new Map<string, string>();
   const sections: SectionContext[] = sectionOrder.map((key, index) => {
     const accumulator = sectionMap.get(key);
@@ -136,6 +261,7 @@ function collectSections(chunks: PaperChunk[]): {
         title: key,
         pageSpan: undefined,
         paragraphs: [],
+        totalParagraphCount: 0,
         referencedFigureIds: [],
       };
     }
@@ -144,27 +270,32 @@ function collectSections(chunks: PaperChunk[]): {
       id,
       title: accumulator.title,
       pageSpan: buildPageSpan(accumulator.pages),
-      paragraphs: accumulator.paragraphs.slice(),
+      paragraphs: selected.get(key) ?? [],
+      totalParagraphCount: accumulator.paragraphs.length,
       referencedFigureIds: Array.from(accumulator.figureIds),
     };
   });
 
-  return { sections, chunkRecords, sectionKeyToId };
+  return { sections, chunkRecords, sectionKeyToId, coverage };
 }
 
+/**
+ * Figure contexts carry the caption plus which sections reference them —
+ * and nothing else. They used to also carry "supporting paragraphs" that
+ * were verbatim copies of section text already in the prompt (measured:
+ * 100% duplication), so that block is gone.
+ */
 function collectFigures(
   figures: Figure[],
   chunkRecords: ChunkRecord[],
   sectionKeyToId: Map<string, string>,
 ): FigureContext[] {
-  const figureMap = new Map<string, FigureAccumulator>();
+  const referencedSections = new Map<string, Set<string>>();
+  const knownFigures = new Map<string, Figure>();
 
   for (const figure of figures) {
-    figureMap.set(figure.figureId, {
-      figure,
-      sections: new Set<string>(),
-      paragraphs: [],
-    });
+    knownFigures.set(figure.figureId, figure);
+    referencedSections.set(figure.figureId, new Set<string>());
   }
 
   for (const record of chunkRecords) {
@@ -173,48 +304,30 @@ function collectFigures(
       continue;
     }
 
-    const figureIds = record.chunk.figureIds ?? [];
-    if (!figureIds.length) {
-      continue;
-    }
-
-    const normalizedParagraph = normalizeParagraph(record.chunk.text);
-
-    for (const figureId of figureIds) {
+    for (const figureId of record.chunk.figureIds ?? []) {
       if (!figureId) {
         continue;
       }
 
-      let accumulator = figureMap.get(figureId);
-      if (!accumulator) {
-        accumulator = {
-          figure: {
-            paperId: record.chunk.paperId,
-            figureId,
-            caption: "",
-          },
-          sections: new Set<string>(),
-          paragraphs: [],
-        };
-        figureMap.set(figureId, accumulator);
+      let sections = referencedSections.get(figureId);
+      if (!sections) {
+        sections = new Set<string>();
+        referencedSections.set(figureId, sections);
       }
-
-      accumulator.sections.add(sectionId);
-
-      if (normalizedParagraph && accumulator.paragraphs.length < MAX_PARAGRAPHS_PER_FIGURE) {
-        accumulator.paragraphs.push(normalizedParagraph);
-      }
+      sections.add(sectionId);
     }
   }
 
-  return Array.from(figureMap.values())
-    .map<FigureContext>((entry) => ({
-      id: entry.figure.figureId,
-      caption: entry.figure.caption,
-      pageNumber: entry.figure.pageNumber,
-      referencedSectionIds: Array.from(entry.sections),
-      supportingParagraphs: entry.paragraphs,
-    }))
+  return Array.from(referencedSections.entries())
+    .map<FigureContext>(([figureId, sections]) => {
+      const figure = knownFigures.get(figureId);
+      return {
+        id: figureId,
+        caption: figure?.caption,
+        pageNumber: figure?.pageNumber,
+        referencedSectionIds: Array.from(sections),
+      };
+    })
     .sort((a, b) => {
       if (a.pageNumber && b.pageNumber) {
         return a.pageNumber - b.pageNumber;
@@ -229,12 +342,64 @@ function collectFigures(
     });
 }
 
-export async function loadPaperSummaryContext(paperId: string): Promise<PaperSummaryContext> {
+function hasCompleteMetadata(metadata: PaperSummaryMetadata | undefined): boolean {
+  return Boolean(metadata?.title && metadata.abstract && metadata.authors?.length);
+}
+
+/**
+ * DB-first metadata: the `papers` row is authoritative; the live arXiv
+ * API is only consulted when stored fields are missing (Issue 8 — the
+ * old code live-fetched arXiv on every summarize request).
+ */
+async function loadMetadata(paperId: string): Promise<PaperSummaryMetadata | undefined> {
+  let stored: PaperSummaryMetadata | undefined;
+  try {
+    const record = await getPaper(paperId);
+    if (record) {
+      stored = {
+        title: record.title,
+        abstract: record.abstract,
+        authors: record.authors,
+        primaryCategory: record.primaryCategory,
+        publishedAt: record.publishedAt,
+        updatedAt: record.updatedAt,
+      };
+    }
+  } catch (error) {
+    console.warn(`[summarize] Failed to read stored metadata for ${paperId}`, error);
+  }
+
+  if (hasCompleteMetadata(stored)) {
+    return stored;
+  }
+
+  try {
+    const fetched = await fetchArxivMetadata(paperId);
+    if (!fetched) {
+      return stored;
+    }
+    return {
+      title: stored?.title ?? fetched.title,
+      abstract: stored?.abstract ?? fetched.abstract,
+      authors: stored?.authors?.length ? stored.authors : fetched.authors,
+      primaryCategory: stored?.primaryCategory ?? fetched.primaryCategory,
+      publishedAt: stored?.publishedAt ?? fetched.publishedAt,
+      updatedAt: stored?.updatedAt ?? fetched.updatedAt,
+    };
+  } catch (error) {
+    console.warn(`[summarize] Failed to fetch metadata for ${paperId}`, error);
+    return stored;
+  }
+}
+
+export async function loadPaperSummaryContext(
+  paperId: string,
+  options: LoadPaperSummaryContextOptions = {},
+): Promise<PaperSummaryContext> {
+  const charBudget = options.charBudget ?? getPromptLimits().context_char_budget;
+
   const [metadataResult, chunkResult, figureResult] = await Promise.allSettled([
-    fetchArxivMetadata(paperId).catch((error) => {
-      console.warn(`[summarize] Failed to fetch metadata for ${paperId}`, error);
-      return undefined;
-    }),
+    loadMetadata(paperId),
     fetchPaperChunksByPaperId(paperId),
     fetchPaperFiguresByPaperId(paperId),
   ]);
@@ -252,7 +417,7 @@ export async function loadPaperSummaryContext(paperId: string): Promise<PaperSum
   const metadata = metadataResult.status === "fulfilled" ? metadataResult.value : undefined;
   const figures = figureResult.status === "fulfilled" ? figureResult.value : [];
 
-  const { sections, chunkRecords, sectionKeyToId } = collectSections(chunks);
+  const { sections, chunkRecords, sectionKeyToId, coverage } = collectSections(chunks, charBudget);
   const figureContexts = collectFigures(figures, chunkRecords, sectionKeyToId);
 
   return {
@@ -260,5 +425,6 @@ export async function loadPaperSummaryContext(paperId: string): Promise<PaperSum
     metadata,
     sections,
     figures: figureContexts,
+    coverage,
   };
 }

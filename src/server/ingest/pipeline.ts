@@ -343,8 +343,15 @@ function selectFigures(
   return [];
 }
 
-function selectReferences(teiResult: ParsedTeiResult | undefined): PaperReference[] {
-  return teiResult?.references ?? [];
+function selectReferences(
+  teiResult: ParsedTeiResult | undefined,
+  htmlResult: HtmlParseResult | undefined,
+): PaperReference[] {
+  if (teiResult?.references.length) {
+    return teiResult.references;
+  }
+
+  return htmlResult?.references ?? [];
 }
 
 export function buildChunks(paperId: string, sections: PaperSection[]): BuildChunkResult {
@@ -494,6 +501,7 @@ function toCitationRecords(paperId: string, references: PaperReference[]): Citat
     year: reference.year,
     source: reference.source,
     doi: reference.doi,
+    arxivId: reference.arxivId,
     url: reference.url,
     chunkIds: reference.chunkIds,
   }));
@@ -639,7 +647,7 @@ export async function ingestPaper(
 
   const extractedFigures = selectFigures(teiResult, htmlResult, fallbackExtraction);
   const figures = enrichFiguresWithPdfData(extractedFigures, fallbackExtraction);
-  const references = selectReferences(teiResult);
+  const references = selectReferences(teiResult, htmlResult);
 
   const { chunks, citationToChunks, figureToChunks } = buildChunks(metadata.id, sections);
 

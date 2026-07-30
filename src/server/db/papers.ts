@@ -231,6 +231,15 @@ export async function getPaper(paperId: string): Promise<PaperRecord | undefined
   });
 }
 
+/** Paper ids in the library — used by the citation router's ingested-lookup trigger. */
+export async function listIngestedPaperIds(): Promise<string[]> {
+  await ensureSchema();
+  return withPgClient(async (client) => {
+    const { rows } = await client.query<{ paper_id: string }>("SELECT paper_id FROM papers");
+    return rows.map((row) => row.paper_id);
+  });
+}
+
 export interface UpsertPaperChunksOptions {
   paperRecord?: Partial<PaperRecord>;
   replaceExistingForPaper?: boolean;

@@ -4,6 +4,7 @@ export * from "./models";
 export interface PromptConfig {
   system: {
     paper_summary: { base: string };
+    term_grounding: { base: string };
     selection_summary: { base: string };
     qa: { base: string };
   };
@@ -33,7 +34,9 @@ export interface PromptConfig {
  * prompts.json for a while afterwards, where setting one produced silence rather
  * than an error. They are gone now — the base prompt is returned as-is.
  */
-export function getSystemPrompt(taskType: "paper_summary" | "selection_summary" | "qa"): string {
+export function getSystemPrompt(
+  taskType: "paper_summary" | "term_grounding" | "selection_summary" | "qa",
+): string {
   return promptsData.system[taskType].base;
 }
 

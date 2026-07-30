@@ -3,7 +3,7 @@
   "id": "server.summarize",
   "parent": "server",
   "path": "src/server/summarize",
-  "goal": "Produces a structured summary of a stored paper.",
+  "goal": "Produces a teaching-contract explanation of a stored paper (hook, claim, mechanism, evidence, glossary).",
   "owns": ["src/server/summarize"],
   "interface": {
     "entrypoint": "index.ts",
@@ -13,6 +13,10 @@
     {
       "module": "server.db",
       "via": "fetchPaperChunksByPaperId"
+    },
+    {
+      "module": "server.explain",
+      "via": "loadPersonaSplit / routeCitations / validateSourceLabel"
     },
     {
       "module": "server.llm",

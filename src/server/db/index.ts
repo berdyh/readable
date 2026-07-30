@@ -21,6 +21,7 @@ export {
   searchPaperChunksByText,
   fetchChunksByIds,
   fetchChunksByPageWindow,
+  listIngestedPaperIds,
 } from "./papers";
 export type {
   PaperChunkTextSearchHit,

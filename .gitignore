@@ -51,3 +51,4 @@ LOG.md
 
 # graphify knowledge-graph output (regenerable from the repo)
 /graphify-out/
+.claude/work-log/

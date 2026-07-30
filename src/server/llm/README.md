@@ -173,6 +173,14 @@ Configured in [`../llm-config/models.json`](../llm-config/models.json); see that
 
 Override via env: `OPENAI_QA_MODEL`, `ANTHROPIC_PAPER_SUMMARY_MODEL`, `OPENROUTER_QA_MODEL`, etc. Or set a coarse default with `OPENAI_MODEL`, `ANTHROPIC_MODEL`, `OPENROUTER_MODEL`.
 
+Two additional task keys exist beyond the table: `term_grounding` (the summarize flow's one
+bounded second-pass grounding call for low-familiarity glossary terms; falls through to the
+provider `default` model) and `eval_judge` (the `pnpm eval` rubric judge — pinned to dated
+model snapshots on purpose so eval scores stay comparable across runs; never point it at a
+floating alias). The explanation flows that drive these calls compose the mechanism library
+in [`../explain`](../explain) — persona calibration, source-label validation, and the
+citation router that decides when retrieved cited text enters a prompt.
+
 ## Adding a new provider
 
 Two-layer change because of routing. Steps:

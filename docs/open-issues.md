@@ -1,14 +1,16 @@
 # Open issues and next steps
 
-Working state as of **2026-07-29**, `main`. `pnpm verify` green: 314 tests on `main`, 0 lint errors, 0 lint warnings. `pnpm test:api -- --live` is
-**5/5** — health, qa, summarize, chat session, arXiv ingest.
+Working state as of **2026-07-31**, `main`. `pnpm verify` green: 397 tests, 0 lint errors,
+0 lint warnings. `pnpm eval -- --dry-run` passes all gates (the live eval baseline is not yet
+recorded — see below).
 
-The local coding-agent items that used to lead this file are done: auth detection now probes
-the CLI itself (`codex login status` / `claude auth status`, sandboxed, cached, with the old
-file shape-check kept as fallback), the chat picker's agent pin reaches `/summary` and
-`/explain`, mid-call token refreshes are written back from the sandbox, and the `--tools ""`
-ordering has a regression test. The durable explanations live as doc comments in
-`src/server/llm/providers/local-coding-agent.ts`.
+The explanation-engine wave landed: document-order chunk fetch (`token_start` ordinal),
+coverage+deepening budget fill, the teaching contract in `/api/summarize`
+(hook → claim → mechanism → evidence → glossary with source labels), persona known/new
+calibration read from the mastery ledger, the concept graph (`concepts` / `concept_edges` +
+typed ledger signals), Semantic Scholar enrichment persisted at ingest (runtime reads
+Postgres only), the four-trigger citation router in `server/explain`, pass-1 contract
+rendering with render-gated exposure, and the `pnpm eval` harness with a pinned judge.
 
 This file is a **living checklist, not a record** — when an item is done, delete it rather
 than marking it ✅, and put the durable explanation in the doc that owns that subject.
@@ -16,61 +18,28 @@ Anything frozen belongs in [`archive/`](./archive/).
 
 ## Next session — start here
 
-### Stop sending the whole paper to the model
+### Record the live eval baseline
 
-`/api/summarize` currently assembles the entire paper into one prompt. That is wrong on cost,
-on latency, and on quality — the relevant couple of kB is buried in ~24kB of noise.
+`scripts/eval/baseline.json` is committed with `recordedAt: null`. Run
+`pnpm eval -- --update-baseline` against live models once, review the scores, and commit the
+result. Until then the harness gates on absolute thresholds only, not on drift from a
+baseline. The judge model is pinned in `models.json` (`eval_judge`) — never point it at a
+floating alias, or scores stop being comparable.
 
-**Measure before designing.** The one number that matters is not yet known: how much of the
-prompt is paper text versus assembled scaffolding. `gemma-4-26b:free` summarised the raw 24kB
-paper standalone in 47s, but `/api/summarize` still hit a 180s timeout with the same model —
-so the real prompt is _substantially_ larger than the paper and nobody has measured the
-difference. Get that number first; it should drive the design rather than assumptions.
+## Deferred from the explanation-engine wave (deliberate, not forgotten)
 
-Directions worth weighing once it is known, not before:
-
-- **Retrieval-scoped summarisation** — `server.search` already does hybrid retrieval. Summarise
-  the top-k chunks rather than everything.
-- **Section-wise map-reduce** — summarise per section, cache those, reduce to a paper summary.
-  Plays well with the existing `paper_chunks` section metadata.
-- **Cheap-model triage** — a fast pass selects what the expensive pass reads.
-
-Each has a different cost/quality trade-off, and the prompt-composition number decides which
-is worth building.
-
-## Verification gaps
-
-### Two of the six chat flows are still unverified
-
-`pnpm test:api -- --live` covers the authenticated **API** surface end to end and runs
-unattended (it mints its own Clerk session token — `scripts/lib/clerk-test-session.ts`).
-The jsdom project now covers the UI half of four flows:
-
-- slash-command dispatch — `commands.test.ts`
-- citation click → block scroll/reveal — `useBlockNavigation.test.tsx`
-- chat tab deletion + confirmation — `ChatTabStrip.test.tsx`
-- insert-answer into the document — exercised through the navigate/intent contracts
-
-**Writing the first of those found a real bug**: the editor replied to a navigate
-request inline, inside the synchronous dispatch, so the caller always subscribed too
-late and a successfully revealed citation timed out into the red "unavailable" state.
-Fixed by deferring the reply to a microtask. Worth remembering as evidence that this
-seam needs rendered tests, not just review — both halves were individually correct and
-only the ordering between them was wrong.
-
-Still unverified:
-
-- **sending and receiving a message**
-- **session persistence across a reload**
-
-Both need meaningful fetch orchestration rather than a render, so they are better done
-alongside the ingestion work than bolted on separately.
+- **Tier-3 on-demand ingest of cited papers.** The citation router already detects when a
+  cited paper is in the library (trigger 3) and is built ready for a "pull this citation in"
+  action, but the async ingest job + sidecar progress UX needs deliberate design before it
+  exists behind a user action. Do not bolt it onto the hot path.
+- **Spaced-repetition scheduling / review prompts.** The mastery ledger stores everything
+  scheduling would need (typed signals, exposure counts, distinct papers, last-seen, decay
+  derived at read). Scheduling itself is a later product feature.
+- **Page-number backfill for ar5iv ingest.** ar5iv chunks store no page numbers; conditional
+  rendering removed the "(page ?)" harm, so backfill is an enhancement, not a fix.
 
 ## Smaller follow-ups
 
-- **Selection summaries do not feed the persona graph.** `qa` and `summarize` both call
-  `recordPersonaSignals()`; the selection path does not. Needs the selection summary schema to
-  return `concepts` first, so it is a feature rather than a fix.
 - **`docs/editor-architecture.md`** still describes the removed `EditorWorkspace`/Tiptap-ribbon
   tree. Its "Canonical helper locations" section is current; the component tree and state
   diagram are historical.

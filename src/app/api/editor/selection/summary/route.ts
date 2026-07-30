@@ -35,9 +35,11 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // The route still gates on auth — only the unused userId hand-off is gone.
-    await requireAuthenticatedUserId();
-    const result = await summarizeSelection(payload.paperId, payload.selection, { localAgent });
+    const userId = await requireAuthenticatedUserId();
+    const result = await summarizeSelection(payload.paperId, payload.selection, {
+      localAgent,
+      userId,
+    });
 
     return NextResponse.json(result, { status: 200 });
   } catch (error) {

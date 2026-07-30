@@ -80,7 +80,55 @@ describe("answerPaperQuestion", () => {
           text: { status: "ok", hitCount: 1 },
         },
       },
+      // No routed citation passages were supplied, so any cited_text
+      // claim would have been downgraded; absent labels default here.
+      source: "model_knowledge",
     });
+  });
+
+  it("downgrades a cited_text label when no citation passages were routed", async () => {
+    mockedEvidence.mockResolvedValue(mockEvidence());
+    mockedGenerate.mockResolvedValue(
+      JSON.stringify({
+        answer: "An answer claiming cited text.",
+        citations: [],
+        source: "cited_text",
+      }),
+    );
+
+    const result = await answerPaperQuestion("paper-1", "What is self-attention?");
+
+    expect(result.source).toBe("model_knowledge");
+  });
+
+  it("keeps cited_text when the router routed citation passages into the prompt", async () => {
+    mockedEvidence.mockResolvedValue(
+      mockEvidence({
+        citations: [
+          {
+            citationId: "bib.bib7",
+            title: "An Obscure Cited Work",
+            year: 2020,
+            citationCount: 2,
+            abstract: "Retrieved abstract text.",
+          },
+        ],
+      }),
+    );
+    mockedGenerate.mockResolvedValue(
+      JSON.stringify({
+        answer: "Grounded in the cited work.",
+        citations: [],
+        source: "cited_text",
+      }),
+    );
+
+    const result = await answerPaperQuestion("paper-1", "What does the cited paper say?");
+
+    expect(result.source).toBe("cited_text");
+    const request = mockedGenerate.mock.calls.at(-1)?.[0] as { userPrompt: string };
+    expect(request.userPrompt).toContain("Retrieved Cited Passages");
+    expect(request.userPrompt).toContain("An Obscure Cited Work");
   });
 
   it("marks retrieved answers as uncited when citations array is empty", async () => {

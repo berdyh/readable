@@ -25,8 +25,7 @@ Anything not listed here is internal to this module:
 Read only the *interface* of these — never their internals.
 
 - **server.db** via `fetchChunksByIds`
-- **server.external** via `enrichCitation`
-- **server.ingest** via `@/server/ingest/types`
+- **server.explain** via `loadPersonaSplit / routeCitations / validateSourceLabel`
 - **server.llm** via `generateJson`
 - **server.llm-config** via `getSystemPrompt`
 - **server.persona** via `recordPersonaSignals`

@@ -43,6 +43,34 @@ interface PaperCitationRow {
   chunk_ids: string[] | null;
 }
 
+/**
+ * Natural-order comparison for chunk ids: "S2-p2" sorts before "S2-p10",
+ * "S2" before "S10". Plain lexicographic ordering ("ORDER BY chunk_id")
+ * silently shuffled the back half of every paper (S10 < S2), which is how
+ * Training/Results/Conclusion sections vanished from summaries.
+ */
+function naturalCompareChunkIds(a: string, b: string): number {
+  return a.localeCompare(b, "en", { numeric: true, sensitivity: "base" });
+}
+
+/**
+ * Document-order comparator for paper chunks. `token_start` carries the
+ * ingest-time reading-order ordinal; rows ingested before the ordinal
+ * existed have NULL `token_start` permanently and fall back to
+ * natural-sorting `chunk_id`.
+ */
+export function compareChunksByDocumentOrder(
+  a: Pick<PaperChunk, "chunkId" | "tokenStart">,
+  b: Pick<PaperChunk, "chunkId" | "tokenStart">,
+): number {
+  if (typeof a.tokenStart === "number" && typeof b.tokenStart === "number") {
+    if (a.tokenStart !== b.tokenStart) {
+      return a.tokenStart - b.tokenStart;
+    }
+  }
+  return naturalCompareChunkIds(a.chunkId, b.chunkId);
+}
+
 const cleanArray = (values: string[] | undefined): string[] =>
   (values ?? []).map((value) => (typeof value === "string" ? value.trim() : "")).filter(Boolean);
 
@@ -596,11 +624,11 @@ export async function fetchPaperChunksByPaperId(paperId: string): Promise<PaperC
               token_start, token_end, citations, figure_ids
        FROM paper_chunks
        WHERE paper_id = $1
-       ORDER BY chunk_id ASC`,
+       ORDER BY token_start ASC NULLS LAST, chunk_id ASC`,
       [paperId],
     );
 
-    return rows.map(mapPaperChunkRow);
+    return rows.map(mapPaperChunkRow).sort(compareChunksByDocumentOrder);
   });
 }
 

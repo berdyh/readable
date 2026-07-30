@@ -347,10 +347,16 @@ function selectReferences(teiResult: ParsedTeiResult | undefined): PaperReferenc
   return teiResult?.references ?? [];
 }
 
-function buildChunks(paperId: string, sections: PaperSection[]): BuildChunkResult {
+export function buildChunks(paperId: string, sections: PaperSection[]): BuildChunkResult {
   const chunks: PaperChunk[] = [];
   const citationToChunks = new Map<string, Set<string>>();
   const figureToChunks = new Map<string, Set<string>>();
+
+  // Document-order ordinal. Ingest never had real token offsets, so
+  // `token_start` doubles as the paper-wide reading-order ordinal: the
+  // fetch path orders by it and only falls back to natural-sorting
+  // `chunk_id` for legacy rows ingested before this ordinal existed.
+  let ordinal = 0;
 
   sections.forEach((section) => {
     section.paragraphs.forEach((paragraph, index) => {
@@ -361,9 +367,11 @@ function buildChunks(paperId: string, sections: PaperSection[]): BuildChunkResul
         text: paragraph.text,
         section: section.title,
         pageNumber: paragraph.pageNumber ?? section.pageStart,
+        tokenStart: ordinal,
         citations: paragraph.citations,
         figureIds: paragraph.figureIds,
       });
+      ordinal += 1;
 
       paragraph.citations.forEach((citationId) => {
         const entry = citationToChunks.get(citationId) ?? new Set<string>();

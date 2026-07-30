@@ -75,7 +75,41 @@ vi.mock("./postgres", () => ({
   ),
 }));
 
-import { replacePaperIngestData } from "./papers";
+import { compareChunksByDocumentOrder, replacePaperIngestData } from "./papers";
+
+describe("compareChunksByDocumentOrder", () => {
+  it("orders by token_start ordinal when both rows carry one", () => {
+    const rows = [
+      { chunkId: "S9-p1", tokenStart: 2 },
+      { chunkId: "S1-p1", tokenStart: 0 },
+      { chunkId: "S2-p1", tokenStart: 1 },
+    ];
+    rows.sort(compareChunksByDocumentOrder);
+    expect(rows.map((row) => row.chunkId)).toEqual(["S1-p1", "S2-p1", "S9-p1"]);
+  });
+
+  it("natural-sorts legacy rows without token_start (regression pin: S10 must follow S2)", () => {
+    // The original `ORDER BY chunk_id ASC` was lexicographic: "S10-p1" < "S2-p1",
+    // which shuffled the back half of every paper out of reading order.
+    const rows = [
+      { chunkId: "S10-p1", tokenStart: undefined },
+      { chunkId: "S2-p10", tokenStart: undefined },
+      { chunkId: "S2-p2", tokenStart: undefined },
+      { chunkId: "S1-p1", tokenStart: undefined },
+    ];
+    rows.sort(compareChunksByDocumentOrder);
+    expect(rows.map((row) => row.chunkId)).toEqual(["S1-p1", "S2-p2", "S2-p10", "S10-p1"]);
+  });
+
+  it("breaks token_start ties and mixed rows via natural chunk_id order", () => {
+    const rows = [
+      { chunkId: "S1-p10", tokenStart: 5 },
+      { chunkId: "S1-p2", tokenStart: 5 },
+    ];
+    rows.sort(compareChunksByDocumentOrder);
+    expect(rows.map((row) => row.chunkId)).toEqual(["S1-p2", "S1-p10"]);
+  });
+});
 
 describe("replacePaperIngestData", () => {
   beforeEach(() => {

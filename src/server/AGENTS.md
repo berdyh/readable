@@ -33,7 +33,8 @@ Route by goal — you should not need to open more than one.
 - **server.config** (`src/server/config`) — Serves timeouts and base URLs, checking env overrides first.
 - **server.db** (`src/server/db`) — Persists application records in Postgres.
 - **server.editor** (`src/server/editor`) — Serves the editor's selection-scoped actions.
-- **server.external** (`src/server/external`) — Enriches a citation from Semantic Scholar.
+- **server.explain** (`src/server/explain`) — Mechanism library for teaching-quality explanations: persona split, source labels, citation routing.
+- **server.external** (`src/server/external`) — Enriches citations from Semantic Scholar, singly or as an ingest-time batch.
 - **server.ingest** (`src/server/ingest`) — Converts a source paper into the stored records the rest of the app reads.
 - **server.llm** (`src/server/llm`) — Answers a prompt using whichever model provider is currently reachable.
 - **server.llm-config** (`src/server/llm-config`) — Serves the prompt text and model id for a given task.

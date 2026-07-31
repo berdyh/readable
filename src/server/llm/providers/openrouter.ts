@@ -140,6 +140,22 @@ function buildHeaders(cfg: OpenRouterProviderConfig): Record<string, string> {
   };
 }
 
+/**
+ * A syntactically valid but empty JSON payload ({} / []) is a silent
+ * no-op — the worst failure mode, because nothing downstream errors
+ * until a parser finds no data. Fail loudly, with a message the
+ * failover classifier reads as empty_response so the router advances.
+ * JSON path only: a plain "{}" is a legitimate *text* answer.
+ */
+function rejectDegenerateJsonPayload(content: string): void {
+  const trimmed = content.trim();
+  if (trimmed === "{}" || trimmed === "[]") {
+    throw new Error(
+      "OpenRouter returned an empty response: degenerate JSON completion ({} or []).",
+    );
+  }
+}
+
 function withNativeFallbacks<T extends Record<string, unknown>>(
   cfg: OpenRouterProviderConfig,
   body: T,
@@ -225,12 +241,7 @@ export class OpenRouterProvider implements LlmProviderInterface {
         throw new Error("OpenRouter response did not include content.");
       }
 
-      // A syntactically valid but empty payload ({} / []) is a silent no-op —
-      // the worst failure mode, because nothing downstream errors until a
-      // parser finds no data. Fail loudly so failover can classify it.
-      if (content.trim() === "{}" || content.trim() === "[]") {
-        throw new Error("OpenRouter response was an empty JSON payload (degenerate completion).");
-      }
+      rejectDegenerateJsonPayload(content);
 
       return content.trim();
     } finally {
@@ -282,13 +293,8 @@ export class OpenRouterProvider implements LlmProviderInterface {
         throw new Error("OpenRouter response did not include content.");
       }
 
-      // A syntactically valid but empty payload ({} / []) is a silent no-op —
-      // the worst failure mode, because nothing downstream errors until a
-      // parser finds no data. Fail loudly so failover can classify it.
-      if (content.trim() === "{}" || content.trim() === "[]") {
-        throw new Error("OpenRouter response was an empty JSON payload (degenerate completion).");
-      }
-
+      // No degenerate-payload guard here: "{}" is a legitimate text
+      // answer on this path (see rejectDegenerateJsonPayload).
       return content.trim();
     } finally {
       clearTimeout(timer);

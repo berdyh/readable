@@ -8,9 +8,14 @@ vi.mock("@/server/llm", () => ({
   generateJson: vi.fn(),
 }));
 
+vi.mock("@/server/persona", () => ({
+  recordPersonaSignals: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { answerPaperQuestion } from "@/server/qa";
 import { loadQuestionEvidence } from "@/server/qa/context";
 import { generateJson } from "@/server/llm";
+import { recordPersonaSignals } from "@/server/persona";
 import type { QuestionEvidenceContext } from "@/server/qa/types";
 
 const mockEvidence = (
@@ -206,6 +211,41 @@ describe("answerPaperQuestion", () => {
     expect(result.trust.status).toBe("refused");
     expect(result.trust.hasEvidence).toBe(false);
     expect(result.trust.retrieval.vector.status).toBe("search_failed");
+  });
+
+  it("plumbs the model's concept domain through to persona recording", async () => {
+    const mockedRecord = vi.mocked(recordPersonaSignals);
+    mockedRecord.mockClear();
+    mockedEvidence.mockResolvedValue(mockEvidence());
+    mockedGenerate.mockResolvedValue(
+      JSON.stringify({
+        answer: "Attention weighs tokens.",
+        citations: [],
+        concepts: [
+          { concept: "attention", description: null, domain: "ml" },
+          { concept: "softmax", description: "normalizes scores", domain: null },
+        ],
+      }),
+    );
+
+    await answerPaperQuestion("paper-1", "What is attention?", { userId: "user-1" });
+
+    await vi.waitFor(() => expect(mockedRecord).toHaveBeenCalledOnce());
+    const args = mockedRecord.mock.calls[0][0];
+    expect(args.concepts).toEqual([
+      { concept: "attention", description: undefined, domain: "ml" },
+      { concept: "softmax", description: "normalizes scores", domain: undefined },
+    ]);
+  });
+
+  it("does not duplicate the ask-overrides-known policy inline (system prompt owns it)", async () => {
+    mockedEvidence.mockResolvedValue(mockEvidence());
+    mockedGenerate.mockResolvedValue(JSON.stringify({ answer: "An answer.", citations: [] }));
+
+    await answerPaperQuestion("paper-1", "What is self-attention?");
+
+    const request = mockedGenerate.mock.calls.at(-1)?.[0] as { userPrompt: string };
+    expect(request.userPrompt).not.toContain("Policy: an explicit question always overrides");
   });
 
   it("throws when the OpenAI payload cannot be parsed", async () => {

@@ -110,6 +110,17 @@ describe("recordExposureSignal", () => {
   });
 });
 
+describe("concept key domains", () => {
+  it("lands domain-tagged concepts under domain:name keys, defaulting to general", async () => {
+    const keys = await recordConceptGraph([
+      { concept: "Attention", domain: "ml" },
+      { concept: "Attention" },
+    ]);
+
+    expect(keys).toEqual(["ml:attention", "general:attention"]);
+  });
+});
+
 describe("recordPersonaSignals concept cap", () => {
   it("persists at most MAX_CONCEPTS_PER_INTERACTION concepts", async () => {
     const concepts = Array.from({ length: MAX_CONCEPTS_PER_INTERACTION + 4 }, (_, index) => ({

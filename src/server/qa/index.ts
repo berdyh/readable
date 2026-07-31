@@ -57,14 +57,16 @@ const QA_RESPONSE_SCHEMA: Record<string, unknown> = {
       items: {
         type: "object",
         additionalProperties: false,
-        // Both fields are required so OpenAI's strict json_schema mode
-        // accepts the schema, but description is nullable — non-strict
-        // providers (Anthropic / Gemini / OpenRouter free) often omit
-        // descriptions when none is meaningful. The parser drops nulls.
-        required: ["concept", "description"],
+        // All fields are required so OpenAI's strict json_schema mode
+        // accepts the schema, but description/domain are nullable —
+        // non-strict providers (Anthropic / Gemini / OpenRouter free)
+        // often omit them when none is meaningful. The parser drops
+        // nulls.
+        required: ["concept", "description", "domain"],
         properties: {
           concept: { type: "string", minLength: 1, maxLength: 80 },
           description: { type: ["string", "null"], maxLength: 240 },
+          domain: { type: ["string", "null"], maxLength: 40 },
         },
       },
     },
@@ -79,7 +81,8 @@ interface LlmCitationPayload {
 
 interface LlmConceptPayload {
   concept: string;
-  description?: string;
+  description?: string | null;
+  domain?: string | null;
 }
 
 interface LlmQaPayload {
@@ -257,9 +260,6 @@ function buildQaUserPrompt(
   lines.push(`Question: ${question.trim()}`);
   lines.push("");
   lines.push(blocks.personaBlock);
-  lines.push(
-    "Policy: an explicit question always overrides the known list — if the user asks about something they supposedly know, explain it fully.",
-  );
 
   if (evidence.selection) {
     const parts: string[] = [];
@@ -412,7 +412,11 @@ export async function answerPaperQuestion(
     prompt: question,
     response: answer,
     chunkIds: citations.map((c) => c.chunkId),
-    concepts: payload.concepts ?? [],
+    concepts: (payload.concepts ?? []).map((concept) => ({
+      concept: concept?.concept ?? "",
+      description: concept?.description ?? undefined,
+      domain: concept?.domain ?? undefined,
+    })),
   }).catch((error) => {
     console.warn("[qa] failed to persist persona signals:", error);
   });

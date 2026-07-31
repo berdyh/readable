@@ -34,10 +34,13 @@ const SELECTION_SUMMARY_SCHEMA: Record<string, unknown> = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["concept", "description"],
+        // All fields required for OpenAI strict mode; description and
+        // domain are nullable and nulls are dropped by the parser.
+        required: ["concept", "description", "domain"],
         properties: {
           concept: { type: "string", minLength: 1, maxLength: 80 },
           description: { type: ["string", "null"], maxLength: 240 },
+          domain: { type: ["string", "null"], maxLength: 40 },
         },
       },
     },
@@ -97,6 +100,7 @@ interface LlmSummaryPayload {
   concepts?: Array<{
     concept?: string;
     description?: string | null;
+    domain?: string | null;
   }>;
 }
 
@@ -417,6 +421,7 @@ export async function summarizeSelection(
     .map((entry) => ({
       concept: (entry?.concept ?? "").trim(),
       description: entry?.description?.trim() || undefined,
+      domain: entry?.domain?.trim() || undefined,
     }))
     .filter((entry) => entry.concept.length > 0);
 

@@ -1,17 +1,20 @@
 import { loadPaperSummaryContext, type PaperSummaryContext } from "./context";
 import { generateJson } from "@/server/llm";
 import { recordConceptGraph, recordPersonaSignals } from "@/server/persona";
-import { fetchPaperCitationsByPaperId, listIngestedPaperIds, type Citation } from "@/server/db";
+import { fetchPaperCitationsByPaperId, type Citation } from "@/server/db";
 import {
   MAX_CITATIONS_IN_SUMMARY_CONTEXT,
+  CITATION_ABSTRACT_TRUNCATE,
   SOURCE_LABEL_INSTRUCTIONS,
   SOURCE_LABEL_SCHEMA,
   buildConceptKey,
+  loadIngestedIdsSafe,
   loadPersonaSplit,
   renderPersonaBlock,
   renderRoutedCitationContext,
   routeCitations,
   selectGroundingTerms,
+  toCitationCandidate,
   validateSourceLabel,
   type CitationCandidate,
   type PersonaSplit,
@@ -821,24 +824,9 @@ function postProcessSummary(
 async function loadCitationCandidates(paperId: string): Promise<CitationCandidate[]> {
   try {
     const citations: Citation[] = await fetchPaperCitationsByPaperId(paperId);
-    return citations.map((citation) => ({
-      citationId: citation.citationId,
-      title: citation.title,
-      year: citation.year,
-      citationCount: citation.citationCount,
-      arxivId: citation.arxivId,
-      abstract: citation.abstract,
-    }));
+    return citations.map(toCitationCandidate);
   } catch (error) {
     console.warn(`[summarize] Failed to load citations for ${paperId}:`, error);
-    return [];
-  }
-}
-
-async function loadIngestedIdsSafe(): Promise<string[]> {
-  try {
-    return await listIngestedPaperIds();
-  } catch {
     return [];
   }
 }
@@ -902,7 +890,7 @@ async function groundLowFamiliarityTerms(
     .slice(0, 8)
     .map(
       (candidate) =>
-        `- [${candidate.citationId}] ${candidate.title ?? "Untitled"}${candidate.year ? ` (${candidate.year})` : ""}\n  ${truncateText((candidate.abstract ?? "").replace(/\s+/g, " "), 480)}`,
+        `- [${candidate.citationId}] ${candidate.title ?? "Untitled"}${candidate.year ? ` (${candidate.year})` : ""}\n  ${truncateText((candidate.abstract ?? "").replace(/\s+/g, " "), CITATION_ABSTRACT_TRUNCATE)}`,
     )
     .join("\n");
 
@@ -993,11 +981,13 @@ export async function summarizePaperFromContext(
   options: SummarizeFromContextOptions = {},
 ): Promise<SummaryResult> {
   const paperId = context.paperId;
-  const [personaSplit, citationCandidates, ingestedIds] = await Promise.all([
+  const [personaSplit, citationCandidates] = await Promise.all([
     options.personaSplit ?? loadPersonaSplit(options.userId),
     options.citationCandidates ?? loadCitationCandidates(paperId),
-    options.ingestedPaperIds ?? loadIngestedIdsSafe(),
   ]);
+  // Sequenced after the candidates: the ingested lookup is now a
+  // membership query over their arXiv ids rather than a full library scan.
+  const ingestedIds = options.ingestedPaperIds ?? (await loadIngestedIdsSafe(citationCandidates));
 
   // Citation router (no question in the summarize flow): retrieval fires
   // for obscure/recent or already-ingested cited work. Abstracts are

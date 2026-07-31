@@ -57,4 +57,10 @@ export type {
   RouteCitationsInput,
 } from "./citationRouter";
 
-export { renderRoutedCitationContext, truncateForPrompt } from "./render";
+export {
+  renderRoutedCitationContext,
+  truncateForPrompt,
+  CITATION_ABSTRACT_TRUNCATE,
+} from "./render";
+
+export { toCitationCandidate, loadIngestedIdsSafe } from "./citationCandidates";

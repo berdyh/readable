@@ -8,7 +8,8 @@ import type { CitationCandidate, CitationRouteDecision } from "./citationRouter"
  * decides what to include, only how it is formatted.
  */
 
-const CITATION_ABSTRACT_TRUNCATE = 480;
+/** Shared by the routed-citation block and the grounding-pass prompt. */
+export const CITATION_ABSTRACT_TRUNCATE = 480;
 
 export function truncateForPrompt(text: string, maxLength: number): string {
   if (text.length <= maxLength) {

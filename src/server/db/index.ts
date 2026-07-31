@@ -21,7 +21,7 @@ export {
   searchPaperChunksByText,
   fetchChunksByIds,
   fetchChunksByPageWindow,
-  listIngestedPaperIds,
+  filterIngestedPaperIds,
 } from "./papers";
 export type {
   PaperChunkTextSearchHit,
@@ -31,7 +31,6 @@ export type {
   UpsertPaperChunksOptions,
 } from "./papers";
 export {
-  upsertPersonaConcepts,
   upsertInteractions,
   listPersonaConceptsForUser,
   recordConceptSignal,

@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
   generateJson: vi.fn<(request: unknown, options?: { taskName?: string }) => Promise<string>>(),
   loadPaperSummaryContext: vi.fn<() => Promise<PaperSummaryContext>>(),
   fetchPaperCitationsByPaperId: vi.fn(async (): Promise<unknown[]> => []),
-  listIngestedPaperIds: vi.fn(async (): Promise<string[]> => []),
+  filterIngestedPaperIds: vi.fn(async (): Promise<string[]> => []),
   recordPersonaSignals: vi.fn(async (_args: unknown) => undefined),
   recordConceptGraph: vi.fn(async (_concepts: unknown, _source?: unknown) => []),
   fetchConceptLedgerForUser: vi.fn(async (): Promise<unknown[]> => []),
@@ -22,7 +22,7 @@ vi.mock("./context", () => ({
 
 vi.mock("@/server/db", () => ({
   fetchPaperCitationsByPaperId: mocks.fetchPaperCitationsByPaperId,
-  listIngestedPaperIds: mocks.listIngestedPaperIds,
+  filterIngestedPaperIds: mocks.filterIngestedPaperIds,
   fetchConceptLedgerForUser: mocks.fetchConceptLedgerForUser,
 }));
 
@@ -110,7 +110,7 @@ beforeEach(() => {
   mocks.generateJson.mockReset();
   mocks.loadPaperSummaryContext.mockResolvedValue(baseContext);
   mocks.fetchPaperCitationsByPaperId.mockResolvedValue([]);
-  mocks.listIngestedPaperIds.mockResolvedValue([]);
+  mocks.filterIngestedPaperIds.mockResolvedValue([]);
   mocks.recordPersonaSignals.mockClear();
   mocks.recordConceptGraph.mockClear();
   mocks.fetchConceptLedgerForUser.mockResolvedValue([]);

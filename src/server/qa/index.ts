@@ -1,14 +1,15 @@
 import { loadQuestionEvidence } from "./context";
 import { generateJson } from "@/server/llm";
 import { recordPersonaSignals } from "@/server/persona";
-import { listIngestedPaperIds } from "@/server/db";
 import {
   SOURCE_LABEL_INSTRUCTIONS,
   SOURCE_LABEL_SCHEMA,
+  loadIngestedIdsSafe,
   loadPersonaSplit,
   renderPersonaBlock,
   renderRoutedCitationContext,
   routeCitations,
+  toCitationCandidate,
   validateSourceLabel,
   type CitationCandidate,
 } from "@/server/explain";
@@ -332,33 +333,20 @@ function parseLlmPayload(raw: string): LlmQaPayload {
   }
 }
 
-async function loadIngestedIdsSafe(): Promise<string[]> {
-  try {
-    return await listIngestedPaperIds();
-  } catch {
-    return [];
-  }
-}
-
 export async function answerPaperQuestion(
   paperId: string,
   question: string,
   options: QuestionOptions = {},
 ): Promise<AnswerResult> {
-  const [evidence, personaSplit, ingestedIds] = await Promise.all([
+  const [evidence, personaSplit] = await Promise.all([
     loadQuestionEvidence(paperId, question, options),
     loadPersonaSplit(options.userId),
-    loadIngestedIdsSafe(),
   ]);
 
-  const citationCandidates: CitationCandidate[] = evidence.citations.map((citation) => ({
-    citationId: citation.citationId,
-    title: citation.title,
-    year: citation.year,
-    citationCount: citation.citationCount,
-    arxivId: citation.arxivId,
-    abstract: citation.abstract,
-  }));
+  const citationCandidates: CitationCandidate[] = evidence.citations.map(toCitationCandidate);
+  // Sequenced after the candidates: the ingested lookup is now a
+  // membership query over their arXiv ids rather than a full library scan.
+  const ingestedIds = await loadIngestedIdsSafe(citationCandidates);
 
   const decisions = routeCitations({
     question,

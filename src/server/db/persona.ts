@@ -42,50 +42,6 @@ export async function listPersonaConceptsForUser(
   });
 }
 
-export async function upsertPersonaConcepts(concepts: PersonaConcept[]): Promise<string[]> {
-  if (concepts.length === 0) {
-    return [];
-  }
-
-  await ensureSchema();
-
-  return withPgClient(async (client) => {
-    const ids: string[] = [];
-    for (const concept of concepts) {
-      const id = concept.id ?? buildPersonaConceptUuid(concept.userId, concept.concept);
-      await client.query(
-        `
-        INSERT INTO persona_concepts (
-          id,
-          user_id,
-          concept,
-          description,
-          first_seen_paper_id,
-          learned_at,
-          confidence
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7)
-        ON CONFLICT (user_id, concept) DO UPDATE SET
-          description = COALESCE(EXCLUDED.description, persona_concepts.description),
-          first_seen_paper_id = COALESCE(EXCLUDED.first_seen_paper_id, persona_concepts.first_seen_paper_id),
-          learned_at = COALESCE(EXCLUDED.learned_at, persona_concepts.learned_at),
-          confidence = COALESCE(EXCLUDED.confidence, persona_concepts.confidence)
-        `,
-        [
-          id,
-          concept.userId,
-          concept.concept,
-          concept.description ?? null,
-          concept.firstSeenPaperId ?? null,
-          concept.learnedAt ?? null,
-          typeof concept.confidence === "number" ? concept.confidence : null,
-        ],
-      );
-      ids.push(id);
-    }
-    return ids;
-  });
-}
-
 export interface RecordConceptSignalArgs {
   userId: string;
   paperId: string;

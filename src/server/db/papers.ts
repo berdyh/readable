@@ -231,11 +231,31 @@ export async function getPaper(paperId: string): Promise<PaperRecord | undefined
   });
 }
 
-/** Paper ids in the library — used by the citation router's ingested-lookup trigger. */
-export async function listIngestedPaperIds(): Promise<string[]> {
+/**
+ * Membership filter for the citation router's already-ingested trigger:
+ * which of these candidate arXiv ids exist in the library? Matching is
+ * version-insensitive on both sides ("1412.6980" matches a stored
+ * "1412.6980v9"), mirroring the router's own normalization. Replaces a
+ * full `SELECT paper_id FROM papers` scan on the QA and summarize hot
+ * paths.
+ */
+export async function filterIngestedPaperIds(candidateIds: string[]): Promise<string[]> {
+  const normalized = Array.from(
+    new Set(
+      candidateIds.map((id) => id.replace(/v\d+$/i, "").trim().toLowerCase()).filter(Boolean),
+    ),
+  );
+  if (normalized.length === 0) {
+    return [];
+  }
+
   await ensureSchema();
   return withPgClient(async (client) => {
-    const { rows } = await client.query<{ paper_id: string }>("SELECT paper_id FROM papers");
+    const { rows } = await client.query<{ paper_id: string }>(
+      `SELECT paper_id FROM papers
+        WHERE regexp_replace(lower(paper_id), 'v[0-9]+$', '') = ANY($1::text[])`,
+      [normalized],
+    );
     return rows.map((row) => row.paper_id);
   });
 }

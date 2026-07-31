@@ -931,9 +931,6 @@ const hybridSearchMock = vi.fn(
 const upsertInteractionsMock = vi.fn(async (rows: unknown[]) =>
   rows.map((_, index) => `interaction-${index}`),
 );
-const upsertPersonaConceptsMock = vi.fn(async (rows: unknown[]) =>
-  rows.map((_, index) => `concept-${index}`),
-);
 const listPersonaConceptsForUserMock = vi.fn(async () => []);
 const ensureQdrantCollectionMock = vi.fn(async () => undefined);
 const upsertPaperChunkVectorsMock = vi.fn(async () => undefined);
@@ -981,7 +978,6 @@ vi.mock("@/server/db", () => ({
   fetchPaperFiguresByPaperId: storeMock.fetchPaperFiguresByPaperId,
   fetchPaperCitationsByPaperId: storeMock.fetchPaperCitationsByPaperId,
   upsertInteractions: upsertInteractionsMock,
-  upsertPersonaConcepts: upsertPersonaConceptsMock,
   listPersonaConceptsForUser: listPersonaConceptsForUserMock,
   buildPaperChunkUuid: (paperId: string, chunkId: string) => `${paperId}:${chunkId}`,
 }));

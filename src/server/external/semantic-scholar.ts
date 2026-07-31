@@ -25,6 +25,7 @@ const BATCH_LIMIT = 500;
 const MAX_RETRY_AFTER_MS = 30_000;
 const DEFAULT_RETRY_AFTER_MS = 2_000;
 const MAX_TITLE_LOOKUPS_PER_BATCH = 20;
+const TITLE_LOOKUP_CONCURRENCY = 3;
 
 const FIELDS = [
   "paperId",
@@ -188,10 +189,37 @@ async function requestOnce<T>(
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T | undefined> {
+/**
+ * Shared across the lookups of one enrichment batch: once any request in
+ * the batch has seen a 429, later 429s in the same batch give up
+ * immediately instead of sleeping — otherwise a 50-reference bibliography
+ * can stack Retry-After sleeps into minutes of user-facing ingest time.
+ */
+interface RateLimitState {
+  rateLimited: boolean;
+}
+
+interface RequestOptions {
+  rateLimitState?: RateLimitState;
+}
+
+async function request<T>(
+  path: string,
+  init?: RequestInit,
+  options: RequestOptions = {},
+): Promise<T | undefined> {
+  const { rateLimitState } = options;
   const first = await requestOnce<T>(path, init);
   if (first.retryAfterMs === undefined) {
     return first.value;
+  }
+
+  if (rateLimitState?.rateLimited) {
+    console.warn(`[semantic-scholar] ${path} rate limited; batch already saw a 429, giving up`);
+    return undefined;
+  }
+  if (rateLimitState) {
+    rateLimitState.rateLimited = true;
   }
 
   // Rate limited: honor Retry-After (capped) and retry exactly once.
@@ -282,6 +310,7 @@ export async function fetchByArxivId(arxivId: string): Promise<SemanticScholarPa
 export async function searchByTitle(
   title: string,
   year?: number,
+  options: RequestOptions = {},
 ): Promise<SemanticScholarPaper | undefined> {
   const trimmed = title.trim();
   if (!trimmed) return undefined;
@@ -298,7 +327,11 @@ export async function searchByTitle(
     if (year) {
       params.set("year", String(year));
     }
-    const raw = await request<RawSearchResponse>(`/paper/search?${params.toString()}`);
+    const raw = await request<RawSearchResponse>(
+      `/paper/search?${params.toString()}`,
+      undefined,
+      options,
+    );
     const shaped = shapePaper(raw?.data?.[0]);
     cacheSet(key, shaped ?? null);
     return shaped;
@@ -311,7 +344,10 @@ export async function searchByTitle(
  * "DOI:10.1000/xyz"). Returns a map keyed by the input id; misses are
  * absent. Best-effort — a failed chunk contributes nothing.
  */
-export async function fetchPapersBatch(ids: string[]): Promise<Map<string, SemanticScholarPaper>> {
+export async function fetchPapersBatch(
+  ids: string[],
+  options: RequestOptions & { deadlineAt?: number } = {},
+): Promise<Map<string, SemanticScholarPaper>> {
   const results = new Map<string, SemanticScholarPaper>();
   const cleaned = ids.map((id) => id.trim()).filter(Boolean);
   if (cleaned.length === 0) {
@@ -319,6 +355,10 @@ export async function fetchPapersBatch(ids: string[]): Promise<Map<string, Seman
   }
 
   for (let offset = 0; offset < cleaned.length; offset += BATCH_LIMIT) {
+    if (options.deadlineAt !== undefined && Date.now() >= options.deadlineAt) {
+      console.warn("[semantic-scholar] batch enrichment deadline reached; stopping early");
+      break;
+    }
     const chunk = cleaned.slice(offset, offset + BATCH_LIMIT);
     const raw = await request<Array<RawSemanticScholarPaper | null>>(
       `/paper/batch?fields=${FIELDS}`,
@@ -327,6 +367,7 @@ export async function fetchPapersBatch(ids: string[]): Promise<Map<string, Seman
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ids: chunk }),
       },
+      options,
     );
 
     if (!Array.isArray(raw)) {
@@ -354,17 +395,50 @@ export interface CitationEnrichmentInput {
   year?: number;
 }
 
+export interface EnrichCitationsBatchOptions {
+  /**
+   * Overall wall-clock budget in ms. When exceeded, remaining lookups
+   * are skipped and whatever was enriched so far is returned — callers
+   * store the rest unenriched (the next re-ingest retries).
+   */
+  deadlineMs?: number;
+}
+
+/** Simple worker pool: runs `worker` over `items` with bounded parallelism. */
+async function runWithConcurrency<T>(
+  items: T[],
+  limit: number,
+  worker: (item: T) => Promise<void>,
+): Promise<void> {
+  let next = 0;
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const index = next;
+      next += 1;
+      await worker(items[index]);
+    }
+  });
+  await Promise.all(runners);
+}
+
 /**
  * Ingest-time bibliography enrichment. Citations with an arXiv id or DOI
  * go through the batch endpoint (500/call); title-only citations fall
  * back to bounded per-title search (first
  * `MAX_TITLE_LOOKUPS_PER_BATCH`, longest titles first — short strings
- * make bad search keys). Returns a map keyed by the caller's `key`.
+ * make bad search keys), run `TITLE_LOOKUP_CONCURRENCY` at a time.
+ * Returns a map keyed by the caller's `key`. Within one call, the first
+ * 429 disables further retry sleeps, and `options.deadlineMs` bounds the
+ * whole operation.
  */
 export async function enrichCitationsBatch(
   inputs: CitationEnrichmentInput[],
+  options: EnrichCitationsBatchOptions = {},
 ): Promise<Map<string, SemanticScholarPaper>> {
   const results = new Map<string, SemanticScholarPaper>();
+  const rateLimitState: RateLimitState = { rateLimited: false };
+  const deadlineAt = options.deadlineMs !== undefined ? Date.now() + options.deadlineMs : undefined;
+  const pastDeadline = (): boolean => deadlineAt !== undefined && Date.now() >= deadlineAt;
 
   const batchIds: string[] = [];
   const batchKeyById = new Map<string, string>();
@@ -386,7 +460,7 @@ export async function enrichCitationsBatch(
     }
   }
 
-  const batchResults = await fetchPapersBatch(batchIds);
+  const batchResults = await fetchPapersBatch(batchIds, { rateLimitState, deadlineAt });
   for (const [id, paper] of batchResults) {
     const key = batchKeyById.get(id);
     if (key) {
@@ -399,12 +473,15 @@ export async function enrichCitationsBatch(
     .sort((a, b) => (b.title?.length ?? 0) - (a.title?.length ?? 0))
     .slice(0, MAX_TITLE_LOOKUPS_PER_BATCH);
 
-  for (const input of titleCandidates) {
-    const paper = await searchByTitle(input.title ?? "", input.year);
+  await runWithConcurrency(titleCandidates, TITLE_LOOKUP_CONCURRENCY, async (input) => {
+    if (pastDeadline()) {
+      return;
+    }
+    const paper = await searchByTitle(input.title ?? "", input.year, { rateLimitState });
     if (paper) {
       results.set(input.key, paper);
     }
-  }
+  });
 
   return results;
 }

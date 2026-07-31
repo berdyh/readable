@@ -171,4 +171,82 @@ describe("enrichCitationsBatch", () => {
     expect(results.size).toBe(0);
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it("runs title-fallback lookups with bounded concurrency", async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    fetchMock.mockImplementation(async () => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      inFlight -= 1;
+      return jsonResponse({ data: [] });
+    });
+
+    const inputs = Array.from({ length: 7 }, (_, index) => ({
+      key: `bib.bib${index}`,
+      title: `A sufficiently long unique paper title number ${index}`,
+    }));
+    await enrichCitationsBatch(inputs);
+
+    expect(fetchMock).toHaveBeenCalledTimes(7);
+    expect(maxInFlight).toBeLessThanOrEqual(3);
+    expect(maxInFlight).toBeGreaterThan(1);
+  });
+
+  it("stops retrying 429s after the first 429 seen within a batch", async () => {
+    fetchMock.mockResolvedValue(
+      new Response("rate limited", { status: 429, headers: { "Retry-After": "0" } }),
+    );
+
+    const inputs = Array.from({ length: 4 }, (_, index) => ({
+      key: `bib.bib${index}`,
+      title: `A sufficiently long unique paper title number ${index}`,
+    }));
+    const results = await enrichCitationsBatch(inputs);
+
+    expect(results.size).toBe(0);
+    // 4 first attempts + exactly ONE Retry-After retry (the first 429
+    // marks the batch; later 429s give up without sleeping).
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+  });
+});
+
+describe("enrichment deadline", () => {
+  it("skips all lookups when the deadline is already exhausted", async () => {
+    const results = await enrichCitationsBatch(
+      [
+        { key: "bib.bib1", arxivId: "1706.03762" },
+        { key: "bib.bib2", title: "A sufficiently long paper title", year: 2020 },
+      ],
+      { deadlineMs: 0 },
+    );
+
+    expect(results.size).toBe(0);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("stops launching title lookups once the deadline passes mid-batch", async () => {
+    vi.useFakeTimers();
+    try {
+      fetchMock.mockImplementation(async () => {
+        // Each lookup consumes more wall clock than the whole budget.
+        vi.setSystemTime(Date.now() + 30_000);
+        return jsonResponse({ data: [] });
+      });
+
+      const inputs = Array.from({ length: 9 }, (_, index) => ({
+        key: `bib.bib${index}`,
+        title: `A sufficiently long unique paper title number ${index}`,
+      }));
+      const results = await enrichCitationsBatch(inputs, { deadlineMs: 20_000 });
+
+      expect(results.size).toBe(0);
+      // Only the first concurrency wave (3) may have started before the
+      // deadline was noticed; the remaining 6 are stored unenriched.
+      expect(fetchMock.mock.calls.length).toBeLessThanOrEqual(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

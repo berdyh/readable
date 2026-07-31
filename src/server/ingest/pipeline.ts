@@ -6,6 +6,7 @@ import {
   type PaperChunk,
   type PaperRecord,
 } from "@/server/db";
+import { getTimeout } from "@/server/config";
 import { enrichCitationsBatch, type SemanticScholarPaper } from "@/server/external";
 import { embedTexts, getEmbeddingEnvironment } from "@/server/vector";
 import {
@@ -547,7 +548,10 @@ export function applyCitationEnrichment(
  * Ingest-time enrichment (S2 hygiene): one batch call per ingest,
  * persisted to Postgres so runtime explanation paths never touch the
  * Semantic Scholar API. Best-effort — when S2 is down the flows work
- * with unenriched citations and the next re-ingest retries.
+ * with unenriched citations and the next re-ingest retries. The whole
+ * operation runs under an overall deadline: ingest is user-facing, so
+ * citations not enriched in time are stored unenriched instead of
+ * stacking rate-limit sleeps into minutes of wait.
  */
 async function enrichCitationsAtIngest(citations: Citation[]): Promise<Citation[]> {
   if (citations.length === 0) {
@@ -563,6 +567,7 @@ async function enrichCitationsAtIngest(citations: Citation[]): Promise<Citation[
         title: citation.title || undefined,
         year: citation.year,
       })),
+      { deadlineMs: getTimeout("ingest.enrichment", "INGEST_ENRICHMENT_DEADLINE_MS") },
     );
     return applyCitationEnrichment(citations, enrichment);
   } catch (error) {

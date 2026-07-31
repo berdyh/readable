@@ -26,7 +26,7 @@ loadEnv({ path: ".env.local" });
 loadEnv();
 
 import { generateJson } from "@/server/llm";
-import { getSystemPrompt } from "@/server/llm-config";
+import { getPromptLimits, getSystemPrompt } from "@/server/llm-config";
 import type { PersonaSplit } from "@/server/explain";
 import type { PaperSummaryContext, SummaryResult } from "@/server/summarize";
 
@@ -58,6 +58,10 @@ const EDGE_VALIDITY_THRESHOLD = 0.6;
 const MAX_EDGE_SAMPLES = 6;
 const DEFAULT_RUNS = 3;
 const LATENCY_BUDGET_MS = Number(process.env.EVAL_LATENCY_BUDGET_MS ?? 120_000);
+/** A dimension mean this far below the recorded baseline fails the gate. */
+const BASELINE_DRIFT_TOLERANCE = 0.15;
+/** Cross-run score variance above this prints a stability warning. */
+const VARIANCE_WARN_THRESHOLD = 0.05;
 
 const RUBRIC_DEFINITIONS: Record<Dimension, string> = {
   coverage:
@@ -161,7 +165,9 @@ function buildContext(fixture: Fixture): PaperSummaryContext {
     coverage: {
       totalParagraphs,
       includedParagraphs: totalParagraphs,
-      charBudget: 40_000,
+      // Same budget the production context builder reports, so eval
+      // coverage numbers stay comparable with real traffic.
+      charBudget: getPromptLimits().context_char_budget,
       truncated: false,
     },
   };
@@ -315,14 +321,27 @@ interface Edge {
   to: string;
 }
 
-function sampleEdges(fixture: Fixture): Edge[] {
+interface EdgeConcept {
+  concept: string;
+  dependsOn?: string[];
+}
+
+function sampleEdges(concepts: EdgeConcept[]): Edge[] {
   const edges: Edge[] = [];
-  for (const concept of fixture.cannedSummary.concepts) {
-    for (const prerequisite of concept.depends_on ?? []) {
+  for (const concept of concepts) {
+    for (const prerequisite of concept.dependsOn ?? []) {
       edges.push({ from: concept.concept, to: prerequisite });
     }
   }
   return edges.slice(0, MAX_EDGE_SAMPLES);
+}
+
+/** The canned payload's concepts, in the shape sampleEdges expects. */
+function cannedEdgeConcepts(fixture: Fixture): EdgeConcept[] {
+  return fixture.cannedSummary.concepts.map((concept) => ({
+    concept: concept.concept,
+    dependsOn: concept.depends_on,
+  }));
 }
 
 async function judgeEdgesWithLlm(fixture: Fixture, edges: Edge[]): Promise<number | null> {
@@ -429,7 +448,13 @@ function parseArgs(argv: string[]): CliOptions {
     const arg = argv[index];
     if (arg === "--dry-run" || arg === "--self-test") options.dryRun = true;
     else if (arg === "--update-baseline") options.updateBaseline = true;
-    else if (arg === "--runs") options.runs = Math.max(1, Number(argv[index + 1] ?? DEFAULT_RUNS));
+    else if (arg === "--runs") {
+      // A non-numeric value must fall back to the default, not become
+      // NaN (NaN runs = zero iterations = every gate "passes" vacuously
+      // while silently testing nothing).
+      const parsed = Number(argv[index + 1]);
+      options.runs = Number.isFinite(parsed) ? Math.max(1, Math.floor(parsed)) : DEFAULT_RUNS;
+    }
   }
   return options;
 }
@@ -448,6 +473,10 @@ async function runCase(
     const start = Date.now();
 
     let summary: SummaryResult;
+    // Live mode judges the LIVE model's depends_on output, not the
+    // fixture's canned edges; the summarize eval hook exposes the
+    // parsed concepts. Dry-run keeps judging the canned edges.
+    let liveConcepts: EdgeConcept[] = [];
     if (options.dryRun) {
       summary = cannedToSummary(fixture);
     } else {
@@ -458,6 +487,12 @@ async function runCase(
         citationCandidates: fixture.citations,
         ingestedPaperIds: [],
         skipRecording: true,
+        onConcepts: (concepts) => {
+          liveConcepts = concepts.map((concept) => ({
+            concept: concept.concept,
+            dependsOn: concept.dependsOn,
+          }));
+        },
       });
     }
 
@@ -470,7 +505,7 @@ async function runCase(
     );
 
     if (run === 0) {
-      const edges = sampleEdges(fixture);
+      const edges = sampleEdges(options.dryRun ? cannedEdgeConcepts(fixture) : liveConcepts);
       edgeValidity = options.dryRun
         ? judgeEdgesDeterministically(edges)
         : await judgeEdgesWithLlm(fixture, edges);
@@ -482,7 +517,7 @@ async function runCase(
     const values = runScores.map((run) => run[dimension]);
     scores[dimension] = mean(values);
     const spread = variance(values);
-    if (spread > 0.05) {
+    if (spread > VARIANCE_WARN_THRESHOLD) {
       console.warn(
         `  ! high variance on ${dimension}: ${spread.toFixed(3)} across ${values.length} runs`,
       );
@@ -557,7 +592,7 @@ async function main(): Promise<void> {
       if (baselineCase && baseline.recordedAt) {
         for (const dimension of DIMENSIONS) {
           const drop = baselineCase.scores[dimension] - result.scores[dimension];
-          if (drop > 0.15) {
+          if (drop > BASELINE_DRIFT_TOLERANCE) {
             failures.push(
               `${caseId}: ${dimension} dropped ${drop.toFixed(2)} below the recorded baseline`,
             );
@@ -567,6 +602,19 @@ async function main(): Promise<void> {
     }
   }
 
+  if (failures.length > 0) {
+    console.error(`\n${failures.length} gate failure(s):`);
+    for (const failure of failures) {
+      console.error(`  ✗ ${failure}`);
+    }
+    if (options.updateBaseline) {
+      console.error("Baseline NOT updated: a failing run must never become the baseline.");
+    }
+    process.exitCode = 1;
+    return;
+  }
+
+  // Only a run that cleared every gate may become the new baseline.
   if (options.updateBaseline && !options.dryRun) {
     const next: Baseline = {
       ...baseline,
@@ -576,15 +624,6 @@ async function main(): Promise<void> {
     };
     writeFileSync(BASELINE_PATH, `${JSON.stringify(next, null, 2)}\n`);
     console.log(`\nBaseline updated: ${path.relative(process.cwd(), BASELINE_PATH)}`);
-  }
-
-  if (failures.length > 0) {
-    console.error(`\n${failures.length} gate failure(s):`);
-    for (const failure of failures) {
-      console.error(`  ✗ ${failure}`);
-    }
-    process.exitCode = 1;
-    return;
   }
 
   console.log("\nAll eval gates passed.");

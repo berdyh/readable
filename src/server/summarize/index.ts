@@ -972,6 +972,15 @@ export interface SummarizeFromContextOptions extends SummarizeOptions {
   ingestedPaperIds?: string[];
   /** Skip graph/interaction recording entirely (eval harness). */
   skipRecording?: boolean;
+  /**
+   * Eval-only hook: observes the parsed model concepts (including
+   * depends_on prerequisites) so the eval harness can judge the LIVE
+   * model's edges instead of re-judging fixture canned edges. Called
+   * once per summarize call, before post-processing.
+   */
+  onConcepts?: (
+    concepts: Array<{ concept: string; domain?: string; dependsOn?: string[] }>,
+  ) => void;
 }
 
 /**
@@ -1021,6 +1030,13 @@ export async function summarizePaperFromContext(
   );
 
   const llmSummary = parseModelSummary(rawContent);
+  options.onConcepts?.(
+    llmSummary.concepts.map((concept) => ({
+      concept: concept.concept,
+      domain: concept.domain,
+      dependsOn: concept.depends_on,
+    })),
+  );
   const result = postProcessSummary(llmSummary, context, Boolean(citationBlock));
 
   const primaryDomain = llmSummary.concepts.find((concept) => concept.domain)?.domain;

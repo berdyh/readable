@@ -31,7 +31,7 @@ vi.mock("@/server/persona", () => ({
   recordConceptGraph: mocks.recordConceptGraph,
 }));
 
-import { summarizePaper } from "./index";
+import { summarizePaper, summarizePaperFromContext } from "./index";
 
 const PAPER_ID = "1706.03762";
 
@@ -296,6 +296,23 @@ describe("summarizePaper — explanation contract", () => {
 
     const options = mocks.generateJson.mock.calls[0][1] as { localAgent?: string };
     expect(options.localAgent).toBe("claude-code");
+  });
+
+  it("exposes parsed concepts (with depends_on) through the eval-only onConcepts hook", async () => {
+    mocks.generateJson.mockResolvedValue(contractPayload());
+    const seen: Array<{ concept: string; domain?: string; dependsOn?: string[] }[]> = [];
+
+    await summarizePaperFromContext(baseContext, {
+      skipRecording: true,
+      onConcepts: (concepts) => {
+        seen.push(concepts);
+      },
+    });
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toEqual([
+      { concept: "attention mechanism", domain: "ml", dependsOn: ["dot product"] },
+    ]);
   });
 
   it("leaves localAgent undefined when no pin was supplied", async () => {

@@ -4,13 +4,36 @@
 
 import { v4 as uuidv4 } from "uuid";
 import type { Block } from "./types";
-import type { SummaryResult } from "@/server/summarize/types";
+import type { SummaryResult, SummarySection } from "@/server/summarize/types";
 import type {
   SelectionSummaryResult,
   SelectionFiguresResult,
   SelectionCitationsResult,
   InlineArxivIngestResult,
 } from "@/server/editor/types";
+
+/**
+ * Model text interpolated into markdown emphasis wrappers (*hook*,
+ * **term**) must not break out of them: stray * or _ inside the text
+ * would close the wrapper early, and leading/trailing whitespace makes
+ * the emphasis fail to parse at all.
+ */
+function escapeEmphasisText(text: string): string {
+  return text.trim().replace(/([*_])/g, "\\$1");
+}
+
+/**
+ * Contract-shaped sections come from the explanation contract; legacy
+ * persisted summaries carry none of these fields and must keep
+ * rendering exactly as before (no mechanism paragraph). Discriminated
+ * on shape rather than on `hook` so a section missing only its hook
+ * still renders its mechanism.
+ */
+function isContractShaped(section: SummarySection): boolean {
+  return Boolean(
+    section.source || section.evidence || (section.new_terms && section.new_terms.length > 0),
+  );
+}
 
 /**
  * Parse SummaryResult from /api/summarize into blocks
@@ -54,7 +77,7 @@ export function parseSummaryToBlocks(summary: SummaryResult): Block[] {
         blocks.push({
           id: uuidv4(),
           type: "paragraph",
-          content: `*${section.hook}*`,
+          content: `*${escapeEmphasisText(section.hook)}*`,
           metadata: {
             locked: true,
           },
@@ -74,7 +97,7 @@ export function parseSummaryToBlocks(summary: SummaryResult): Block[] {
       }
 
       // Mechanism (contract) — carried in `reasoning` for wire compat.
-      if (section.reasoning && section.hook) {
+      if (section.reasoning && isContractShaped(section)) {
         blocks.push({
           id: uuidv4(),
           type: "paragraph",
@@ -97,14 +120,24 @@ export function parseSummaryToBlocks(summary: SummaryResult): Block[] {
         });
       }
 
-      // Glossary of new terms introduced by the section.
+      // Glossary of new terms introduced by the section, under its own
+      // small heading so the bullets don't visually merge with the
+      // section's key points.
       if (section.new_terms && section.new_terms.length > 0) {
+        blocks.push({
+          id: uuidv4(),
+          type: "heading_3",
+          content: "New terms",
+          metadata: {
+            locked: true,
+          },
+        });
         for (const term of section.new_terms) {
           const citedSuffix = term.source === "cited_text" ? " *(from cited text)*" : "";
           blocks.push({
             id: uuidv4(),
             type: "bullet_list",
-            content: `**${term.term}** — ${term.definition}${citedSuffix}`,
+            content: `**${escapeEmphasisText(term.term)}** — ${term.definition}${citedSuffix}`,
             metadata: {
               sourceLabel: term.source,
               locked: true,

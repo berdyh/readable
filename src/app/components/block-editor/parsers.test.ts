@@ -151,6 +151,83 @@ describe("parseSummaryToBlocks", () => {
     expect(headings[2]?.metadata?.sourceLabel).toBe("cited_text");
   });
 
+  it("renders the mechanism when the section is contract-shaped even without a hook", () => {
+    const noHook: SummaryResult = {
+      sections: [
+        {
+          section_id: "S1",
+          title: "Introduction",
+          summary: "Claim.",
+          reasoning: "Mechanism without a hook.",
+          evidence: "Supported by S1.",
+        },
+      ],
+      key_findings: [],
+      figures: [],
+    };
+
+    const contents = parseSummaryToBlocks(noHook).map((block) => block.content);
+    expect(contents).toContain("Mechanism without a hook.");
+  });
+
+  it("still hides reasoning for legacy (non-contract) sections", () => {
+    const contents = parseSummaryToBlocks(legacySummary).map((block) => block.content);
+    expect(contents).not.toContain("Legacy reasoning text.");
+    expect(contents).not.toContain("Legacy results reasoning.");
+  });
+
+  it("escapes markdown metacharacters in hook and term wrappers", () => {
+    const hostile: SummaryResult = {
+      sections: [
+        {
+          section_id: "S1",
+          title: "Introduction",
+          summary: "Claim.",
+          reasoning: "Mechanism.",
+          hook: "  Why does a*b differ from a_b?  ",
+          new_terms: [
+            { term: "gradient *descent*", definition: "Following the slope.", familiarity: "high" },
+          ],
+          source: "model_knowledge",
+        },
+      ],
+      key_findings: [],
+      figures: [],
+    };
+
+    const contents = parseSummaryToBlocks(hostile).map((block) => block.content);
+    expect(contents).toContain("*Why does a\\*b differ from a\\_b?*");
+    expect(contents).toContain("**gradient \\*descent\\*** — Following the slope.");
+  });
+
+  it("separates the glossary from key points with a New terms heading", () => {
+    const withBoth: SummaryResult = {
+      sections: [
+        {
+          section_id: "S1",
+          title: "Introduction",
+          summary: "Claim.",
+          reasoning: "Mechanism.",
+          new_terms: [{ term: "softmax", definition: "Normalizes scores.", familiarity: "high" }],
+          key_points: ["A key point"],
+          source: "model_knowledge",
+        },
+      ],
+      key_findings: [],
+      figures: [],
+    };
+
+    const blocks = parseSummaryToBlocks(withBoth);
+    const shapes = blocks.map((block) => `${block.type}:${block.content}`);
+    const headingIndex = shapes.indexOf("heading_3:New terms");
+    const termIndex = shapes.findIndex((shape) => shape.includes("softmax"));
+    const keyPointIndex = shapes.indexOf("bullet_list:A key point");
+
+    expect(headingIndex).toBeGreaterThan(-1);
+    expect(termIndex).toBe(headingIndex + 1);
+    expect(keyPointIndex).toBeGreaterThan(termIndex);
+  });
+
   it("keeps every generated block locked", () => {
     const blocks = parseSummaryToBlocks(contractSummary).filter(
       (block) => block.type !== "divider",

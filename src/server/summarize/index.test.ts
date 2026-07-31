@@ -288,6 +288,24 @@ describe("summarizePaper — explanation contract", () => {
     const args = mocks.recordPersonaSignals.mock.calls[0][0] as { skipLedger?: boolean };
     expect(args.skipLedger).toBe(true);
   });
+
+  it("passes the localAgent pin through to generateJson", async () => {
+    mocks.generateJson.mockResolvedValue(contractPayload());
+
+    await summarizePaper(PAPER_ID, { localAgent: "claude-code" });
+
+    const options = mocks.generateJson.mock.calls[0][1] as { localAgent?: string };
+    expect(options.localAgent).toBe("claude-code");
+  });
+
+  it("leaves localAgent undefined when no pin was supplied", async () => {
+    mocks.generateJson.mockResolvedValue(contractPayload());
+
+    await summarizePaper(PAPER_ID);
+
+    const options = mocks.generateJson.mock.calls[0][1] as { localAgent?: string };
+    expect(options.localAgent).toBeUndefined();
+  });
 });
 
 describe("summarizePaper — degenerate model output tolerance", () => {

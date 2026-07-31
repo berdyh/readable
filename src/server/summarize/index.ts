@@ -3,6 +3,7 @@ import { generateJson } from "@/server/llm";
 import { recordConceptGraph, recordPersonaSignals } from "@/server/persona";
 import { fetchPaperCitationsByPaperId, listIngestedPaperIds, type Citation } from "@/server/db";
 import {
+  MAX_CITATIONS_IN_SUMMARY_CONTEXT,
   SOURCE_LABEL_INSTRUCTIONS,
   SOURCE_LABEL_SCHEMA,
   buildConceptKey,
@@ -997,7 +998,9 @@ export async function summarizePaperFromContext(
     candidates: citationCandidates,
     ingestedPaperIds: ingestedIds,
   });
-  const citationBlock = renderRoutedCitationContext(citationCandidates, decisions);
+  const citationBlock = renderRoutedCitationContext(citationCandidates, decisions, {
+    max: MAX_CITATIONS_IN_SUMMARY_CONTEXT,
+  });
 
   const systemPrompt = getSystemPrompt("paper_summary");
   const userPrompt = buildUserPrompt(context, {

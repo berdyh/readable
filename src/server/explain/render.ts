@@ -22,14 +22,49 @@ export function truncateForPrompt(text: string, maxLength: number): string {
  * citations the router decided to retrieve appear; the block is clearly
  * framed as grounding material so `cited_text` labels stay honest.
  */
+export interface RenderRoutedCitationOptions {
+  /**
+   * Cap on rendered citations. When more were routed, the block keeps
+   * the highest-priority ones: already_ingested > obscure_or_recent,
+   * then citationCount descending.
+   */
+  max?: number;
+}
+
+function routePriority(decision: CitationRouteDecision | undefined): number {
+  if (decision?.reasons.includes("already_ingested")) {
+    return 0;
+  }
+  if (decision?.reasons.includes("obscure_or_recent")) {
+    return 1;
+  }
+  return 2;
+}
+
 export function renderRoutedCitationContext(
   candidates: CitationCandidate[],
   decisions: CitationRouteDecision[],
+  options: RenderRoutedCitationOptions = {},
 ): string | undefined {
-  const retrieveIds = new Set(
-    decisions.filter((decision) => decision.retrieve).map((decision) => decision.citationId),
+  const decisionById = new Map(decisions.map((decision) => [decision.citationId, decision]));
+  let routed = candidates.filter(
+    (candidate) => decisionById.get(candidate.citationId)?.retrieve === true,
   );
-  const routed = candidates.filter((candidate) => retrieveIds.has(candidate.citationId));
+
+  if (typeof options.max === "number" && routed.length > options.max) {
+    routed = routed
+      .slice()
+      .sort((a, b) => {
+        const byPriority =
+          routePriority(decisionById.get(a.citationId)) -
+          routePriority(decisionById.get(b.citationId));
+        if (byPriority !== 0) {
+          return byPriority;
+        }
+        return (b.citationCount ?? -1) - (a.citationCount ?? -1);
+      })
+      .slice(0, options.max);
+  }
 
   if (routed.length === 0) {
     return undefined;

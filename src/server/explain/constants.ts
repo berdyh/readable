@@ -43,3 +43,10 @@ export const DEFAULT_CONCEPT_DOMAIN = "general";
  * bound existed (or written by any other path).
  */
 export const MAX_RENDERED_CONCEPT_NAME_LENGTH = 80;
+
+/**
+ * Cap on routed citations rendered into the summarize prompt. Without a
+ * bound, a 50-reference paper of obscure/recent work dumps tens of KB
+ * of abstracts into every summary call.
+ */
+export const MAX_CITATIONS_IN_SUMMARY_CONTEXT = 6;

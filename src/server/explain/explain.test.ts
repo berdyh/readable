@@ -327,6 +327,41 @@ describe("renderRoutedCitationContext", () => {
     expect(block).not.toContain("Unrouted Paper");
   });
 
+  it("caps rendered citations by priority: ingested > obscure/recent > citation count", () => {
+    const candidates = [
+      { citationId: "bib.bib1", title: "Obscure Low", citationCount: 5 },
+      { citationId: "bib.bib2", title: "Obscure High", citationCount: 150 },
+      { citationId: "bib.bib3", title: "Ingested Paper", citationCount: 1 },
+      { citationId: "bib.bib4", title: "Obscure Mid", citationCount: 50 },
+    ];
+    const decisions = [
+      { citationId: "bib.bib1", retrieve: true, reasons: ["obscure_or_recent" as const] },
+      { citationId: "bib.bib2", retrieve: true, reasons: ["obscure_or_recent" as const] },
+      { citationId: "bib.bib3", retrieve: true, reasons: ["already_ingested" as const] },
+      { citationId: "bib.bib4", retrieve: true, reasons: ["obscure_or_recent" as const] },
+    ];
+
+    const block = renderRoutedCitationContext(candidates, decisions, { max: 2 });
+    expect(block).toContain("Ingested Paper");
+    expect(block).toContain("Obscure High");
+    expect(block).not.toContain("Obscure Mid");
+    expect(block).not.toContain("Obscure Low");
+  });
+
+  it("keeps routed order untouched when under the cap", () => {
+    const candidates = [
+      { citationId: "bib.bib1", title: "First", citationCount: 1 },
+      { citationId: "bib.bib2", title: "Second", citationCount: 100 },
+    ];
+    const decisions = [
+      { citationId: "bib.bib1", retrieve: true, reasons: ["obscure_or_recent" as const] },
+      { citationId: "bib.bib2", retrieve: true, reasons: ["obscure_or_recent" as const] },
+    ];
+
+    const block = renderRoutedCitationContext(candidates, decisions, { max: 5 })!;
+    expect(block.indexOf("First")).toBeLessThan(block.indexOf("Second"));
+  });
+
   it("returns undefined when nothing was routed", () => {
     expect(
       renderRoutedCitationContext(

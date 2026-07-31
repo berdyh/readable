@@ -1,3 +1,5 @@
+import type { ExplanationSource } from "@/server/explain";
+
 export type ChatTrustStatus = "sourced" | "uncited" | "refused" | "unavailable" | "unknown";
 
 export type ChatVectorRetrievalStatus =
@@ -19,7 +21,8 @@ export interface ChatCitation {
   quote?: string;
 }
 
-export type ChatSourceLabel = "model_knowledge" | "cited_text";
+/** Alias, not a copy: server/explain owns the label vocabulary. */
+export type ChatSourceLabel = ExplanationSource;
 
 export interface ChatTrustMetadata {
   status: ChatTrustStatus;

@@ -30,6 +30,7 @@ Anything not listed here is internal to this module:
 Read only the *interface* of these — never their internals.
 
 - **server.db** via `ChatMessageRow`
+- **server.explain** via `ExplanationSource`
 
 ## Constraints
 

@@ -1,9 +1,12 @@
+import type { ExplanationSource } from "@/server/explain";
+
 export interface PageSpan {
   start?: number;
   end?: number;
 }
 
-export type SummarySource = "model_knowledge" | "cited_text";
+/** Alias, not a copy: server/explain owns the label vocabulary. */
+export type SummarySource = ExplanationSource;
 
 /** Glossary entry for a term the section introduces. */
 export interface SummaryTerm {

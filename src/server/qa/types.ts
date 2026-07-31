@@ -1,3 +1,5 @@
+import type { ExplanationSource } from "@/server/explain";
+
 export interface QuestionSelection {
   text?: string;
   page?: number;
@@ -108,5 +110,5 @@ export interface AnswerResult {
    * Server-validated source label: "cited_text" only when the citation
    * router supplied retrieved passages for this answer.
    */
-  source?: "model_knowledge" | "cited_text";
+  source?: ExplanationSource;
 }

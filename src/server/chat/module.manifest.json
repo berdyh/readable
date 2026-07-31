@@ -20,6 +20,10 @@
     {
       "module": "server.db",
       "via": "ChatMessageRow"
+    },
+    {
+      "module": "server.explain",
+      "via": "ExplanationSource"
     }
   ],
   "constraints": ["wire shapes", "payload validation", "metadata parsing"],

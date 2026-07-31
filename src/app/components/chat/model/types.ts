@@ -17,7 +17,11 @@ import type {
   ChatMessageMetadata as WireChatMessageMetadata,
   ChatTrustMetadata,
 } from "@/server/chat/types";
-import type { AnswerCitation, AnswerTrustMetadata as QaTrustMetadata } from "@/server/qa/types";
+import type {
+  AnswerCitation,
+  AnswerResult,
+  AnswerTrustMetadata as QaTrustMetadata,
+} from "@/server/qa/types";
 
 import type { TrustDisplayMetadata } from "../primitives/answer-card";
 import type { Source } from "../primitives/sources";
@@ -91,8 +95,12 @@ export interface ChatAnswerResponse {
   cites?: Source[];
   reasoning?: string;
   trust?: TrustDisplayMetadata;
-  /** Server-validated source label; folded into `trust` for display. */
-  source?: "model_knowledge" | "cited_text";
+  /**
+   * Server-validated source label; folded into `trust` for display.
+   * Derived, not redeclared — adding a label server-side breaks this build
+   * rather than silently rendering nothing.
+   */
+  source?: AnswerResult["source"];
 }
 
 /**

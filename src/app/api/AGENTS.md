@@ -28,6 +28,7 @@ Read only the *interface* of these — never their internals.
 - **server.persona** via `recordExposureSignal`
 - **server.qa** via `answerPaperQuestion`
 - **server.summarize** via `summarizePaper`
+- **server.text** via `truncateSafely`
 
 ## Constraints
 

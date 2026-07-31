@@ -39,6 +39,10 @@
       "via": "recordExposureSignal"
     },
     {
+      "module": "server.text",
+      "via": "truncateSafely"
+    },
+    {
       "module": "server.db",
       "via": "createChatSession"
     },

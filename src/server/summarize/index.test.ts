@@ -289,3 +289,24 @@ describe("summarizePaper — explanation contract", () => {
     expect(args.skipLedger).toBe(true);
   });
 });
+
+describe("summarizePaper — degenerate model output tolerance", () => {
+  it("unwraps a double-encoded single-key envelope", async () => {
+    // Observed live (deepseek, json_object mode): the entire valid payload
+    // arrives stringified inside {".json": "..."} . The parser must unwrap
+    // one level instead of reporting "no sections".
+    mocks.generateJson.mockResolvedValueOnce(JSON.stringify({ ".json": contractPayload() }));
+
+    const result = await summarizePaper(PAPER_ID);
+
+    expect(result.sections).toHaveLength(3);
+    // The wire keeps the legacy field name: claim maps onto `summary`.
+    expect(result.sections[0].summary).toContain("Introduction claim");
+  });
+
+  it("does not unwrap when the envelope value is not JSON", async () => {
+    mocks.generateJson.mockResolvedValueOnce(JSON.stringify({ note: "not a payload" }));
+
+    await expect(summarizePaper(PAPER_ID)).rejects.toThrow(/did not include any sections/);
+  });
+});

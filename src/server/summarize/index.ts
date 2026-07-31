@@ -460,7 +460,26 @@ function extractJsonPayload(content: string): unknown {
   const trimmed = content.trim();
   const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const jsonText = fencedMatch ? fencedMatch[1] : trimmed;
-  return JSON.parse(jsonText);
+  const parsed = JSON.parse(jsonText) as unknown;
+
+  // Some models double-encode: the real payload arrives stringified inside a
+  // single-key envelope (observed live: {".json": "{\"sections\": ..."} from
+  // deepseek in json_object mode). Unwrap one level when the object has none
+  // of the expected top-level keys and exactly one string value that parses.
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    const record = parsed as Record<string, unknown>;
+    if (!("sections" in record)) {
+      const values = Object.values(record);
+      if (values.length === 1 && typeof values[0] === "string") {
+        try {
+          return JSON.parse(values[0]) as unknown;
+        } catch {
+          // Not double-encoded after all — fall through to the original.
+        }
+      }
+    }
+  }
+  return parsed;
 }
 
 function coerceString(value: unknown): string | undefined {

@@ -207,6 +207,50 @@ describe("parseChatMetadata", () => {
     expect(parsed.trust.hasEvidence).toBe(false);
     expect(JSON.stringify(parsed)).not.toContain("drop-me");
   });
+
+  it("keeps a persisted cited_text source label", () => {
+    const metadata = validTrustMetadata();
+    const parsed = parseChatMetadata({
+      ...metadata,
+      trust: { ...metadata.trust, source: "cited_text" },
+    });
+
+    expect(parsed.trust.source).toBe("cited_text");
+  });
+
+  it("keeps model_knowledge and drops unknown or non-string source labels", () => {
+    const metadata = validTrustMetadata();
+
+    const known = parseChatMetadata({
+      ...metadata,
+      trust: { ...metadata.trust, source: "model_knowledge" },
+    });
+    expect(known.trust.source).toBe("model_knowledge");
+
+    for (const invalid of ["hallucinated", 42, { label: "cited_text" }, null]) {
+      const parsed = parseChatMetadata({
+        ...metadata,
+        trust: { ...metadata.trust, source: invalid },
+      });
+      expect(parsed.trust.source).toBeUndefined();
+    }
+  });
+
+  it("round-trips source through the persisted-row path", () => {
+    const metadata = validTrustMetadata();
+
+    const kept = parsePersistedChatMetadata(
+      { ...metadata, trust: { ...metadata.trust, source: "cited_text" } },
+      "assistant",
+    );
+    expect(kept?.trust.source).toBe("cited_text");
+
+    const dropped = parsePersistedChatMetadata(
+      { ...metadata, trust: { ...metadata.trust, source: "hallucinated" } },
+      "assistant",
+    );
+    expect(dropped?.trust.source).toBeUndefined();
+  });
 });
 
 describe("legacyAssistantMetadata", () => {

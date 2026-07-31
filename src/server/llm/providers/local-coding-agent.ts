@@ -783,6 +783,31 @@ async function writePrivateFile(filePath: string, contents: string): Promise<voi
 }
 
 /**
+ * The write-back copies sandbox-written bytes over the user's real
+ * credential file, so before writing we insist the staged content still
+ * has the shape of the credential it is meant to be. A crashed agent,
+ * a truncated write, or a hostile process inside the sandbox must not
+ * be able to replace the user's auth file with arbitrary content.
+ */
+function isValidCodexAuthPayload(raw: string): boolean {
+  try {
+    const parsed = JSON.parse(raw) as { tokens?: { access_token?: unknown } };
+    return (
+      typeof parsed?.tokens?.access_token === "string" && parsed.tokens.access_token.length > 0
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Same shape check for Claude Code's `claudeAiOauth` block. */
+function isValidClaudeOauthPayload(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const accessToken = (value as { accessToken?: unknown }).accessToken;
+  return typeof accessToken === "string" && accessToken.length > 0;
+}
+
+/**
  * Codex reads `$CODEX_HOME/auth.json` and nothing else — there is no
  * `CODEX_AUTH_FILE`, which is why the old hook of that name was inert.
  * Everything in `auth.json` (`auth_mode`, `tokens`, `last_refresh`) is the
@@ -809,6 +834,7 @@ async function stageCodexCredentials(tempDir: string): Promise<StagedCredentials
     persistRefresh: async () => {
       const refreshed = await readFile(stagedPath, "utf8").catch(() => undefined);
       if (!refreshed || refreshed === raw) return;
+      if (!isValidCodexAuthPayload(refreshed)) return;
       const current = await readFile(source, "utf8").catch(() => undefined);
       if (current !== raw) return;
       await replacePrivateFile(source, refreshed);
@@ -842,7 +868,7 @@ async function stageClaudeCredentials(tempDir: string): Promise<StagedCredential
     persistRefresh: async () => {
       const staged = await readJsonFile(stagedPath);
       const refreshed = staged?.claudeAiOauth;
-      if (!refreshed || typeof refreshed !== "object") return;
+      if (!isValidClaudeOauthPayload(refreshed)) return;
       if (JSON.stringify(refreshed) === originalOauth) return;
       // Merge into the *current* file, not the one read at staging time, so
       // keys that never entered the sandbox (mcpOAuth) survive — but only if
@@ -862,17 +888,38 @@ async function stageAgentCredentials(
   agent: CodingAgentId,
   tempDir: string,
 ): Promise<StagedCredentials> {
+  let credentials: StagedCredentials;
   switch (agent) {
     case "codex-cli":
-      return stageCodexCredentials(tempDir);
+      credentials = await stageCodexCredentials(tempDir);
+      break;
     case "claude-code":
-      return stageClaudeCredentials(tempDir);
+      credentials = await stageClaudeCredentials(tempDir);
+      break;
     default:
       // Agents behind the unsafe opt-in bring their own credentials via
       // LLM_LOCAL_AGENT_ENV_ALLOWLIST; we do not guess at their file layout.
       return NO_CREDENTIALS;
   }
+
+  // With LLM_AGENT_*_ARGS_JSON the invocation is whatever the developer
+  // typed, so the sandbox guarantees the write-back relies on no longer
+  // hold — an arbitrary argv can point the agent's config-dir env var
+  // anywhere or run something that is not the trusted CLI at all. Stage
+  // credentials so the call works, but never write anything back.
+  if (hasArgsOverride(agent) && credentials.persistRefresh) {
+    return { ...credentials, persistRefresh: undefined };
+  }
+
+  return credentials;
 }
+
+/** Test-only access to the credential staging/write-back internals. */
+export const _credentialStagingForTests = {
+  stageCodexCredentials,
+  stageClaudeCredentials,
+  stageAgentCredentials,
+};
 
 function getAgentModelName(agent: CodingAgentId): string {
   return getAgentEnvValue(agent, "MODEL") ?? "default";

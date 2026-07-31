@@ -5,6 +5,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  _credentialStagingForTests,
   classifyLocalAgentFailure,
   describeLocalCodingAgents,
   LocalAgentInvocationError,
@@ -27,6 +28,8 @@ const ENV_KEYS = [
   "LLM_AGENT_OPENCODE_ALLOW_UNSAFE",
   "LLM_AGENT_CODEX_MODEL",
   "LLM_AGENT_CODEX_REASONING_EFFORT",
+  "LLM_AGENT_CODEX_ARGS_JSON",
+  "LLM_AGENT_CLAUDE_CODE_ARGS_JSON",
   "LLM_AGENT_OPENCODE_ARGS_JSON",
   "LLM_AGENT_ANTIGRAVITY_COMMAND",
   "LLM_AGENT_ANTIGRAVITY_ARGS_JSON",
@@ -796,5 +799,123 @@ exit 0
 
     const probes = (await readFile(counterFile, "utf8")).trim().split("\n");
     expect(probes).toHaveLength(1);
+  });
+});
+
+describe("credential write-back hardening", () => {
+  let original: Record<string, string | undefined>;
+  let tempDir: string;
+
+  const codexAuth = JSON.stringify({
+    auth_mode: "chatgpt",
+    tokens: { access_token: "codex-token", refresh_token: "codex-refresh" },
+  });
+  const claudeCredentials = JSON.stringify({
+    claudeAiOauth: { accessToken: "claude-token", refreshToken: "claude-refresh" },
+    mcpOAuth: { vercel: { accessToken: "unrelated" } },
+  });
+
+  beforeEach(async () => {
+    original = snapshotEnv();
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "readable-agent-writeback-"));
+  });
+
+  afterEach(async () => {
+    restoreEnv(original);
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it("persists a valid Codex token refresh back to the real auth file", async () => {
+    const source = path.join(tempDir, "auth.json");
+    await writeFile(source, codexAuth, "utf8");
+    process.env.LLM_AGENT_CODEX_AUTH_FILE = source;
+
+    const sandbox = path.join(tempDir, "sandbox");
+    const staged = await _credentialStagingForTests.stageCodexCredentials(sandbox);
+    expect(staged.staged).toBe(true);
+
+    const refreshed = JSON.stringify({
+      auth_mode: "chatgpt",
+      tokens: { access_token: "rotated-token", refresh_token: "rotated-refresh" },
+    });
+    await writeFile(path.join(sandbox, "codex-home", "auth.json"), refreshed, "utf8");
+    await staged.persistRefresh?.();
+
+    expect(await readFile(source, "utf8")).toBe(refreshed);
+  });
+
+  it("refuses to write back Codex content that is not a credential", async () => {
+    const source = path.join(tempDir, "auth.json");
+    await writeFile(source, codexAuth, "utf8");
+    process.env.LLM_AGENT_CODEX_AUTH_FILE = source;
+
+    const sandbox = path.join(tempDir, "sandbox");
+    const staged = await _credentialStagingForTests.stageCodexCredentials(sandbox);
+    const stagedPath = path.join(sandbox, "codex-home", "auth.json");
+
+    for (const garbage of [
+      "not json at all",
+      JSON.stringify({ tokens: {} }),
+      JSON.stringify({ tokens: { access_token: 42 } }),
+      JSON.stringify({ evil: "payload" }),
+    ]) {
+      await writeFile(stagedPath, garbage, "utf8");
+      await staged.persistRefresh?.();
+      expect(await readFile(source, "utf8")).toBe(codexAuth);
+    }
+  });
+
+  it("merges a valid Claude refresh while refusing malformed oauth blocks", async () => {
+    const source = path.join(tempDir, ".credentials.json");
+    await writeFile(source, claudeCredentials, "utf8");
+    process.env.LLM_AGENT_CLAUDE_CODE_AUTH_FILE = source;
+
+    const sandbox = path.join(tempDir, "sandbox");
+    const staged = await _credentialStagingForTests.stageClaudeCredentials(sandbox);
+    expect(staged.staged).toBe(true);
+    const stagedPath = path.join(sandbox, "claude-home", ".credentials.json");
+
+    // Malformed refresh: accessToken missing / wrong type — never written.
+    await writeFile(stagedPath, JSON.stringify({ claudeAiOauth: { accessToken: 42 } }), "utf8");
+    await staged.persistRefresh?.();
+    expect(await readFile(source, "utf8")).toBe(claudeCredentials);
+
+    // Valid refresh: merged into the current file, mcpOAuth preserved.
+    await writeFile(
+      stagedPath,
+      JSON.stringify({ claudeAiOauth: { accessToken: "rotated", refreshToken: "r2" } }),
+      "utf8",
+    );
+    await staged.persistRefresh?.();
+    const merged = JSON.parse(await readFile(source, "utf8")) as Record<string, unknown>;
+    expect(merged.claudeAiOauth).toEqual({ accessToken: "rotated", refreshToken: "r2" });
+    expect(merged.mcpOAuth).toEqual({ vercel: { accessToken: "unrelated" } });
+  });
+
+  it("skips write-back entirely when custom ARGS_JSON overrides are in use", async () => {
+    const source = path.join(tempDir, "auth.json");
+    await writeFile(source, codexAuth, "utf8");
+    process.env.LLM_AGENT_CODEX_AUTH_FILE = source;
+    process.env.LLM_AGENT_CODEX_ARGS_JSON = JSON.stringify(["exec", "--custom"]);
+
+    const sandbox = path.join(tempDir, "sandbox");
+    const staged = await _credentialStagingForTests.stageAgentCredentials("codex-cli", sandbox);
+
+    // Credentials still stage (the call should work)…
+    expect(staged.staged).toBe(true);
+    // …but nothing may ever be written back from an untrusted invocation.
+    expect(staged.persistRefresh).toBeUndefined();
+  });
+
+  it("keeps write-back for the trusted built-in invocation", async () => {
+    const source = path.join(tempDir, "auth.json");
+    await writeFile(source, codexAuth, "utf8");
+    process.env.LLM_AGENT_CODEX_AUTH_FILE = source;
+    delete process.env.LLM_AGENT_CODEX_ARGS_JSON;
+
+    const sandbox = path.join(tempDir, "sandbox");
+    const staged = await _credentialStagingForTests.stageAgentCredentials("codex-cli", sandbox);
+
+    expect(staged.persistRefresh).toBeDefined();
   });
 });

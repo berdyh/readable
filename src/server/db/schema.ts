@@ -90,7 +90,6 @@ CREATE TABLE IF NOT EXISTS concept_edges (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (from_key, to_key, relation, source)
 );
-CREATE INDEX IF NOT EXISTS concept_edges_from_idx ON concept_edges(from_key);
 CREATE INDEX IF NOT EXISTS concept_edges_to_idx ON concept_edges(to_key);
 
 CREATE TABLE IF NOT EXISTS persona_concepts (
@@ -127,6 +126,10 @@ CREATE TABLE IF NOT EXISTS interactions (
   prompt TEXT NOT NULL,
   response TEXT,
   chunk_ids TEXT[] NOT NULL DEFAULT '{}',
+  -- Dual encoding by era: rows written before the concept-graph wave hold
+  -- persona_concepts UUIDs; rows written after hold normalized concept keys
+  -- ("ml:attention mechanism"). Nothing joins this column today — a future
+  -- reader must handle both, or backfill first.
   persona_concept_ids TEXT[] NOT NULL DEFAULT '{}',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

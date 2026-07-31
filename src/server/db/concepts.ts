@@ -23,6 +23,9 @@ export async function upsertConcepts(concepts: ConceptRecord[]): Promise<void> {
         INSERT INTO concepts (concept_key, display_name, description)
         VALUES ($1, $2, $3)
         ON CONFLICT (concept_key) DO UPDATE SET
+          -- A later, better-cased name may improve on the first writer's;
+          -- an empty one never overwrites what is already stored.
+          display_name = COALESCE(NULLIF(EXCLUDED.display_name, ''), concepts.display_name),
           description = COALESCE(EXCLUDED.description, concepts.description),
           updated_at = NOW()
         `,

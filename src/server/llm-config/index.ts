@@ -16,12 +16,8 @@ export interface PromptConfig {
   };
   limits: {
     context_char_budget: number;
-    section: number;
-    paragraph: number;
     figure: number;
-    paragraph_truncate: number;
     figure_caption_truncate: number;
-    figure_context_truncate: number;
     abstract_truncate: number;
     text_truncate: number;
   };

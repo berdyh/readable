@@ -154,7 +154,6 @@ function buildContext(fixture: Fixture): PaperSummaryContext {
       id: `S${index + 1}`,
       title: section.title,
       paragraphs: section.paragraphs,
-      totalParagraphCount: section.paragraphs.length,
       referencedFigureIds: section.figureIds ?? [],
     })),
     figures: fixture.figures.map((figure) => ({

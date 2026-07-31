@@ -32,12 +32,8 @@
   },
   "limits": {
     "context_char_budget": 40000,
-    "section": 10,
-    "paragraph": 3,
     "figure": 6,
-    "paragraph_truncate": 360,
     "figure_caption_truncate": 280,
-    "figure_context_truncate": 320,
     "abstract_truncate": 1200,
     "text_truncate": 420
   }

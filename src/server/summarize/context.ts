@@ -19,7 +19,6 @@ interface SectionContextRecord {
   /** Paragraphs selected by the coverage+deepening fill, in document order. */
   paragraphs: string[];
   /** How many paragraphs the section holds in storage (before budget fill). */
-  totalParagraphCount: number;
   referencedFigureIds: string[];
 }
 
@@ -261,7 +260,6 @@ function collectSections(
         title: key,
         pageSpan: undefined,
         paragraphs: [],
-        totalParagraphCount: 0,
         referencedFigureIds: [],
       };
     }
@@ -271,7 +269,6 @@ function collectSections(
       title: accumulator.title,
       pageSpan: buildPageSpan(accumulator.pages),
       paragraphs: selected.get(key) ?? [],
-      totalParagraphCount: accumulator.paragraphs.length,
       referencedFigureIds: Array.from(accumulator.figureIds),
     };
   });

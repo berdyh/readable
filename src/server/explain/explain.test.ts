@@ -15,6 +15,7 @@ import {
   DECAY_HALF_LIFE_DAYS,
   MASTERY_THRESHOLD,
   MAX_GROUNDING_TERMS_PER_RESPONSE,
+  MAX_RENDERED_CONCEPT_NAME_LENGTH,
   OBSCURE_CITATION_COUNT_THRESHOLD,
   RECENT_YEAR_CUTOFF,
   SIGNAL_WEIGHTS,
@@ -165,6 +166,25 @@ describe("persona split", () => {
     });
     expect(calibrated).toContain("softmax");
     expect(calibrated).toMatch(/without re-explaining/i);
+  });
+
+  it("defensively caps rendered concept names at the render bound", async () => {
+    const longName = "x".repeat(400);
+    const block = renderPersonaBlock({
+      uncalibrated: false,
+      known: [
+        {
+          conceptKey: `ml:${longName}`,
+          displayName: longName,
+          score: 5,
+          known: true,
+        },
+      ],
+      seen: [],
+    });
+
+    expect(block).not.toContain(longName);
+    expect(block).toContain(`${"x".repeat(MAX_RENDERED_CONCEPT_NAME_LENGTH - 1)}…`);
   });
 });
 

@@ -65,7 +65,32 @@ export interface RecordPersonaSignalsArgs {
 }
 
 const RESPONSE_TRUNCATE_LIMIT = 4000;
-const MAX_CONCEPTS_PER_INTERACTION = 8;
+
+/**
+ * Shared cap on concepts persisted per interaction. The exposure route
+ * enforces the same bound at parse time so garbage entries can never
+ * crowd out valid ones.
+ */
+export const MAX_CONCEPTS_PER_INTERACTION = 8;
+
+/**
+ * Length bounds on model-supplied concept strings. These land in
+ * unbounded TEXT columns and are later rendered back into prompts, so a
+ * hostile paper must not be able to persist a stored prompt injection or
+ * a megabyte of "concept name".
+ */
+export const MAX_CONCEPT_NAME_LENGTH = 80;
+export const MAX_CONCEPT_DESCRIPTION_LENGTH = 240;
+export const MAX_CONCEPT_DOMAIN_LENGTH = 40;
+
+/** Strips C0/C1 control characters (keeps plain text on one line). */
+function stripControlCharacters(text: string): string {
+  return text.replace(/[\u0000-\u001f\u007f-\u009f]/g, " ").replace(/\s+/g, " ");
+}
+
+function boundText(text: string, max: number): string {
+  return truncateSafely(stripControlCharacters(text).trim(), max).trim();
+}
 
 interface KeyedConcept {
   key: string;
@@ -77,21 +102,28 @@ function sanitizeConcepts(concepts: ConceptInput[]): KeyedConcept[] {
   const keyed: KeyedConcept[] = [];
 
   for (const entry of concepts) {
-    const name = (entry?.concept ?? "").trim();
+    const name = boundText(entry?.concept ?? "", MAX_CONCEPT_NAME_LENGTH);
     if (!name) {
       continue;
     }
-    const key = buildConceptKey(name, entry.domain);
+    const domain = entry.domain
+      ? boundText(entry.domain, MAX_CONCEPT_DOMAIN_LENGTH) || undefined
+      : undefined;
+    const key = buildConceptKey(name, domain);
     if (!key || seen.has(key)) {
       continue;
     }
     seen.add(key);
+    const description = entry.description
+      ? boundText(entry.description, MAX_CONCEPT_DESCRIPTION_LENGTH) || undefined
+      : undefined;
     keyed.push({
       key,
       input: {
         ...entry,
         concept: name,
-        description: (entry.description ?? "").trim() || undefined,
+        domain,
+        description,
       },
     });
     if (keyed.length >= MAX_CONCEPTS_PER_INTERACTION) {
@@ -127,7 +159,7 @@ export async function recordConceptGraph(
     });
 
     for (const rawPrerequisite of input.dependsOn ?? []) {
-      const name = rawPrerequisite.trim();
+      const name = boundText(rawPrerequisite, MAX_CONCEPT_NAME_LENGTH);
       if (!name) {
         continue;
       }

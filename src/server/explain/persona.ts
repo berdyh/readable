@@ -1,5 +1,7 @@
 import { fetchConceptLedgerForUser } from "@/server/db";
+import { truncateWithEllipsis } from "@/server/text";
 
+import { MAX_RENDERED_CONCEPT_NAME_LENGTH } from "./constants";
 import { deriveConceptMastery, type ConceptMastery } from "./mastery";
 import { splitConceptKey } from "./conceptKey";
 
@@ -50,7 +52,12 @@ function formatConceptList(entries: ConceptMastery[], limit: number): string {
     .slice()
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
-    .map((entry) => splitConceptKey(entry.conceptKey).name || entry.displayName)
+    .map((entry) =>
+      truncateWithEllipsis(
+        splitConceptKey(entry.conceptKey).name || entry.displayName,
+        MAX_RENDERED_CONCEPT_NAME_LENGTH,
+      ),
+    )
     .join(", ");
 }
 

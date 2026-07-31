@@ -6,7 +6,15 @@
  * the graph only). `recordExposureSignal` is the render-gated ledger
  * write used when contract content actually reaches the reader.
  */
-export { recordPersonaSignals, recordExposureSignal, recordConceptGraph } from "./record";
+export {
+  recordPersonaSignals,
+  recordExposureSignal,
+  recordConceptGraph,
+  MAX_CONCEPTS_PER_INTERACTION,
+  MAX_CONCEPT_NAME_LENGTH,
+  MAX_CONCEPT_DESCRIPTION_LENGTH,
+  MAX_CONCEPT_DOMAIN_LENGTH,
+} from "./record";
 export type {
   ConceptInput,
   PersonaInteractionType,

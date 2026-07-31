@@ -36,3 +36,10 @@ export const MAX_GROUNDING_TERMS_PER_RESPONSE = 5;
 
 /** Domain facet used when no domain can be inferred for a concept key. */
 export const DEFAULT_CONCEPT_DOMAIN = "general";
+
+/**
+ * Defensive cap on concept names rendered into prompts. The recorder
+ * bounds names at write time; this guards rows persisted before that
+ * bound existed (or written by any other path).
+ */
+export const MAX_RENDERED_CONCEPT_NAME_LENGTH = 80;

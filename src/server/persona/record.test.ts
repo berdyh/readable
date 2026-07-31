@@ -96,7 +96,91 @@ describe("concept string bounding", () => {
   });
 });
 
+describe("recordConceptGraph", () => {
+  it("dedupes concepts that normalize to the same key", async () => {
+    const keys = await recordConceptGraph([
+      { concept: "Attention Mechanisms", domain: "ml" },
+      { concept: "attention mechanism", domain: "ml" },
+      { concept: "softmax", domain: "ml" },
+    ]);
+
+    expect(keys).toEqual(["ml:attention mechanism", "ml:softmax"]);
+    expect(upsertedConcepts()).toHaveLength(2);
+  });
+
+  it("resolves prefixed prerequisites to their own domain and unprefixed to the parent's", async () => {
+    await recordConceptGraph([
+      {
+        concept: "transformer",
+        domain: "ml",
+        dependsOn: ["statistics:softmax", "attention"],
+        confidence: 0.9,
+      },
+    ]);
+
+    const edges = mocks.upsertConceptEdges.mock.calls.flat(2) as Array<{
+      fromKey: string;
+      toKey: string;
+      relation: string;
+      confidence?: number;
+      source: string;
+    }>;
+    expect(edges.map((edge) => edge.toKey)).toEqual(["statistics:softmax", "ml:attention"]);
+    expect(edges.every((edge) => edge.fromKey === "ml:transformer")).toBe(true);
+    expect(edges.every((edge) => edge.relation === "depends_on")).toBe(true);
+    expect(edges.every((edge) => edge.confidence === 0.9)).toBe(true);
+  });
+
+  it("creates stub nodes for prerequisite-only concepts so the FK holds", async () => {
+    await recordConceptGraph([
+      { concept: "transformer", domain: "ml", dependsOn: ["positional encoding"] },
+    ]);
+
+    const nodes = upsertedConcepts();
+    expect(nodes.map((node) => node.conceptKey)).toEqual([
+      "ml:transformer",
+      "ml:positional encoding",
+    ]);
+    const stub = nodes[1];
+    expect(stub.displayName).toBe("positional encoding");
+    expect(stub.description).toBeUndefined();
+  });
+
+  it("skips self-edges", async () => {
+    await recordConceptGraph([
+      { concept: "attention", domain: "ml", dependsOn: ["Attention", "softmax"] },
+    ]);
+
+    const edges = mocks.upsertConceptEdges.mock.calls.flat(2) as Array<{ toKey: string }>;
+    expect(edges.map((edge) => edge.toKey)).toEqual(["ml:softmax"]);
+  });
+
+  it("tags edges with the caller's provenance", async () => {
+    await recordConceptGraph(
+      [{ concept: "attention", domain: "ml", dependsOn: ["softmax"] }],
+      "citation",
+    );
+
+    const edges = mocks.upsertConceptEdges.mock.calls.flat(2) as Array<{ source: string }>;
+    expect(edges[0].source).toBe("citation");
+  });
+});
+
 describe("recordExposureSignal", () => {
+  it("is a no-op for anonymous readers", async () => {
+    await recordExposureSignal({
+      paperId: "1706.03762",
+      concepts: [{ concept: "attention", domain: "ml" }],
+    });
+    await recordExposureSignal({
+      userId: "   ",
+      paperId: "1706.03762",
+      concepts: [{ concept: "attention", domain: "ml" }],
+    });
+
+    expect(mocks.recordConceptSignal).not.toHaveBeenCalled();
+  });
+
   it("applies the same bounds on the exposure path", async () => {
     await recordExposureSignal({
       userId: "user-1",
@@ -141,5 +225,52 @@ describe("recordPersonaSignals concept cap", () => {
     expect(upsertedConcepts()).toHaveLength(MAX_CONCEPTS_PER_INTERACTION);
     const [interaction] = mocks.upsertInteractions.mock.calls[0][0];
     expect(interaction.personaConceptIds).toHaveLength(MAX_CONCEPTS_PER_INTERACTION);
+  });
+});
+
+describe("recordPersonaSignals ledger behavior", () => {
+  const baseArgs = {
+    userId: "user-1",
+    paperId: "1706.03762",
+    prompt: "prompt",
+    response: "response",
+    chunkIds: ["chunk-1"],
+    concepts: [{ concept: "attention", domain: "ml" }],
+  };
+
+  it("records graph only (no ledger, no interaction) for anonymous users", async () => {
+    await recordPersonaSignals({
+      ...baseArgs,
+      userId: undefined,
+      interactionType: "qa",
+    });
+
+    expect(mocks.upsertConcepts).toHaveBeenCalledOnce();
+    expect(mocks.recordConceptSignal).not.toHaveBeenCalled();
+    expect(mocks.upsertInteractions).not.toHaveBeenCalled();
+  });
+
+  it("skipLedger suppresses the mastery-ledger write but not the interaction log", async () => {
+    await recordPersonaSignals({
+      ...baseArgs,
+      interactionType: "summarize",
+      skipLedger: true,
+    });
+
+    expect(mocks.recordConceptSignal).not.toHaveBeenCalled();
+    expect(mocks.upsertInteractions).toHaveBeenCalledOnce();
+  });
+
+  it("writes a typed ledger signal for the interaction type when not skipped", async () => {
+    await recordPersonaSignals({
+      ...baseArgs,
+      interactionType: "qa",
+    });
+
+    expect(mocks.recordConceptSignal).toHaveBeenCalledOnce();
+    const [args] = mocks.recordConceptSignal.mock.calls[0];
+    expect(args.signal).toBe("qa_asked");
+    expect(args.concepts[0].conceptKey).toBe("ml:attention");
+    expect(mocks.upsertInteractions).toHaveBeenCalledOnce();
   });
 });

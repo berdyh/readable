@@ -185,6 +185,13 @@ export class OpenRouterProvider implements LlmProviderInterface {
             model,
             temperature: request.temperature ?? 0.3,
             response_format: { type: "json_object" },
+            // Route only to upstreams that honour response_format, and never
+            // let OpenRouter silently compress the prompt to fit a smaller
+            // provider window. Observed failure without these: DeepInfra
+            // served deepseek with the prompt cut to exactly 2048 tokens and
+            // the model answered `{}` — a 200 that no fallback ever caught.
+            provider: { require_parameters: true, ignore: ["DeepInfra"] },
+            transforms: [],
             messages: [
               {
                 role: "system",
@@ -218,6 +225,13 @@ export class OpenRouterProvider implements LlmProviderInterface {
         throw new Error("OpenRouter response did not include content.");
       }
 
+      // A syntactically valid but empty payload ({} / []) is a silent no-op —
+      // the worst failure mode, because nothing downstream errors until a
+      // parser finds no data. Fail loudly so failover can classify it.
+      if (content.trim() === "{}" || content.trim() === "[]") {
+        throw new Error("OpenRouter response was an empty JSON payload (degenerate completion).");
+      }
+
       return content.trim();
     } finally {
       clearTimeout(timer);
@@ -236,6 +250,8 @@ export class OpenRouterProvider implements LlmProviderInterface {
           withNativeFallbacks(this.config, {
             model: this.config.model,
             temperature: request.temperature ?? 0.3,
+            // Same anti-truncation guard as the JSON path (see above).
+            transforms: [],
             messages: [
               { role: "system", content: request.systemPrompt },
               { role: "user", content: request.userPrompt },
@@ -264,6 +280,13 @@ export class OpenRouterProvider implements LlmProviderInterface {
 
       if (typeof content !== "string" || !content.trim()) {
         throw new Error("OpenRouter response did not include content.");
+      }
+
+      // A syntactically valid but empty payload ({} / []) is a silent no-op —
+      // the worst failure mode, because nothing downstream errors until a
+      // parser finds no data. Fail loudly so failover can classify it.
+      if (content.trim() === "{}" || content.trim() === "[]") {
+        throw new Error("OpenRouter response was an empty JSON payload (degenerate completion).");
       }
 
       return content.trim();

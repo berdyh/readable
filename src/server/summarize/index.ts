@@ -656,7 +656,10 @@ function parseModelSummary(rawContent: string): LlmSummaryPayload {
   const concepts = coerceConcepts(payload.concepts);
 
   if (sections.length < 1) {
-    throw new Error("Model response did not include any sections.");
+    // Keep a bounded snippet of what actually came back — "no sections" with
+    // no evidence turns a five-minute model-drift diagnosis into an hour.
+    const snippet = rawContent.replace(/\s+/g, " ").slice(0, 500);
+    throw new Error(`Model response did not include any sections. Response head: ${snippet}`);
   }
 
   return {

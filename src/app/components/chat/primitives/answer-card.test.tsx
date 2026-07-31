@@ -84,6 +84,20 @@ describe("AnswerCard trust strip", () => {
     expect(screen.getByTestId("source-label-chip")).toHaveTextContent("Cited text");
   });
 
+  it("carries the tooltip explanation for screen readers", () => {
+    render(
+      <AnswerCard
+        paperId="2301.00001"
+        content="Grounded in a cited paper."
+        trust={{ status: "sourced", source: "cited_text" }}
+      />,
+    );
+
+    expect(screen.getByTestId("source-label-chip")).toHaveTextContent(
+      /Grounded in retrieved text from the paper's citations\./,
+    );
+  });
+
   it("shows a model-knowledge chip for model-sourced explanations", () => {
     render(
       <AnswerCard

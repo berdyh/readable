@@ -116,22 +116,23 @@ function SourceLabelChip({ source }: { source?: string }) {
   }
 
   const isCited = source === "cited_text";
+  const explanation = isCited
+    ? "Grounded in retrieved text from the paper's citations."
+    : "Explained from the model's own knowledge.";
   return (
     <span
       data-testid="source-label-chip"
       className={clsx(
-        "ml-auto inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide",
+        "ml-auto inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide",
         isCited
           ? "border-sky-300 bg-sky-50 text-sky-800 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-200"
           : "border-zinc-300 bg-white text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300",
       )}
-      title={
-        isCited
-          ? "Grounded in retrieved text from the paper's citations."
-          : "Explained from the model's own knowledge."
-      }
+      title={explanation}
     >
       {isCited ? "Cited text" : "Model knowledge"}
+      {/* The title tooltip is mouse-only; carry it for screen readers too. */}
+      <span className="sr-only">{` — ${explanation}`}</span>
     </span>
   );
 }

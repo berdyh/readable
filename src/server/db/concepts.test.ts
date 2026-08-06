@@ -105,17 +105,28 @@ describe("upsertConcepts", () => {
     expect(sql).not.toContain("source_paper_ids = EXCLUDED.source_paper_ids");
   });
 
-  it("is first-write-wins on both shared text fields", async () => {
+  it("is first-write-wins on the description", async () => {
     await upsertConcepts([{ conceptKey: "ml:attention", displayName: "attention" }], "1706.03762");
 
     const [sql] = mocks.statements;
-    // The stored value comes first in each COALESCE: a later paper fills a
-    // gap but can never overwrite text another paper already supplied.
+    // The stored value comes first in the COALESCE: a later paper fills a gap
+    // but can never overwrite a description another paper already supplied.
     expect(sql).toContain("description = COALESCE(concepts.description, EXCLUDED.description)");
-    expect(sql).toContain("display_name = COALESCE( NULLIF(concepts.display_name, '')");
     // The pre-provenance shape, which let any later paper poison the
     // shared description for every reader.
     expect(sql).not.toContain("COALESCE(EXCLUDED.description, concepts.description)");
+  });
+
+  it("is last-write-wins on the display name, so a stub label can be corrected", async () => {
+    await upsertConcepts([{ conceptKey: "ml:attention", displayName: "attention" }], "1706.03762");
+
+    const [sql] = mocks.statements;
+    // A concept that first appears only as a prerequisite is stored under a
+    // stub name — often the raw "domain:key" form (see recordConceptGraph).
+    // Freezing display_name would make that stub permanent and block the real
+    // label from ever landing, so the incoming value wins here.
+    expect(sql).toContain("display_name = COALESCE( NULLIF(EXCLUDED.display_name, '')");
+    expect(sql).not.toContain("display_name = COALESCE( NULLIF(concepts.display_name, '')");
   });
 
   it("only re-attributes the description on the write that actually stores it", async () => {

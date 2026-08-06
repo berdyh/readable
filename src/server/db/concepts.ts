@@ -23,14 +23,25 @@ import type {
  */
 
 /**
- * Nodes are upserted first-write-wins on both human-readable fields.
+ * Nodes are upserted first-write-wins on `description`, last-write-wins on
+ * `display_name`. The two differ deliberately.
  *
- * The shared text is LLM output derived from arbitrary uploaded papers,
- * and last-writer-wins made it an overwrite-poisoning vector: any later
+ * `description` is prose: LLM output derived from arbitrary uploaded papers,
+ * and the field with real blast radius if anything ever serves it across
+ * users. Last-writer-wins made it an overwrite-poisoning vector — any later
  * paper could replace a good description for every reader. First-write-wins
- * plus `description_paper_id` makes the stored text attributable and
- * rollback meaningful. The cost is that a later, better-cased display name
- * no longer improves on the first writer's — an accepted trade.
+ * plus `description_paper_id` makes the stored text attributable and rollback
+ * meaningful.
+ *
+ * `display_name` cannot take the same rule, because a concept that first
+ * appears only as a prerequisite is stored with a stub name — often the raw
+ * domain-prefixed key form ("statistics:softmax"), see `recordConceptGraph`.
+ * Freezing that would make the stub permanent and block the real label
+ * ("Softmax") from ever landing. It stays last-write-wins, which is safe for
+ * a different reason than the description: it is a short bounded label, no
+ * read path serves it, and prompt composition uses the key-derived name
+ * rather than this column. A read path that ever renders `display_name`
+ * needs to revisit this.
  */
 export async function upsertConcepts(concepts: ConceptRecord[], paperId?: string): Promise<void> {
   const valid = concepts.filter((concept) => concept.conceptKey.trim() && concept.displayName);
@@ -62,13 +73,14 @@ export async function upsertConcepts(concepts: ConceptRecord[], paperId?: string
           $5
         )
         ON CONFLICT (concept_key) DO UPDATE SET
-          -- First write wins for both shared text fields: a later paper can
-          -- fill a gap but can never overwrite what is already stored.
+          -- Last write wins, so a real label replaces the stub name a
+          -- prerequisite-only concept was first stored under.
           display_name = COALESCE(
-            NULLIF(concepts.display_name, ''),
             NULLIF(EXCLUDED.display_name, ''),
             concepts.display_name
           ),
+          -- First write wins: a later paper can fill a gap but never
+          -- overwrite a description that is already stored.
           description = COALESCE(concepts.description, EXCLUDED.description),
           -- Attribute the description only on the write that actually stored it.
           description_paper_id = CASE

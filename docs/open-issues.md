@@ -129,6 +129,24 @@ Arguably correct as written (fresh chunk ids are re-derived; stale ones would da
 this is a **deliberate-tradeoff note**, not a confirmed bug. If anchor loss matters, preserve
 stored `chunk_ids` when the incoming array is empty, mirroring the `authors` CASE guard.
 
+### The citation router's "recent work" trigger widens on its own
+
+**Priority:** P2 · `src/server/explain/constants.ts:29`
+
+`RECENT_YEAR_CUTOFF = 2025` is a frozen literal, but its own comment states the intent:
+"post-training-cutoff risk". Those are not the same thing. The model's training cutoff moves
+forward; the constant does not. Today (2026) every paper published in 2025 **or later** trips
+the obscure-or-recent trigger and pulls retrieval, whether or not the model knows the work —
+and that widens every year the constant sits still, silently increasing prompt size, cost, and
+latency on a path nobody is watching.
+
+Fix options, in preference order: derive the cutoff from the active model's known training
+cutoff (it is per-model data, so it belongs next to the model entry in `models.json`, not in a
+shared constant); or keep a constant but assert in a test that it is within N years of the
+current date, so it fails loudly instead of drifting.
+
+Found by the pre-merge review (2026-07-31), after the eight-reviewer pass missed it.
+
 ### Legacy persona rows never join the ledger
 
 **Priority:** P3 · `src/server/db/persona.ts`
@@ -158,6 +176,9 @@ EXISTS` statements in `ensureSchema()` acquire `ACCESS EXCLUSIVE` on `paper_cita
   not the lock), inside one transaction. Harmless for a mostly single-instance local-first app
   on PG16; if multi-instance deploys ever matter, gate the block behind an
   `information_schema.columns` check or set a `lock_timeout` so a blocked migration fails fast.
+- **`/api/persona/exposure` has no rate limit.** Cosmetic today: the route is auth-gated and an
+  authenticated caller can only inflate their _own_ ledger, and field lengths and concept
+  counts are now capped. Worth a limit if the ledger ever feeds anything shared.
 - **Double sort on chunk fetch.** `fetchPaperChunksByPaperId` orders in SQL and then re-sorts
   in JS with a comparator whose semantics differ from the SQL collation. The JS sort is
   authoritative; the SQL `ORDER BY` is redundant work (keep it only as a stable pre-sort, or

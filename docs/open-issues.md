@@ -211,6 +211,27 @@ main reading view. The plumbing is correct and tested; only rendering is missing
 
 ---
 
+## Reader — the markdown round trip collapses single newlines
+
+**Priority:** P3 · **Surfaced by:** fixing the unlock-rewrites-content bug, 2026-08-06
+
+`parseSelectionSummaryToBlocks` joins a selection summary's bullets with `\n`
+(`parsers.ts`), but `marked` runs with `breaks: false`, so a single newline renders as a
+soft break and Turndown reads it back as a space. The first time such a callout is unlocked
+its bullets collapse onto one line — the same "unlocking rewrites the block" symptom as the
+block-marker bug, but a different cause, and it survives that fix.
+
+Same shape for any paragraph whose text carries single newlines. Turndown's escaping is a
+third instance: a paragraph containing `x_i` comes back as `x\_i`.
+
+- **Start at:** the `breaks` option in `src/app/components/block-editor/utils/markdown.ts`
+  and the `\n` join in `parsers.ts`. The known-loss cases are pinned as tests at the bottom
+  of `utils/markdown.test.ts`, so a fix has somewhere to land.
+- Deciding whether a soft break should become `<br>` is a rendering choice, not just a
+  serializer bug — a callout of bullets and a wrapped paragraph want different answers.
+
+---
+
 ## Reader — passes 2 and 3 render identical content
 
 **Priority:** P3 · **Surfaced by:** the pass-toggle investigation, 2026-08-06

@@ -934,8 +934,18 @@ async function groundLowFamiliarityTerms(
     }
 
     // Citation-derived edges: prerequisites extracted from cited text.
-    // Provenance is the paper being summarized — the paper whose
-    // bibliography supplied the passages these edges were read out of.
+    //
+    // Provenance here is the summarization that produced the row, NOT the
+    // work that asserted it — the passages come from up to eight cited
+    // papers' abstracts, and the grounding response does not say which one
+    // supported which term. So "remove what paper A contributed" works;
+    // "find everything derived from cited work B" does not. Naming the
+    // supporting citation means changing a schema-enforced LLM contract, so
+    // it is tracked in docs/open-issues.md rather than guessed at here.
+    //
+    // This does not inflate trust: `corroborated` treats a citation-sourced
+    // edge as trusted on its own and never consults paper count for it, so
+    // two papers citing one bad source cannot masquerade as agreement.
     const withEdges = grounded.filter((term) => term.definition && term.dependsOn.length > 0);
     if (withEdges.length > 0) {
       void recordConceptGraph(

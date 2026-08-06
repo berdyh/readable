@@ -67,6 +67,38 @@ callers) and `src/server/db/persona.ts` (`fetchConceptLedgerForUser`, the per-us
 
 ---
 
+## Concept graph — citation edges name the summarization, not the source
+
+**Priority:** P2 · **Surfaced by:** codex review of the provenance wave, 2026-08-07
+
+`groundLowFamiliarityTerms` (`src/server/summarize/index.ts`) builds its prompt from up to
+eight **cited** papers' abstracts and extracts prerequisite pairs out of that text — then
+records the paper being _summarized_ as the provenance for every resulting edge.
+
+So the two questions provenance is supposed to answer come apart:
+
+- "Remove what paper A contributed" — works. A is genuinely the summarization that produced
+  the row.
+- "Find everything derived from cited work B, which turned out to be wrong" — does not work.
+  B is not recorded anywhere on the edge.
+
+**It does not inflate trust.** `corroborated` treats a `source = 'citation'` edge as trusted
+on its own and never consults `cardinality(paper_ids)` for it, so several papers citing one
+bad source cannot masquerade as independent agreement. Worth re-checking if that short-circuit
+is ever removed.
+
+The fix is not a patch: the grounding response would have to name which citation supported
+which term, which means changing `TERM_GROUNDING_SCHEMA` and the `term_grounding` prompt —
+a schema-enforced LLM contract. This repo has already shipped one unvalidated LLM-contract
+change that failed silently (see the OpenRouter truncation note below), so this wants an eval
+run, not a guess. The cited work also usually has no `papers` row, so the identifier would be
+the citation's arXiv id or DOI rather than a `paper_id`.
+
+**Start at:** `groundLowFamiliarityTerms` and `TERM_GROUNDING_SCHEMA` in
+`src/server/summarize/index.ts`, and `term_grounding` in `src/server/llm-config/prompts.json`.
+
+---
+
 ## Correctness — found in the ship review, not yet fixed
 
 ### Degraded re-ingest drops citation-to-chunk anchors

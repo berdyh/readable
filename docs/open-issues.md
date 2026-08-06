@@ -211,26 +211,6 @@ main reading view. The plumbing is correct and tested; only rendering is missing
 
 ---
 
-## Reader — unlocking a locked block rewrites its own content
-
-**Priority:** P2 · **Surfaced by:** building the pass-toggle regression test, 2026-08-06
-
-Clicking a locked block's unlock button makes TipTap editable, and its markdown round-trip
-immediately rewrites the content — a `heading_1` reading `Paper Summary` becomes
-`# Paper Summary`, so the heading renders with a visible `#` prefix. The block is dirty from
-that moment despite the reader having typed nothing.
-
-Predates the pass-toggle work and is unrelated to it, but it is now easy to hit: any reader
-who unlocks a summary heading sees the corruption. It was deliberately left out of the
-pass-toggle tests rather than pinning the buggy behaviour as expected.
-
-- **Start at:** `src/app/components/block-editor/blocks/TipTapBlock.tsx` and the markdown
-  round-trip in `src/app/components/block-editor/utils/markdown.ts`; the rules are in
-  `MARKDOWN_FORMAT.md`.
-- Likely the serializer re-emitting block-level syntax that the block type already encodes.
-
----
-
 ## Reader — passes 2 and 3 render identical content
 
 **Priority:** P3 · **Surfaced by:** the pass-toggle investigation, 2026-08-06

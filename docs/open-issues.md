@@ -1,8 +1,8 @@
 # Open issues and next steps
 
-Working state as of **2026-07-31**, branch `feat/explanation-engine`. `pnpm verify` green:
-458 tests, 0 lint errors, 0 lint warnings. `pnpm eval -- --dry-run` passes all gates (the
-live eval baseline is not yet recorded — see below).
+Working state as of **2026-07-31**, branch `feat/explanation-engine` (PR #23, `v0.2.0.0`).
+`pnpm verify` green: 458 tests, 0 lint errors, 0 lint warnings. `pnpm eval -- --dry-run`
+passes all gates; the live eval baseline is not yet recorded (see below).
 
 The explanation-engine wave landed: document-order chunk fetch (`token_start` ordinal),
 coverage+deepening budget fill, the teaching contract in `/api/summarize`
@@ -14,27 +14,181 @@ rendering with render-gated exposure, and the `pnpm eval` harness with a pinned 
 
 This file is a **living checklist, not a record** — when an item is done, delete it rather
 than marking it ✅, and put the durable explanation in the doc that owns that subject.
-Anything frozen belongs in [`archive/`](./archive/).
+Anything frozen belongs in [`archive/`](./archive/). What shipped is recorded in
+`CHANGELOG.md` and the PR, not here.
 
 Items are grouped by component, then priority: **P0** (drop everything) through **P4**
 (someday). This file is the single tracker for this repo — there is deliberately no
 `TODOS.md`, because two lists of the same truth drift apart.
 
-## Reader — pass toggle discards in-progress edits
+---
+
+## Next session — start here
+
+Two P1 items, in this order. Everything below them is context, not queue.
+
+### 1. Reader — pass toggle discards in-progress edits
 
 **Priority:** P1 · **Surfaced by:** /ship pre-landing review (coverage audit), 2026-07-31
 
 Switching ThreePass passes regenerates `initialBlocks`, and the store effect in
-`block-editor/store.tsx` replaces every block on identity change — so any edit the reader
-made is discarded. The mechanism predates the explanation-engine wave (any summary arrival
-did this), but pass-aware rendering turned it into a one-click loss.
+`block-editor/store.tsx` replaces every block when that array's identity changes — so any
+edit the reader made is discarded. The mechanism predates the explanation-engine wave (any
+summary arrival did this), but pass-aware rendering turned it into a one-click loss.
 
 - **Repro:** open a paper signed in, edit a block on the skim pass, switch to read → edits gone.
-- **Why it is not a patch:** the fix is per-pass block state or dirty-checking in the editor
-  store, i.e. editor state architecture. Rushing it into the ship wave risked new editor bugs.
-- **Start at:** `src/app/components/workspace/ReaderWorkspace.tsx` (pass → initialBlocks),
-  `src/app/components/block-editor/store.tsx` (the replace-on-change effect).
-- **Wants:** an E2E test for the repro above, since neither half is wrong in isolation.
+- **Why it was not patched during the ship:** the fix is per-pass block state or dirty-checking
+  in the editor store — editor state architecture, not a patch. Rushing it into a 41-commit
+  wave risked new editor bugs in the surface the whole product runs on.
+- **Start at:** `src/app/components/workspace/ReaderWorkspace.tsx` (pass → `initialBlocks`),
+  `src/app/components/block-editor/store.tsx` (the replace-on-identity-change effect),
+  `src/app/components/workspace/usePaperContent.ts` (where the pass decides content).
+- **Design question to settle first:** are edits per-pass (three independent documents) or
+  one document the passes render differently? That answers whether to keep three block sets
+  or to diff-and-merge into one.
+- **Wants:** an E2E test for the repro above — neither half is wrong in isolation, so only an
+  integration-level test catches it.
+
+### 2. Concept graph — provenance, now blocking
+
+**Priority:** P1 · **Status:** confirmed **in scope** for the next wave (2026-07-31)
+
+`concepts` and `concept_edges` are global tables written last-writer-wins from LLM output
+over user-ingested papers, with no record of which paper or user produced a node or edge.
+This was a latent risk while nothing read the graph cross-user. **The next wave adds a
+cross-user read path, so it is no longer latent — this is blocking work in that wave**, not
+a precondition to remember.
+
+Without provenance, one malicious or sloppy paper poisons shared concept descriptions and
+prerequisite ordering for every user, and there is no way to attribute or roll back a bad
+node.
+
+Required before the read path ships:
+
+- Provenance columns (`paper_id`, and `user_id` where it does not leak identity) on both
+  `concepts` and `concept_edges`, written by `recordConceptGraph`.
+- Treat `display_name` / `description` as untrusted text at **every** render site and every
+  prompt-composition site — they are LLM output derived from arbitrary uploaded documents.
+- Corroboration before overwrite: require agreement from more than one source/paper before an
+  LLM-sourced description replaces an existing shared one, rather than last-writer-wins.
+- Decide the read model: is the graph global-but-attributed, or per-user views over a shared
+  skeleton? This decision drives the schema, so make it before writing migrations.
+
+**Start at:** `src/server/db/concepts.ts` (`upsertConcepts`, `upsertConceptEdges`),
+`src/server/persona/record.ts` (`recordConceptGraph`), `src/server/db/schema.ts` +
+`schema.sql` (both, together).
+
+Length caps and control-character stripping landed in the ship wave; they bound the blast
+radius of a single write but establish no provenance.
+
+Related and unblocked by the same work: **`fetchConceptEdgesByFromKeys` currently has no
+callers** (`src/server/db/concepts.ts`) — it was built for exactly this read path. Its row
+mapper silently coerces any unknown `relation` to `depends_on` and any unknown `source` to
+`llm`, which will mask a future enum widening; pin that behavior with a test when it gains
+its first caller.
+
+---
+
+## Correctness — found in the ship review, not yet fixed
+
+### Chunk ordering comparator is non-transitive on mixed rows
+
+**Priority:** P2 · `src/server/db/papers.ts:68`
+
+`compareChunksByDocumentOrder` compares by `tokenStart` only when **both** sides have one,
+and otherwise falls through to natural chunk-id comparison. A paper holding both
+ordinal-bearing and legacy `NULL` rows can therefore form ordering cycles (A < B by ordinal,
+B < C by id, C < A by id), and `Array.sort` gives an unspecified order for cyclic comparators
+— silently reintroducing the exact class of bug this wave fixed.
+
+Reachable when `upsertPaperChunks` runs without `replaceExistingForPaper`, interleaving new
+and legacy chunks. Fix: treat a missing `tokenStart` as `+Infinity` so ordinal rows always
+sort before legacy ones, then tiebreak by natural id — that restores a total order.
+
+### Duplicate citations lose enrichment
+
+**Priority:** P3 · `src/server/external/semantic-scholar.ts:444`
+
+`batchKeyById` is a `Map<string, string>`, so when two bibliography entries resolve to the
+same Semantic Scholar id (the same work cited twice under different keys), the second
+`set(id, input.key)` overwrites the first and the earlier citation silently receives no
+enrichment. Fix: make it `Map<string, string[]>` and apply the result to every key that
+mapped to that id.
+
+### Degraded re-ingest drops citation-to-chunk anchors
+
+**Priority:** P3 · `src/server/db/papers.ts:496,600`
+
+`chunk_ids = EXCLUDED.chunk_ids` is the one citation field overwritten unconditionally while
+every other field COALESCE-preserves. If a paper is re-ingested through a path that maps no
+references to chunks (e.g. ar5iv previously, PDF fallback later), stored anchors reset to
+`{}` and citation-reveal navigation loses its targets — even though the S2 enrichment on the
+same row survives.
+
+Arguably correct as written (fresh chunk ids are re-derived; stale ones would dangle), so
+this is a **deliberate-tradeoff note**, not a confirmed bug. If anchor loss matters, preserve
+stored `chunk_ids` when the incoming array is empty, mirroring the `authors` CASE guard.
+
+### Legacy persona rows never join the ledger
+
+**Priority:** P3 · `src/server/db/persona.ts`
+
+Rows written before the concept-graph wave hold raw concept strings; ledger rows hold
+normalized `{domain}:{key}` keys. The same concept can exist twice for one user
+(`Transformer` and `ml:transformer`), and pre-wave reading history contributes nothing to
+derived mastery. Read paths tolerate the zero-state defaults, so nothing is broken — but the
+calibration is quietly less informed than it looks. Fix, if wanted: a one-time best-effort
+backfill mapping legacy strings through the `server/explain` normalizer, merging duplicates.
+
+---
+
+## Performance — measured, not urgent
+
+**Priority:** P3
+
+- **N+1 writes on the concept-graph path.** `upsertConcepts` and `upsertConceptEdges`
+  (`src/server/db/concepts.ts:20,49`) and `recordConceptSignal` (`src/server/db/persona.ts`)
+  each issue one `INSERT ... ON CONFLICT` per row inside a loop. Bounded today (≤8 concepts ×
+  ≤4 prerequisites per interaction) and fire-and-forget, but it is the classic batchable shape
+  on a path every QA/summarize/selection interaction touches. Fix: multi-row `VALUES` or
+  `unnest($1::text[], ...)` with the same conflict clause.
+- **Schema DDL takes table locks on every cold start.** The `ALTER TABLE ... ADD COLUMN IF NOT
+EXISTS` statements in `ensureSchema()` acquire `ACCESS EXCLUSIVE` on `paper_citations` and
+  `persona_concepts` even when the columns already exist (`IF NOT EXISTS` skips the change,
+  not the lock), inside one transaction. Harmless for a mostly single-instance local-first app
+  on PG16; if multi-instance deploys ever matter, gate the block behind an
+  `information_schema.columns` check or set a `lock_timeout` so a blocked migration fails fast.
+- **Double sort on chunk fetch.** `fetchPaperChunksByPaperId` orders in SQL and then re-sorts
+  in JS with a comparator whose semantics differ from the SQL collation. The JS sort is
+  authoritative; the SQL `ORDER BY` is redundant work (keep it only as a stable pre-sort, or
+  drop it once legacy `NULL`-ordinal rows are gone).
+
+---
+
+## Test coverage — the honest number
+
+**Priority:** P2
+
+The ship audit traced 67 paths through the diff and found **31 covered (46%)** — code paths
+43%, user flows 57%, LLM behavior covered by `pnpm eval`. All **9 flagged regressions**
+(changed behavior with no covering test) were fixed before merge; **36 gaps remain**, of which
+7 want E2E and 2 want eval cases.
+
+The gaps worth closing first, because they guard data correctness rather than rendering:
+
+- `src/server/db/concepts.ts` — no tests at all: the `GREATEST(confidence)` edge merge, the
+  empty-input early returns, and the read-side `relation`/`source` coercions.
+- `src/server/db/persona.ts` — `recordConceptSignal`'s ledger upsert carries the subtlest
+  persistence semantics in the wave (per-signal `jsonb` counter increment, `distinct_paper_ids`
+  dedupe CASE, COALESCE name/description) with no SQL-shape test. `papers.test.ts` pins its
+  sibling upsert exactly this way — mirror that.
+- `src/server/qa/context.ts` — a 165-line rewrite (live enrichment → Postgres-only) with zero
+  direct tests; its `citationCount` mapping feeds the router's obscurity trigger, so a wrong
+  mapping silently disables retrieval.
+- `/api/persona/exposure` — the only new route with neither a unit test of the handler nor a
+  probe in `scripts/test-api-endpoints.ts`.
+
+---
 
 ## Reader — source labels are invisible on the reading surface
 
@@ -45,30 +199,16 @@ Contract blocks carry a server-validated `metadata.sourceLabel`
 block renderer reads it — so provenance shows in chat and silently vanishes in the product's
 main reading view. The plumbing is correct and tested; only rendering is missing.
 
-- **Pros:** honesty about what the model knows vs. what the paper says, where most reading happens.
-- **Cons/why deferred:** chip placement in reading flow is a visual-hierarchy question, worth
-  a `/design-review` rather than a rushed inline chip.
+- **Why deferred:** chip placement in reading flow is a visual-hierarchy question, worth a
+  `/design-review` rather than a rushed inline chip.
 - **Start at:** `src/app/components/block-editor/parsers.ts` (sets the metadata),
   `src/app/components/chat/primitives/answer-card.tsx` (`SourceLabelChip`, the pattern to match).
-- Also unify the `new_terms` inline `*(from cited text)*` suffix with whatever chip lands.
+- Unify the `new_terms` inline `*(from cited text)*` suffix with whatever chip lands.
+- Related, same area: on the skim pass the paper HTML renders first and is then wholesale
+  replaced when the summary arrives, with no loading state or transition. Verify visually
+  whether that reads as a glitch.
 
-## Concept graph — provenance required before any cross-user read path
-
-**Priority:** P1 (blocking precondition, not scheduled work) · **Surfaced by:** /ship security review, 2026-07-31
-
-`concepts` and `concept_edges` are global tables written last-writer-wins from LLM output
-over user-ingested papers, with no record of which paper or user produced a node or edge.
-Nothing reads them cross-user today, so the risk is latent — **but shipping any cross-user
-read path without provenance turns this into a stored cross-user injection channel**, where
-one malicious paper poisons shared descriptions and prerequisite ordering for everyone.
-
-- **Required before that read path ships:** provenance columns (`paper_id` and/or `user_id`)
-  on nodes and edges; treat `display_name`/`description` as untrusted text at every render or
-  prompt-composition site; consider requiring corroboration from multiple sources before an
-  LLM-sourced description overwrites an existing shared one.
-- **Start at:** `src/server/db/concepts.ts`, `src/server/persona/record.ts` (`recordConceptGraph`).
-- Length caps and control-character stripping already landed this wave; they bound the blast
-  radius but do not establish provenance.
+---
 
 ## Eval — record the live baseline
 
@@ -82,6 +222,10 @@ floating alias, or scores stop being comparable.
 
 Known flake: long fixtures can exceed the provider timeout; raise it for the run
 (`OPENROUTER_TIMEOUT_MS=420000 pnpm eval -- --update-baseline`) rather than lowering the gate.
+Partial live runs during the ship scored coverage 0.97, hook 0.88, plain language 0.80,
+mechanism 0.90, evidence 0.95, glossary 0.90+, edge validity 1.00 — all above threshold.
+
+---
 
 ## Explanation engine — deferred by design (not forgotten)
 
@@ -96,6 +240,8 @@ Known flake: long fixtures can exceed the provider timeout; raise it for the run
   derived at read). Scheduling itself is a later product feature.
 - **Page-number backfill for ar5iv ingest.** ar5iv chunks store no page numbers; conditional
   rendering removed the "(page ?)" harm, so backfill is an enhancement, not a fix.
+
+---
 
 ## Docs and housekeeping
 
@@ -127,3 +273,9 @@ invented from the code. This is owned by the user.
 - OpenRouter's `:free` slugs rotate and are retired without notice; every model configured
   before 2026-07-29 had 404'd. The paid `deepseek-v4-flash` entries in `models.json` are
   deliberate — see the `openrouter_cost` note there.
+- **OpenRouter can silently truncate a prompt and return HTTP 200 with `{}`.** An upstream
+  provider cut the summarize prompt to exactly 2048 tokens and the model answered with an
+  empty object — a success response no failover path caught, invisible to unit tests and code
+  review. JSON calls now send `provider.require_parameters` + `transforms: []` and reject
+  degenerate `{}`/`[]` completions. The eval harness found this; keep it in the loop when
+  changing providers.

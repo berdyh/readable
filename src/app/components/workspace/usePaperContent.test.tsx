@@ -80,6 +80,7 @@ describe("usePaperContent pass-aware rendering", () => {
     const contents = result.current.initialBlocks.map((block) => block.content);
     expect(contents).toContain("Paper Summary");
     expect(contents).not.toContain("Paper HTML text.");
+    expect(result.current.documentKey).toBe(`${PAPER_ID}:summary`);
   });
 
   it("keeps paper HTML primary on passes 2-3", async () => {
@@ -93,6 +94,7 @@ describe("usePaperContent pass-aware rendering", () => {
     const contents = result.current.initialBlocks.map((block) => block.content);
     expect(contents).toContain("Paper HTML text.");
     expect(contents).not.toContain("Paper Summary");
+    expect(result.current.documentKey).toBe(`${PAPER_ID}:paper`);
   });
 
   it("records exposure once when contract content actually renders", async () => {
@@ -136,5 +138,61 @@ describe("usePaperContent pass-aware rendering", () => {
     // Anonymous readers still get the paper text.
     const contents = result.current.initialBlocks.map((block) => block.content);
     expect(contents).toContain("Paper HTML text.");
+  });
+});
+
+/**
+ * `documentKey` names the source document the blocks were parsed from. The
+ * editor remembers reader edits under it, so two different documents must never
+ * share a key — and a placeholder must never share one with real content, or an
+ * edited placeholder would keep the real thing off the screen forever.
+ */
+describe("usePaperContent document keys", () => {
+  it("keys the summary and the paper as different documents", async () => {
+    const skim = renderHook(() => usePaperContent({ paperId: PAPER_ID, pass: "skim" }));
+    await waitFor(() => {
+      expect(skim.result.current.summary).not.toBeNull();
+    });
+
+    const read = renderHook(() => usePaperContent({ paperId: PAPER_ID, pass: "read" }));
+    await waitFor(() => {
+      expect(read.result.current.arxivHtmlContent).not.toBeNull();
+    });
+
+    expect(skim.result.current.documentKey).toBe(`${PAPER_ID}:summary`);
+    expect(read.result.current.documentKey).toBe(`${PAPER_ID}:paper`);
+  });
+
+  it("keys a loading placeholder apart from both real documents", async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      if (String(input).includes("/api/editor/ingest/arxiv")) {
+        // Never settles: the reader is looking at the loading placeholder.
+        return new Promise<Response>(() => {});
+      }
+      return new Response(JSON.stringify(contractSummary), { status: 200 });
+    });
+
+    const { result } = renderHook(() => usePaperContent({ paperId: PAPER_ID, pass: "skim" }));
+    await waitFor(() => {
+      expect(result.current.isHtmlLoading).toBe(true);
+    });
+
+    expect(result.current.documentKey).toBe(`${PAPER_ID}:placeholder`);
+    expect(result.current.documentKey).not.toBe(`${PAPER_ID}:summary`);
+    expect(result.current.documentKey).not.toBe(`${PAPER_ID}:paper`);
+  });
+
+  it("keys an error placeholder the same way as any other placeholder", async () => {
+    fetchMock.mockImplementation(
+      async () => new Response(JSON.stringify({ error: "boom" }), { status: 500 }),
+    );
+
+    const { result } = renderHook(() => usePaperContent({ paperId: PAPER_ID, pass: "skim" }));
+    await waitFor(() => {
+      expect(result.current.summaryError).not.toBeNull();
+    });
+
+    expect(result.current.initialBlocks[0].id).toBe("error-placeholder");
+    expect(result.current.documentKey).toBe(`${PAPER_ID}:placeholder`);
   });
 });

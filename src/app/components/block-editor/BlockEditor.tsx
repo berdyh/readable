@@ -13,6 +13,12 @@ import type { QuestionSelection } from "@/server/qa/types";
 interface BlockEditorProps {
   paperId: string;
   initialBlocks?: BlockType[];
+  /**
+   * Which source document `initialBlocks` came from. Reader edits are kept
+   * per key, so switching documents (e.g. the three-pass toggle) restores
+   * what was left behind instead of discarding it.
+   */
+  documentKey?: string;
   onSlashCommand?: (query: string, blockIndex: number) => void;
   statusMessage?: string | null;
   errorMessage?: string | null;
@@ -24,6 +30,7 @@ interface BlockEditorProps {
 export function BlockEditor({
   paperId,
   initialBlocks = [],
+  documentKey,
   onSlashCommand,
   statusMessage,
   errorMessage,
@@ -40,7 +47,7 @@ export function BlockEditor({
   };
 
   return (
-    <EditorProvider paperId={paperId} initialBlocks={initialBlocks}>
+    <EditorProvider paperId={paperId} initialBlocks={initialBlocks} documentKey={documentKey}>
       <BlockEditorContent
         onSlashCommand={onSlashCommand}
         statusMessage={statusMessage}

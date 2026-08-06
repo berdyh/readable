@@ -252,72 +252,99 @@ export const usePaperContent = ({ paperId, pdfUrl, pass = "skim" }: UsePaperCont
     });
   }, [effectiveSummary, isSignedIn, resolvedPaperId, summaryIsPrimary]);
 
-  const initialBlocks = useMemo<Block[]>(() => {
+  // Blocks and the key naming the document they were parsed from, produced
+  // together so they can never disagree. The editor remembers reader edits per
+  // key: the parsers mint new block ids on every reparse, so without a key
+  // saying "this is still the same document" a pass toggle looks like brand
+  // new content and the edits are thrown away.
+  const paperDocument = useMemo<{ blocks: Block[]; key: string }>(() => {
+    const summaryKey = `${resolvedPaperId}:summary`;
+    const paperKey = `${resolvedPaperId}:paper`;
+    // Every placeholder shares one key, distinct from both real documents, so
+    // that real content arriving always looks like a different document and
+    // takes the clean-adopt path. A placeholder can never hold it hostage.
+    const placeholderKey = `${resolvedPaperId}:placeholder`;
+
     if (summaryIsPrimary && effectiveSummary) {
-      return parseSummaryToBlocks(effectiveSummary);
+      return { blocks: parseSummaryToBlocks(effectiveSummary), key: summaryKey };
     }
 
     if (arxivHtmlContent) {
-      return parseArxivHtmlToBlocks(arxivHtmlContent);
+      return { blocks: parseArxivHtmlToBlocks(arxivHtmlContent), key: paperKey };
     }
 
     if (isHtmlLoading) {
-      return [
-        {
-          id: "html-loading-placeholder",
-          type: "paragraph",
-          content: `Loading paper content for ${resolvedPaperId}…`,
-          metadata: {},
-        },
-      ];
+      return {
+        blocks: [
+          {
+            id: "html-loading-placeholder",
+            type: "paragraph",
+            content: `Loading paper content for ${resolvedPaperId}…`,
+            metadata: {},
+          },
+        ],
+        key: placeholderKey,
+      };
     }
 
     if (effectiveSummary) {
-      return parseSummaryToBlocks(effectiveSummary);
+      return { blocks: parseSummaryToBlocks(effectiveSummary), key: summaryKey };
     }
 
     if (effectiveIsSummaryLoading) {
-      return [
-        {
-          id: "loading-placeholder",
-          type: "paragraph",
-          content: `Building a personalized summary for ${resolvedPaperId}…`,
-          metadata: {},
-        },
-      ];
+      return {
+        blocks: [
+          {
+            id: "loading-placeholder",
+            type: "paragraph",
+            content: `Building a personalized summary for ${resolvedPaperId}…`,
+            metadata: {},
+          },
+        ],
+        key: placeholderKey,
+      };
     }
 
     if (effectiveSummaryError && htmlError && !authRequired) {
-      return [
-        {
-          id: "error-placeholder",
-          type: "paragraph",
-          content: `Unable to load content: ${htmlError}. Trying summary pipeline...`,
-          metadata: {},
-        },
-      ];
+      return {
+        blocks: [
+          {
+            id: "error-placeholder",
+            type: "paragraph",
+            content: `Unable to load content: ${htmlError}. Trying summary pipeline...`,
+            metadata: {},
+          },
+        ],
+        key: placeholderKey,
+      };
     }
 
     if (effectiveSummaryError) {
-      return [
-        {
-          id: "error-placeholder",
-          type: "paragraph",
-          content: `Summary unavailable: ${effectiveSummaryError}`,
-          metadata: {},
-        },
-      ];
+      return {
+        blocks: [
+          {
+            id: "error-placeholder",
+            type: "paragraph",
+            content: `Summary unavailable: ${effectiveSummaryError}`,
+            metadata: {},
+          },
+        ],
+        key: placeholderKey,
+      };
     }
 
-    return [
-      {
-        id: "pending-placeholder",
-        type: "paragraph",
-        content:
-          "Waiting for the paper summary pipeline to finish processing. This usually takes a few moments after ingest completes.",
-        metadata: {},
-      },
-    ];
+    return {
+      blocks: [
+        {
+          id: "pending-placeholder",
+          type: "paragraph",
+          content:
+            "Waiting for the paper summary pipeline to finish processing. This usually takes a few moments after ingest completes.",
+          metadata: {},
+        },
+      ],
+      key: placeholderKey,
+    };
   }, [
     arxivHtmlContent,
     authRequired,
@@ -339,6 +366,7 @@ export const usePaperContent = ({ paperId, pdfUrl, pass = "skim" }: UsePaperCont
     arxivHtmlContent,
     isHtmlLoading,
     htmlError,
-    initialBlocks,
+    initialBlocks: paperDocument.blocks,
+    documentKey: paperDocument.key,
   };
 };

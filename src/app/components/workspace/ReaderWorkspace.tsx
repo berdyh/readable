@@ -42,6 +42,7 @@ const ReaderWorkspace = ({ paperId, pdfUrl }: ReaderWorkspaceProps) => {
     summaryError,
     arxivHtmlContent,
     initialBlocks,
+    documentKey,
     htmlError,
   } = usePaperContent({ paperId, pdfUrl, pass });
 
@@ -137,6 +138,7 @@ const ReaderWorkspace = ({ paperId, pdfUrl }: ReaderWorkspaceProps) => {
             <BlockEditor
               paperId={resolvedPaperId}
               initialBlocks={editorInitialBlocks}
+              documentKey={documentKey}
               statusMessage={statusMessage}
               errorMessage={showPersonalizedFeatureGate ? null : summaryError}
               onStatusClear={clearStatus}

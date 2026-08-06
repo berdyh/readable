@@ -138,9 +138,15 @@ function sanitizeConcepts(concepts: ConceptInput[]): KeyedConcept[] {
  * Writes the global graph: concept nodes plus depends_on edges.
  * Edge endpoints that are only mentioned as prerequisites get stub
  * nodes so the FK holds.
+ *
+ * `paperId` is the provenance of everything this call writes — nodes,
+ * stub prerequisite nodes, and edges alike. It is dedupe-appended to the
+ * row's paper array, which is what a later read counts for corroboration
+ * and what an operator rolls back by.
  */
 export async function recordConceptGraph(
   concepts: ConceptInput[],
+  paperId: string,
   edgeSource: "llm" | "citation" = "llm",
 ): Promise<string[]> {
   const keyed = sanitizeConcepts(concepts);
@@ -182,9 +188,9 @@ export async function recordConceptGraph(
     }
   }
 
-  await upsertConcepts(Array.from(nodes.values()));
+  await upsertConcepts(Array.from(nodes.values()), paperId);
   if (edges.length > 0) {
-    await upsertConceptEdges(edges);
+    await upsertConceptEdges(edges, paperId);
   }
 
   return keyed.map(({ key }) => key);
@@ -227,7 +233,11 @@ export async function recordExposureSignal(args: RecordExposureSignalArgs): Prom
 export async function recordPersonaSignals(args: RecordPersonaSignalsArgs): Promise<void> {
   // Global graph first — paper-derived knowledge, recorded regardless of
   // who asked.
-  const conceptKeys = await recordConceptGraph(args.concepts, args.edgeSource ?? "llm");
+  const conceptKeys = await recordConceptGraph(
+    args.concepts,
+    args.paperId,
+    args.edgeSource ?? "llm",
+  );
 
   const userId = args.userId?.trim();
   if (!userId) {

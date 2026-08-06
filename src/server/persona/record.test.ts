@@ -31,23 +31,33 @@ beforeEach(() => {
   mocks.upsertInteractions.mockReset().mockResolvedValue(undefined);
 });
 
+const PAPER_ID = "1706.03762";
+
 function upsertedConcepts(): Array<{
   conceptKey: string;
   displayName: string;
   description?: string;
 }> {
-  return mocks.upsertConcepts.mock.calls.flat(2);
+  // Only the first argument is the node list; the second is the paper id.
+  return mocks.upsertConcepts.mock.calls.flatMap((call) => call[0]);
+}
+
+function upsertedEdges<T>(): T[] {
+  return mocks.upsertConceptEdges.mock.calls.flatMap((call) => call[0]);
 }
 
 describe("concept string bounding", () => {
   it("caps name, description, and domain lengths before persisting", async () => {
-    await recordConceptGraph([
-      {
-        concept: "a".repeat(500),
-        description: "d".repeat(1000),
-        domain: "m".repeat(200),
-      },
-    ]);
+    await recordConceptGraph(
+      [
+        {
+          concept: "a".repeat(500),
+          description: "d".repeat(1000),
+          domain: "m".repeat(200),
+        },
+      ],
+      PAPER_ID,
+    );
 
     const [node] = upsertedConcepts();
     expect(node.displayName.length).toBeLessThanOrEqual(MAX_CONCEPT_NAME_LENGTH);
@@ -57,13 +67,16 @@ describe("concept string bounding", () => {
   });
 
   it("strips control characters from model-supplied strings", async () => {
-    await recordConceptGraph([
-      {
-        concept: "atten\u0000tion\u001b[31m mechanism",
-        description: "uses\u0007 bell\r\ncharacters",
-        domain: "m\u0008l",
-      },
-    ]);
+    await recordConceptGraph(
+      [
+        {
+          concept: "atten\u0000tion\u001b[31m mechanism",
+          description: "uses\u0007 bell\r\ncharacters",
+          domain: "m\u0008l",
+        },
+      ],
+      PAPER_ID,
+    );
 
     const [node] = upsertedConcepts();
     expect(node.displayName).not.toMatch(/[\u0000-\u001f\u007f-\u009f]/);
@@ -72,13 +85,16 @@ describe("concept string bounding", () => {
   });
 
   it("bounds prerequisite stub-node names too", async () => {
-    await recordConceptGraph([
-      {
-        concept: "attention",
-        domain: "ml",
-        dependsOn: ["p".repeat(500)],
-      },
-    ]);
+    await recordConceptGraph(
+      [
+        {
+          concept: "attention",
+          domain: "ml",
+          dependsOn: ["p".repeat(500)],
+        },
+      ],
+      PAPER_ID,
+    );
 
     const stub = upsertedConcepts().find((node) => node.displayName.startsWith("p"));
     expect(stub).toBeDefined();
@@ -86,11 +102,10 @@ describe("concept string bounding", () => {
   });
 
   it("drops entries that are empty after sanitization", async () => {
-    const keys = await recordConceptGraph([
-      { concept: "\u0000\u0001\u0002" },
-      { concept: "   " },
-      { concept: "softmax", domain: "ml" },
-    ]);
+    const keys = await recordConceptGraph(
+      [{ concept: "\u0000\u0001\u0002" }, { concept: "   " }, { concept: "softmax", domain: "ml" }],
+      PAPER_ID,
+    );
 
     expect(keys).toEqual(["ml:softmax"]);
   });
@@ -98,33 +113,39 @@ describe("concept string bounding", () => {
 
 describe("recordConceptGraph", () => {
   it("dedupes concepts that normalize to the same key", async () => {
-    const keys = await recordConceptGraph([
-      { concept: "Attention Mechanisms", domain: "ml" },
-      { concept: "attention mechanism", domain: "ml" },
-      { concept: "softmax", domain: "ml" },
-    ]);
+    const keys = await recordConceptGraph(
+      [
+        { concept: "Attention Mechanisms", domain: "ml" },
+        { concept: "attention mechanism", domain: "ml" },
+        { concept: "softmax", domain: "ml" },
+      ],
+      PAPER_ID,
+    );
 
     expect(keys).toEqual(["ml:attention mechanism", "ml:softmax"]);
     expect(upsertedConcepts()).toHaveLength(2);
   });
 
   it("resolves prefixed prerequisites to their own domain and unprefixed to the parent's", async () => {
-    await recordConceptGraph([
-      {
-        concept: "transformer",
-        domain: "ml",
-        dependsOn: ["statistics:softmax", "attention"],
-        confidence: 0.9,
-      },
-    ]);
+    await recordConceptGraph(
+      [
+        {
+          concept: "transformer",
+          domain: "ml",
+          dependsOn: ["statistics:softmax", "attention"],
+          confidence: 0.9,
+        },
+      ],
+      PAPER_ID,
+    );
 
-    const edges = mocks.upsertConceptEdges.mock.calls.flat(2) as Array<{
+    const edges = upsertedEdges<{
       fromKey: string;
       toKey: string;
       relation: string;
       confidence?: number;
       source: string;
-    }>;
+    }>();
     expect(edges.map((edge) => edge.toKey)).toEqual(["statistics:softmax", "ml:attention"]);
     expect(edges.every((edge) => edge.fromKey === "ml:transformer")).toBe(true);
     expect(edges.every((edge) => edge.relation === "depends_on")).toBe(true);
@@ -132,9 +153,10 @@ describe("recordConceptGraph", () => {
   });
 
   it("creates stub nodes for prerequisite-only concepts so the FK holds", async () => {
-    await recordConceptGraph([
-      { concept: "transformer", domain: "ml", dependsOn: ["positional encoding"] },
-    ]);
+    await recordConceptGraph(
+      [{ concept: "transformer", domain: "ml", dependsOn: ["positional encoding"] }],
+      PAPER_ID,
+    );
 
     const nodes = upsertedConcepts();
     expect(nodes.map((node) => node.conceptKey)).toEqual([
@@ -147,22 +169,38 @@ describe("recordConceptGraph", () => {
   });
 
   it("skips self-edges", async () => {
-    await recordConceptGraph([
-      { concept: "attention", domain: "ml", dependsOn: ["Attention", "softmax"] },
-    ]);
+    await recordConceptGraph(
+      [{ concept: "attention", domain: "ml", dependsOn: ["Attention", "softmax"] }],
+      PAPER_ID,
+    );
 
-    const edges = mocks.upsertConceptEdges.mock.calls.flat(2) as Array<{ toKey: string }>;
+    const edges = upsertedEdges<{ toKey: string }>();
     expect(edges.map((edge) => edge.toKey)).toEqual(["ml:softmax"]);
   });
 
   it("tags edges with the caller's provenance", async () => {
     await recordConceptGraph(
       [{ concept: "attention", domain: "ml", dependsOn: ["softmax"] }],
+      PAPER_ID,
       "citation",
     );
 
-    const edges = mocks.upsertConceptEdges.mock.calls.flat(2) as Array<{ source: string }>;
+    const edges = upsertedEdges<{ source: string }>();
     expect(edges[0].source).toBe("citation");
+  });
+
+  it("passes the source paper to both graph writes, stub nodes included", async () => {
+    await recordConceptGraph(
+      [{ concept: "transformer", domain: "ml", dependsOn: ["positional encoding"] }],
+      PAPER_ID,
+    );
+
+    // One call each, so every node written here — including the
+    // prerequisite stub — carries the same provenance.
+    expect(mocks.upsertConcepts).toHaveBeenCalledOnce();
+    expect(mocks.upsertConcepts.mock.calls[0][1]).toBe(PAPER_ID);
+    expect(mocks.upsertConceptEdges).toHaveBeenCalledOnce();
+    expect(mocks.upsertConceptEdges.mock.calls[0][1]).toBe(PAPER_ID);
   });
 });
 
@@ -196,10 +234,10 @@ describe("recordExposureSignal", () => {
 
 describe("concept key domains", () => {
   it("lands domain-tagged concepts under domain:name keys, defaulting to general", async () => {
-    const keys = await recordConceptGraph([
-      { concept: "Attention", domain: "ml" },
-      { concept: "Attention" },
-    ]);
+    const keys = await recordConceptGraph(
+      [{ concept: "Attention", domain: "ml" }, { concept: "Attention" }],
+      PAPER_ID,
+    );
 
     expect(keys).toEqual(["ml:attention", "general:attention"]);
   });
@@ -231,7 +269,7 @@ describe("recordPersonaSignals concept cap", () => {
 describe("recordPersonaSignals ledger behavior", () => {
   const baseArgs = {
     userId: "user-1",
-    paperId: "1706.03762",
+    paperId: PAPER_ID,
     prompt: "prompt",
     response: "response",
     chunkIds: ["chunk-1"],
@@ -246,6 +284,8 @@ describe("recordPersonaSignals ledger behavior", () => {
     });
 
     expect(mocks.upsertConcepts).toHaveBeenCalledOnce();
+    // Provenance is paper-derived, so it is recorded even with no user.
+    expect(mocks.upsertConcepts.mock.calls[0][1]).toBe(PAPER_ID);
     expect(mocks.recordConceptSignal).not.toHaveBeenCalled();
     expect(mocks.upsertInteractions).not.toHaveBeenCalled();
   });

@@ -869,6 +869,7 @@ function parseGroundingPayload(raw: string): GroundedTerm[] {
  */
 async function groundLowFamiliarityTerms(
   result: SummaryResult,
+  paperId: string,
   candidates: CitationCandidate[],
   primaryDomain: string | undefined,
   options: SummarizeOptions,
@@ -933,6 +934,8 @@ async function groundLowFamiliarityTerms(
     }
 
     // Citation-derived edges: prerequisites extracted from cited text.
+    // Provenance is the paper being summarized — the paper whose
+    // bibliography supplied the passages these edges were read out of.
     const withEdges = grounded.filter((term) => term.definition && term.dependsOn.length > 0);
     if (withEdges.length > 0) {
       void recordConceptGraph(
@@ -941,6 +944,7 @@ async function groundLowFamiliarityTerms(
           domain: primaryDomain,
           dependsOn: term.dependsOn,
         })),
+        paperId,
         "citation",
       ).catch((error) => {
         console.warn("[summarize] failed to record citation-derived edges:", error);
@@ -1030,7 +1034,7 @@ export async function summarizePaperFromContext(
   const result = postProcessSummary(llmSummary, context, Boolean(citationBlock));
 
   const primaryDomain = llmSummary.concepts.find((concept) => concept.domain)?.domain;
-  await groundLowFamiliarityTerms(result, citationCandidates, primaryDomain, options);
+  await groundLowFamiliarityTerms(result, paperId, citationCandidates, primaryDomain, options);
 
   if (options.skipRecording) {
     return result;

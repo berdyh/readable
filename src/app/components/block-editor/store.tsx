@@ -11,6 +11,13 @@ import {
 } from "react";
 import { v4 as uuidv4 } from "uuid";
 
+import {
+  blocksAreEquivalent,
+  decideDocumentBlocks,
+  recordDocumentBaseline,
+  recordDocumentEdit,
+  type DocumentEntries,
+} from "./documentState";
 import type { Block, EditorState } from "./types";
 
 export interface BlockFocusApi {
@@ -75,9 +82,23 @@ interface EditorProviderProps {
   children: ReactNode;
   paperId: string;
   initialBlocks?: Block[];
+  /**
+   * Identifies which source document `initialBlocks` was parsed from — the
+   * summary artifact, the paper HTML, or a placeholder. Edits are remembered
+   * per key, so swapping documents (the three-pass toggle) no longer discards
+   * them. Defaults to the paper id for callers that only ever render one
+   * document.
+   */
+  documentKey?: string;
 }
 
-export function EditorProvider({ children, paperId, initialBlocks = [] }: EditorProviderProps) {
+export function EditorProvider({
+  children,
+  paperId,
+  initialBlocks = [],
+  documentKey,
+}: EditorProviderProps) {
+  const resolvedDocumentKey = documentKey ?? paperId;
   const [blocks, setBlocksState] = useState<Block[]>(initialBlocks);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -85,6 +106,11 @@ export function EditorProvider({ children, paperId, initialBlocks = [] }: Editor
   const blockFocusApisRef = useRef<Map<string, BlockFocusApi>>(new Map());
   const pendingFocusRef = useRef<{ blockId: string; position: "start" | "end" } | null>(null);
   const localAgentRef = useRef<string | undefined>(undefined);
+  // Per-source-document blocks + dirty flag. A ref, not state: it is written
+  // from inside state updaters and only ever read when a document swaps in,
+  // so it must never itself cause a render.
+  const documentEntriesRef = useRef<DocumentEntries>(new Map());
+  const documentKeyRef = useRef(resolvedDocumentKey);
 
   const setLocalAgent = useCallback((agentId: string | undefined) => {
     localAgentRef.current = agentId;
@@ -92,12 +118,30 @@ export function EditorProvider({ children, paperId, initialBlocks = [] }: Editor
 
   const getLocalAgent = useCallback(() => localAgentRef.current, []);
 
-  // Sync blocks when initialBlocks change (e.g., when HTML/summary loads)
-  // This ensures that when ReaderWorkspace loads HTML or summary content,
-  // the blocks are updated in the editor
+  // Swap in the document `initialBlocks` belongs to. The parsers mint fresh
+  // block ids on every reparse, so an incoming array shares nothing with what
+  // is on screen and there is no reconciliation to do — the only question is
+  // whether the reader has edits worth keeping, which is what the decision in
+  // `documentState.ts` answers.
   useEffect(() => {
-    setBlocksState(initialBlocks);
-  }, [initialBlocks]);
+    documentKeyRef.current = resolvedDocumentKey;
+    // Any queued focus intent names a block id from the outgoing document.
+    // Those ids no longer exist, and a stale intent would fire the moment a
+    // block with a colliding id registered.
+    pendingFocusRef.current = null;
+
+    const decision = decideDocumentBlocks(
+      documentEntriesRef.current,
+      resolvedDocumentKey,
+      initialBlocks,
+    );
+
+    if (decision.action === "adopt") {
+      recordDocumentBaseline(documentEntriesRef.current, resolvedDocumentKey, decision.blocks);
+    }
+
+    setBlocksState(decision.blocks);
+  }, [resolvedDocumentKey, initialBlocks]);
 
   const state: EditorState = {
     blocks,
@@ -130,6 +174,33 @@ export function EditorProvider({ children, paperId, initialBlocks = [] }: Editor
     }, 1000);
   }, []);
 
+  /**
+   * The single write path for block mutations. Every mutator goes through it
+   * so the per-document bookkeeping cannot be forgotten: one mutator writing
+   * to state directly would leave its document looking untouched, and the next
+   * document swap would silently throw the edit away.
+   *
+   * A write that changes nothing is dropped rather than recorded. TipTap emits
+   * an update the moment it mounts and reconciles its own markup, so without
+   * this a document would be dirty — and therefore unreplaceable — before the
+   * reader had touched it.
+   */
+  const commit = useCallback(
+    (mutate: (previous: Block[]) => Block[]) => {
+      setBlocksState((previous) => {
+        const updated = mutate(previous);
+        if (updated === previous || blocksAreEquivalent(previous, updated)) {
+          return previous;
+        }
+
+        recordDocumentEdit(documentEntriesRef.current, documentKeyRef.current, updated);
+        void saveToBackend(updated);
+        return updated;
+      });
+    },
+    [saveToBackend],
+  );
+
   const addBlock = useCallback(
     (type: Block["type"], index: number, content = ""): Block => {
       const newBlock: Block = {
@@ -139,45 +210,36 @@ export function EditorProvider({ children, paperId, initialBlocks = [] }: Editor
         metadata: type === "to_do_list" ? { checked: false } : undefined,
       };
 
-      setBlocksState((prev) => {
+      commit((prev) => {
         const updated = [...prev];
         updated.splice(index + 1, 0, newBlock);
-        void saveToBackend(updated);
         return updated;
       });
 
       return newBlock;
     },
-    [saveToBackend],
+    [commit],
   );
 
   const updateBlock = useCallback(
     (blockId: string, updates: Partial<Block>) => {
-      setBlocksState((prev) => {
-        const updated = prev.map((block) =>
-          block.id === blockId ? { ...block, ...updates } : block,
-        );
-        void saveToBackend(updated);
-        return updated;
-      });
+      commit((prev) =>
+        prev.map((block) => (block.id === blockId ? { ...block, ...updates } : block)),
+      );
     },
-    [saveToBackend],
+    [commit],
   );
 
   const deleteBlock = useCallback(
     (blockId: string) => {
-      setBlocksState((prev) => {
-        const updated = prev.filter((block) => block.id !== blockId);
-        void saveToBackend(updated);
-        return updated;
-      });
+      commit((prev) => prev.filter((block) => block.id !== blockId));
     },
-    [saveToBackend],
+    [commit],
   );
 
   const moveBlock = useCallback(
     (blockId: string, toIndex: number) => {
-      setBlocksState((prev) => {
+      commit((prev) => {
         const fromIndex = prev.findIndex((block) => block.id === blockId);
         if (fromIndex === -1) {
           return prev;
@@ -186,23 +248,21 @@ export function EditorProvider({ children, paperId, initialBlocks = [] }: Editor
         const updated = [...prev];
         const [movedBlock] = updated.splice(fromIndex, 1);
         updated.splice(toIndex, 0, movedBlock);
-        void saveToBackend(updated);
         return updated;
       });
     },
-    [saveToBackend],
+    [commit],
   );
 
   const insertBlock = useCallback(
     (block: Block, index: number) => {
-      setBlocksState((prev) => {
+      commit((prev) => {
         const updated = [...prev];
         updated.splice(index, 0, block);
-        void saveToBackend(updated);
         return updated;
       });
     },
-    [saveToBackend],
+    [commit],
   );
 
   const getBlock = useCallback(
@@ -249,8 +309,8 @@ export function EditorProvider({ children, paperId, initialBlocks = [] }: Editor
 
   const changeBlockType = useCallback(
     (blockId: string, newType: Block["type"]) => {
-      setBlocksState((prev) => {
-        const updated = prev.map((block) => {
+      commit((prev) =>
+        prev.map((block) => {
           if (block.id === blockId) {
             // Preserve metadata for to-do lists
             const metadata =
@@ -261,20 +321,17 @@ export function EditorProvider({ children, paperId, initialBlocks = [] }: Editor
             return { ...block, type: newType, content, metadata };
           }
           return block;
-        });
-        void saveToBackend(updated);
-        return updated;
-      });
+        }),
+      );
     },
-    [saveToBackend],
+    [commit],
   );
 
   const setBlocks = useCallback(
     (newBlocks: Block[]) => {
-      setBlocksState(newBlocks);
-      void saveToBackend(newBlocks);
+      commit(() => newBlocks);
     },
-    [saveToBackend],
+    [commit],
   );
 
   const value: EditorContextValue = {

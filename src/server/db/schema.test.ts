@@ -102,4 +102,45 @@ describe("schema DDL is additive and idempotent", () => {
       );
     }
   });
+
+  it("carries concept-graph provenance columns on both shared tables", () => {
+    const sql = READABLE_SCHEMA_SQL;
+    expect(sql).toMatch(
+      /ALTER TABLE concepts ADD COLUMN IF NOT EXISTS source_paper_ids TEXT\[\] NOT NULL DEFAULT '\{\}'/,
+    );
+    expect(sql).toMatch(/ALTER TABLE concepts ADD COLUMN IF NOT EXISTS description_paper_id TEXT/);
+    expect(sql).toMatch(
+      /ALTER TABLE concept_edges ADD COLUMN IF NOT EXISTS paper_ids TEXT\[\] NOT NULL DEFAULT '\{\}'/,
+    );
+  });
+
+  it("keeps the shared graph tables free of user_id", () => {
+    // Provenance is per-paper by design: `interactions` already carries
+    // user_id + paper_id + concept keys, so operator attribution is a
+    // private join. A user_id column on a globally readable row would be a
+    // deanonymization primitive for single-contributor concepts.
+    for (const table of ["concepts", "concept_edges"]) {
+      const create = ddlStatements.find((statement) =>
+        new RegExp(`^CREATE TABLE IF NOT EXISTS ${table} `, "i").test(statement),
+      );
+      expect(create, `${table} CREATE TABLE`).toBeDefined();
+      expect(create).not.toMatch(/user_id/);
+      const alters = ddlStatements.filter((statement) =>
+        new RegExp(`^ALTER TABLE ${table} `, "i").test(statement),
+      );
+      for (const alter of alters) {
+        expect(alter, alter).not.toMatch(/user_id/);
+      }
+    }
+  });
+
+  it("does not try to widen an existing primary key", () => {
+    // CREATE TABLE IF NOT EXISTS skips tables that already exist, so a key
+    // change written inside one reaches fresh databases only. If a key ever
+    // has to move, it needs real migration machinery, not this file.
+    for (const statement of ddlStatements) {
+      expect(statement).not.toMatch(/ADD (CONSTRAINT|PRIMARY KEY)/i);
+      expect(statement).not.toMatch(/DROP CONSTRAINT/i);
+    }
+  });
 });

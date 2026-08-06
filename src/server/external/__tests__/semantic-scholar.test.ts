@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   _resetCacheForTests,
   enrichCitation,
+  enrichCitationsBatch,
   fetchByArxivId,
   fetchByDoi,
   searchByTitle,
@@ -180,5 +181,45 @@ describe("enrichCitation precedence", () => {
     const result = await enrichCitation({ title: "short" });
     expect(result).toBeUndefined();
     expect(mockFetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("enrichCitationsBatch — one work cited under several keys", () => {
+  it("enriches every key that resolved to the same id", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse([{ paperId: "shared" }]));
+
+    const results = await enrichCitationsBatch([
+      { key: "bib1", arxivId: "1706.03762" },
+      { key: "bib7", arxivId: "1706.03762" },
+    ]);
+
+    // Before this was a Map<string, string[]>, the second key overwrote the
+    // first and bib1 silently received no enrichment.
+    expect(results.get("bib1")?.paperId).toBe("shared");
+    expect(results.get("bib7")?.paperId).toBe("shared");
+  });
+
+  it("spends one batch slot per distinct id, not per citation", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse([{ paperId: "shared" }]));
+
+    await enrichCitationsBatch([
+      { key: "bib1", doi: "10.1/x" },
+      { key: "bib7", doi: "10.1/x" },
+    ]);
+
+    const init = mockFetch.mock.calls[0]![1] as RequestInit;
+    expect(JSON.parse(String(init.body))).toEqual({ ids: ["DOI:10.1/x"] });
+  });
+
+  it("still maps distinct ids to their own keys", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse([{ paperId: "first" }, { paperId: "second" }]));
+
+    const results = await enrichCitationsBatch([
+      { key: "bib1", arxivId: "1706.03762" },
+      { key: "bib2", doi: "10.1/y" },
+    ]);
+
+    expect(results.get("bib1")?.paperId).toBe("first");
+    expect(results.get("bib2")?.paperId).toBe("second");
   });
 });

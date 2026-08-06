@@ -96,6 +96,79 @@ describe("LocalCodingAgentProvider", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
+  // An agent that exits without reading closes the pipe under us, so writing
+  // the prompt raises EPIPE on child.stdin — a separate emitter from the
+  // child, which is why child.on("error") never saw it.
+  //
+  // The prompt is sized past any plausible pipe capacity rather than the 64 KB
+  // Linux default, because that capacity is platform-dependent. If the buffer
+  // could absorb the write, the write would succeed and neither of these tests
+  // would exercise the path they exist for.
+  const PROMPT_LARGER_THAN_ANY_PIPE_BUFFER = "x".repeat(4 * 1024 * 1024);
+
+  it("does not let a failed prompt write escape as an uncaught exception", async () => {
+    const agent = await makeAgentScript(tempDir, "exits-early.sh", "exit 0");
+    process.env.LLM_LOCAL_AGENTS = "claude-code";
+    process.env.LLM_AGENT_CLAUDE_CODE_COMMAND = agent;
+
+    const escaped: Error[] = [];
+    const onUncaught = (error: Error) => escaped.push(error);
+    process.on("uncaughtException", onUncaught);
+
+    try {
+      const provider = new LocalCodingAgentProvider({ provider: "coding-agent" });
+
+      await provider
+        .generateText({
+          systemPrompt: "Be concise.",
+          userPrompt: PROMPT_LARGER_THAN_ANY_PIPE_BUFFER,
+        })
+        .catch((error: unknown) => error);
+
+      // Give a stray EPIPE a turn of the loop to surface before asserting.
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(escaped.map((error) => error.message)).toEqual([]);
+    } finally {
+      process.off("uncaughtException", onUncaught);
+    }
+  });
+
+  it("refuses output from an agent that exited cleanly without taking the prompt", async () => {
+    // The dangerous shape: stdin is never read, yet the agent prints something
+    // and exits 0. Swallowing the write failure would hand that text back as
+    // an answer to a prompt the agent never received — a silent wrong result,
+    // worse than the crash the handler exists to prevent.
+    //
+    // The assertion is that it rejects at all, not on the summary text: this
+    // failure classifies as advance-and-retry, so the caller sees the failover
+    // layer's exhausted-providers error rather than the invocation summary.
+    // Returning "answer to nothing" is the regression, and only a rejection
+    // rules it out.
+    const agent = await makeAgentScript(
+      tempDir,
+      "ignores-stdin.sh",
+      "printf 'answer to nothing'\nexit 0",
+    );
+    process.env.LLM_LOCAL_AGENTS = "claude-code";
+    process.env.LLM_AGENT_CLAUDE_CODE_COMMAND = agent;
+
+    const provider = new LocalCodingAgentProvider({ provider: "coding-agent" });
+
+    const result = await provider
+      .generateText({
+        systemPrompt: "Be concise.",
+        userPrompt: PROMPT_LARGER_THAN_ANY_PIPE_BUFFER,
+      })
+      .then(
+        (value) => ({ resolved: value }),
+        (error: unknown) => ({ rejected: error }),
+      );
+
+    expect(result).not.toHaveProperty("resolved");
+    expect(result).toHaveProperty("rejected");
+  });
+
   it("routes text requests to the configured local agent executable", async () => {
     const agent = await makeAgentScript(
       tempDir,

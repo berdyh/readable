@@ -140,6 +140,34 @@ EXISTS` statements in `ensureSchema()` acquire `ACCESS EXCLUSIVE` on `paper_cita
 
 ---
 
+## `pnpm verify` fails intermittently on a leaked async error
+
+**Priority:** P2 · **Surfaced by:** running the gate repeatedly across three waves, 2026-08-07
+
+Roughly one full run in four ends with `Errors 1` alongside every test passing, and exits
+non-zero — so the deterministic gate is not deterministic. Vitest attributes it to
+`src/server/llm/providers/local-coding-agent.test.ts`, test `"skips auto-detected npx
+wrappers unless explicitly configured"`.
+
+The file **passes in isolation** every time (32/32). It only shows up in full runs, which
+points at an async error escaping after its test completed rather than a failing assertion —
+that test spawns real shell scripts from a temp dir and mutates `process.env.PATH`/`HOME`,
+so a child-process write-after-exit (EPIPE) or an unawaited spawn rejection is the shape to
+look for first.
+
+Why it matters more than one flaky test normally would: `pnpm verify` is the deterministic
+gate the whole workflow trusts, and a gate that fails at random trains everyone to re-run it
+until it passes, which is exactly how a real failure gets waved through.
+
+- **Repro:** `pnpm vitest run` in a loop; it is not reliably reproducible in fewer than a few
+  runs. `pnpm vitest run src/server/llm/providers/local-coding-agent.test.ts` alone will not
+  reproduce it.
+- **Start at:** the spawn/stdin handling in `src/server/llm/providers/local-coding-agent.ts`
+  and the temp-script helpers in the test. Check whether every spawned child is awaited and
+  whether stdin is written after the child can have exited.
+
+---
+
 ## Test coverage — the honest number
 
 **Priority:** P2

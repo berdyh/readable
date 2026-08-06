@@ -1218,6 +1218,7 @@ function runProcess(spec: InvocationSpec, timeoutMs: number): Promise<string> {
     let stdout = "";
     let stderr = "";
     let didTimeout = false;
+    let stdinError: Error | undefined;
     let forceKillTimer: NodeJS.Timeout | undefined;
     const timeoutTimer = setTimeout(() => {
       didTimeout = true;
@@ -1283,7 +1284,37 @@ function runProcess(spec: InvocationSpec, timeoutMs: number): Promise<string> {
         );
         return;
       }
+      if (stdinError) {
+        // A clean exit is not a successful invocation if the agent never
+        // received the prompt. Resolving `stdout` here would hand back an
+        // answer to a question that was never asked — a silent wrong result,
+        // which is worse than the crash this handler exists to prevent.
+        reject(
+          new LocalAgentInvocationError({
+            agent: spec.agent,
+            command: spec.command,
+            exitCode: code,
+            signal,
+            stderrTail: tail(stderr) || tail(stdout),
+            summary: `${spec.agent} exited cleanly but closed its input before the prompt was delivered (${stdinError.message}).`,
+          }),
+        );
+        return;
+      }
       resolve(stdout);
+    });
+
+    // An agent that exits before reading its input — a crash, a rejected
+    // flag, a wrapper that never consumes stdin — closes this pipe under us,
+    // and the write then raises EPIPE on the stdin stream. `child.on("error")`
+    // does not cover it: stdin is a separate emitter, so an unhandled error
+    // there takes down the process instead of taking this path at all.
+    //
+    // Record it rather than discard it. A non-zero exit is the better
+    // diagnosis and wins above; a zero exit needs this, or an agent that
+    // ignored the prompt and printed something anyway would look like success.
+    child.stdin.on("error", (error: Error) => {
+      stdinError ??= error;
     });
 
     if (spec.stdin) {

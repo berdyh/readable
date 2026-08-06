@@ -1,8 +1,9 @@
 # Open issues and next steps
 
-Working state as of **2026-07-31**, branch `feat/explanation-engine` (PR #23, `v0.2.0.0`).
-`pnpm verify` green: 458 tests, 0 lint errors, 0 lint warnings. `pnpm eval -- --dry-run`
-passes all gates; the live eval baseline is not yet recorded (see below).
+Working state: `main` at `v0.2.0.0` — the explanation-engine wave merged as PR #23 (`1ab4131`).
+`pnpm verify` green on the merged tree: 458 tests, 0 lint errors, 0 lint warnings.
+`pnpm eval -- --dry-run` passes all gates; the live eval baseline is not yet recorded
+(see below).
 
 The explanation-engine wave landed: document-order chunk fetch (`token_start` ordinal),
 coverage+deepening budget fill, the teaching contract in `/api/summarize`

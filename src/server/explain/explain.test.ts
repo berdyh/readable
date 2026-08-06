@@ -18,6 +18,7 @@ import {
   MAX_RENDERED_CONCEPT_NAME_LENGTH,
   OBSCURE_CITATION_COUNT_THRESHOLD,
   RECENT_YEAR_CUTOFF,
+  RECENT_YEAR_CUTOFF_MAX_LAG_YEARS,
   SIGNAL_WEIGHTS,
 } from "./constants";
 import { deriveConceptMastery, decayFactor, scoreLedgerEntry } from "./mastery";
@@ -307,6 +308,56 @@ describe("citation router trigger matrix", () => {
       "obscure_or_recent",
       "already_ingested",
     ]);
+  });
+});
+
+/**
+ * The recency cutoff is the one constant in this file whose correct
+ * value changes on its own, because "recent" is measured against a
+ * clock the constant cannot see. Left unattended it does not break —
+ * it quietly widens the retrieval trigger by a year every January.
+ *
+ * So this suite deliberately reads the REAL current date rather than a
+ * frozen one: a pinned `now` would go stale exactly the way the
+ * constant does, and the test would keep passing while the value it
+ * guards drifted. This is a test-only exception; the routing path
+ * itself never reads the clock.
+ */
+describe("recency cutoff stays in step with the calendar", () => {
+  it("sits within the allowed lag behind the real current year", () => {
+    const currentYear = new Date().getFullYear();
+    const lag = currentYear - RECENT_YEAR_CUTOFF;
+
+    expect(
+      lag,
+      `RECENT_YEAR_CUTOFF is ${RECENT_YEAR_CUTOFF}, which is ${lag} years behind the current ` +
+        `year (${currentYear}) — more than the ${RECENT_YEAR_CUTOFF_MAX_LAG_YEARS}-year lag ` +
+        `allowed. Every year it sits still, the citation router calls a wider span of papers ` +
+        `"recent" and pulls retrieval for more of them. Re-decide the cutoff in ` +
+        `src/server/explain/constants.ts (usually: bump it toward the current year). Widening ` +
+        `RECENT_YEAR_CUTOFF_MAX_LAG_YEARS to silence this is the bug, not the fix.`,
+    ).toBeLessThanOrEqual(RECENT_YEAR_CUTOFF_MAX_LAG_YEARS);
+
+    expect(
+      lag,
+      `RECENT_YEAR_CUTOFF is ${RECENT_YEAR_CUTOFF}, which is in the future relative to the ` +
+        `current year (${currentYear}). No paper can be published in/after it, so the recency ` +
+        `half of the obscure-or-recent trigger would never fire.`,
+    ).toBeGreaterThanOrEqual(0);
+  });
+
+  it("still routes a paper from the cutoff year, and leaves the year before it alone", () => {
+    // Pins the behaviour the lag assertion exists to protect, so a bump
+    // to the constant cannot quietly invert the comparison.
+    const atCutoff = routeCitations({
+      candidates: [{ citationId: "bib.bib1", citationCount: 10_000, year: RECENT_YEAR_CUTOFF }],
+    })[0];
+    expect(atCutoff.reasons).toEqual(["obscure_or_recent"]);
+
+    const beforeCutoff = routeCitations({
+      candidates: [{ citationId: "bib.bib2", citationCount: 10_000, year: RECENT_YEAR_CUTOFF - 1 }],
+    })[0];
+    expect(beforeCutoff.retrieve).toBe(false);
   });
 });
 

@@ -141,13 +141,78 @@ describe("compareChunksByDocumentOrder", () => {
     expect(rows.map((row) => row.chunkId)).toEqual(["S1-p1", "S2-p2", "S2-p10", "S10-p1"]);
   });
 
-  it("breaks token_start ties and mixed rows via natural chunk_id order", () => {
+  it("breaks token_start ties via natural chunk_id order", () => {
     const rows = [
       { chunkId: "S1-p10", tokenStart: 5 },
       { chunkId: "S1-p2", tokenStart: 5 },
     ];
     rows.sort(compareChunksByDocumentOrder);
     expect(rows.map((row) => row.chunkId)).toEqual(["S1-p2", "S1-p10"]);
+  });
+
+  it("puts every ordinal-bearing row ahead of every legacy row", () => {
+    // Mixed rows occur whenever upsertPaperChunks runs without
+    // replaceExistingForPaper, interleaving new and legacy chunks.
+    const rows = [
+      { chunkId: "S1-p1", tokenStart: undefined },
+      { chunkId: "S9-p1", tokenStart: 2 },
+      { chunkId: "S2-p1", tokenStart: undefined },
+      { chunkId: "S7-p1", tokenStart: 1 },
+    ];
+    rows.sort(compareChunksByDocumentOrder);
+    expect(rows.map((row) => row.chunkId)).toEqual(["S7-p1", "S9-p1", "S1-p1", "S2-p1"]);
+  });
+
+  it("is a total order, so sorting cannot depend on input order", () => {
+    // The cycle the old comparator allowed: A < B by ordinal, B < C by id,
+    // C < A by id. Array.sort may return anything for a cyclic comparator, so
+    // the pin is that every permutation sorts to the same sequence.
+    const rows = [
+      { chunkId: "S3-p1", tokenStart: 0 },
+      { chunkId: "S1-p1", tokenStart: 1 },
+      { chunkId: "S2-p1", tokenStart: undefined },
+    ];
+
+    const permutations = [
+      [0, 1, 2],
+      [0, 2, 1],
+      [1, 0, 2],
+      [1, 2, 0],
+      [2, 0, 1],
+      [2, 1, 0],
+    ];
+
+    const sorted = permutations.map((order) =>
+      order
+        .map((index) => rows[index])
+        .sort(compareChunksByDocumentOrder)
+        .map((row) => row.chunkId),
+    );
+
+    for (const result of sorted) {
+      expect(result).toEqual(["S3-p1", "S1-p1", "S2-p1"]);
+    }
+  });
+
+  it("keeps antisymmetry and transitivity across mixed rows", () => {
+    const ordinalEarly = { chunkId: "S9-p1", tokenStart: 0 };
+    const ordinalLate = { chunkId: "S1-p1", tokenStart: 1 };
+    const legacy = { chunkId: "S0-p1", tokenStart: undefined };
+
+    const sign = (value: number) => Math.sign(value);
+    const pairs = [
+      [ordinalEarly, ordinalLate],
+      [ordinalLate, legacy],
+      [ordinalEarly, legacy],
+    ] as const;
+
+    for (const [left, right] of pairs) {
+      // Antisymmetry: swapping the arguments flips the sign.
+      expect(sign(compareChunksByDocumentOrder(left, right))).toBe(
+        -sign(compareChunksByDocumentOrder(right, left)),
+      );
+      expect(sign(compareChunksByDocumentOrder(left, right))).toBe(-1);
+    }
   });
 });
 

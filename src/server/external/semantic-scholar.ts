@@ -441,20 +441,31 @@ export async function enrichCitationsBatch(
   const pastDeadline = (): boolean => deadlineAt !== undefined && Date.now() >= deadlineAt;
 
   const batchIds: string[] = [];
-  const batchKeyById = new Map<string, string>();
+  // One id can be cited under several keys — the same work referenced twice in
+  // one bibliography. Keying by id alone dropped every key but the last, so the
+  // earlier citations silently received no enrichment at all.
+  const batchKeysById = new Map<string, string[]>();
   const titleOnly: CitationEnrichmentInput[] = [];
+
+  const addBatchLookup = (id: string, key: string): void => {
+    const existing = batchKeysById.get(id);
+    if (existing) {
+      existing.push(key);
+      return;
+    }
+    // Only the first key registers the id, so a work cited twice costs one
+    // slot of the 500-per-call batch budget rather than two.
+    batchKeysById.set(id, [key]);
+    batchIds.push(id);
+  };
 
   for (const input of inputs) {
     const arxivId = input.arxivId?.trim();
     const doi = input.doi?.trim();
     if (arxivId) {
-      const id = `ARXIV:${arxivId}`;
-      batchIds.push(id);
-      batchKeyById.set(id, input.key);
+      addBatchLookup(`ARXIV:${arxivId}`, input.key);
     } else if (doi) {
-      const id = `DOI:${doi}`;
-      batchIds.push(id);
-      batchKeyById.set(id, input.key);
+      addBatchLookup(`DOI:${doi}`, input.key);
     } else if (input.title && input.title.trim().length >= 12) {
       titleOnly.push(input);
     }
@@ -462,8 +473,7 @@ export async function enrichCitationsBatch(
 
   const batchResults = await fetchPapersBatch(batchIds, { rateLimitState, deadlineAt });
   for (const [id, paper] of batchResults) {
-    const key = batchKeyById.get(id);
-    if (key) {
+    for (const key of batchKeysById.get(id) ?? []) {
       results.set(key, paper);
     }
   }

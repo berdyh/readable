@@ -4,18 +4,12 @@ import { answerPaperQuestion } from "@/server/qa";
 import type { AnswerResult, QuestionSelection } from "@/server/qa/types";
 import { parseQuestionSelection } from "@/server/qa";
 import { classifyFailoverSignal } from "@/server/llm/routing";
+import { parseLocalAgentPin } from "@/server/llm";
 import {
   AUTH_REQUIRED_MESSAGE,
   isAuthenticationRequiredError,
   requireAuthenticatedUserId,
 } from "@/server/auth";
-
-/**
- * Local CLI agents the chat picker may pin a question to. Allowlisted rather
- * than passed through, because the value ends up selecting a binary to spawn —
- * an unvalidated string here would be the wrong kind of flexible.
- */
-const LOCAL_AGENT_IDS = new Set(["claude-code", "codex-cli"]);
 
 interface QaRequestPayload {
   paperId: string;
@@ -51,8 +45,8 @@ function parseRequestPayload(data: unknown): QaRequestPayload {
     result.selection = selection;
   }
 
-  const localAgent = payload.localAgent;
-  if (typeof localAgent === "string" && LOCAL_AGENT_IDS.has(localAgent)) {
+  const localAgent = parseLocalAgentPin(payload.localAgent);
+  if (localAgent) {
     result.localAgent = localAgent;
   }
 

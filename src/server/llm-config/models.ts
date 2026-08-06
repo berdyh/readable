@@ -9,31 +9,20 @@ export interface ModelConfig {
   };
 }
 
+export interface ProviderModels {
+  paper_summary: ModelConfig;
+  selection_summary: ModelConfig;
+  qa: ModelConfig;
+  /** Pinned judge for `pnpm eval` — a dated snapshot, never a floating alias. */
+  eval_judge: ModelConfig;
+  default: ModelConfig;
+}
+
 export interface ModelsConfig {
-  openai: {
-    paper_summary: ModelConfig;
-    selection_summary: ModelConfig;
-    qa: ModelConfig;
-    default: ModelConfig;
-  };
-  anthropic: {
-    paper_summary: ModelConfig;
-    selection_summary: ModelConfig;
-    qa: ModelConfig;
-    default: ModelConfig;
-  };
-  gemini: {
-    paper_summary: ModelConfig;
-    selection_summary: ModelConfig;
-    qa: ModelConfig;
-    default: ModelConfig;
-  };
-  openrouter: {
-    paper_summary: ModelConfig;
-    selection_summary: ModelConfig;
-    qa: ModelConfig;
-    default: ModelConfig;
-  };
+  openai: ProviderModels;
+  anthropic: ProviderModels;
+  gemini: ProviderModels;
+  openrouter: ProviderModels;
   notes: {
     selection_strategy: string;
     customization: string;
@@ -51,7 +40,7 @@ export function getModel(
   const config = modelsData[provider];
 
   // Map task names to config keys
-  let taskKey: "paper_summary" | "selection_summary" | "qa" | "default" = "default";
+  let taskKey: "paper_summary" | "selection_summary" | "qa" | "eval_judge" | "default" = "default";
 
   if (!taskType) {
     taskKey = "default";
@@ -66,6 +55,8 @@ export function getModel(
       taskKey = "selection_summary";
     } else if (normalized === "qa" || normalized === "question") {
       taskKey = "qa";
+    } else if (normalized === "eval_judge" || normalized === "judge") {
+      taskKey = "eval_judge";
     } else if (normalized === "default") {
       taskKey = "default";
     }
@@ -102,7 +93,7 @@ export function getModelConfig(
   const config = modelsData[provider];
 
   // Map task names to config keys
-  let taskKey: "paper_summary" | "selection_summary" | "qa" | "default" = "default";
+  let taskKey: "paper_summary" | "selection_summary" | "qa" | "eval_judge" | "default" = "default";
 
   if (!taskType) {
     taskKey = "default";
@@ -117,6 +108,8 @@ export function getModelConfig(
       taskKey = "selection_summary";
     } else if (normalized === "qa" || normalized === "question") {
       taskKey = "qa";
+    } else if (normalized === "eval_judge" || normalized === "judge") {
+      taskKey = "eval_judge";
     } else if (normalized === "default") {
       taskKey = "default";
     }

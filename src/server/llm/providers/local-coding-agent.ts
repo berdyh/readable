@@ -1,6 +1,15 @@
 import { spawn } from "node:child_process";
-import { accessSync, constants, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  accessSync,
+  closeSync,
+  constants,
+  existsSync,
+  openSync,
+  readdirSync,
+  readSync,
+  statSync,
+} from "node:fs";
+import { mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -45,6 +54,8 @@ interface InvocationSpec {
   stdin?: string;
   outputFile?: string;
   cleanupDir?: string;
+  /** Write a mid-call token refresh back to the real credential file. */
+  persistCredentials?: () => Promise<void>;
 }
 
 /**
@@ -116,6 +127,20 @@ function normalizeAgentId(value: string): CodingAgentId | undefined {
   return AGENT_ALIASES[value.trim().toLowerCase()];
 }
 
+/**
+ * Validate a client-supplied agent pin down to the safe built-in ids.
+ *
+ * Route handlers share this instead of keeping their own allowlists: the value
+ * ends up selecting a binary to spawn, so it is allowlisted rather than passed
+ * through — and one allowlist that every route uses cannot drift out of sync
+ * with the agents the provider actually considers safe.
+ */
+export function parseLocalAgentPin(value: unknown): CodingAgentId | undefined {
+  if (typeof value !== "string") return undefined;
+  const agent = normalizeAgentId(value);
+  return agent && SAFE_BUILT_IN_AGENTS.has(agent) ? agent : undefined;
+}
+
 function splitAgentList(value: string | undefined): CodingAgentId[] {
   const raw = value?.trim();
   if (!raw) {
@@ -160,9 +185,20 @@ function findOnPath(command: string): string | undefined {
 }
 
 function isLikelyNpxWrapper(command: string): boolean {
+  // Read only the head of the file. `readFileSync().slice(4096)` loaded the
+  // whole binary first, and the resolved `claude` command is a >100MB native
+  // executable — that one line cost ~1.5s of blocked event loop on every
+  // agent-status call.
   try {
-    const content = readFileSync(command, "utf8").slice(0, 4096);
-    return content.includes("npx") && content.includes("--prefer-online");
+    const fd = openSync(command, "r");
+    try {
+      const head = Buffer.alloc(4096);
+      const bytesRead = readSync(fd, head, 0, head.length, 0);
+      const content = head.toString("utf8", 0, bytesRead);
+      return content.includes("npx") && content.includes("--prefer-online");
+    } finally {
+      closeSync(fd);
+    }
   } catch {
     return false;
   }
@@ -294,7 +330,7 @@ export interface LocalCodingAgentStatus {
   displayName: string;
   /** The binary resolved on PATH, in the npx cache, or via LLM_AGENT_*_COMMAND. */
   installed: boolean;
-  /** A usable credential file exists for it. */
+  /** The CLI reports itself signed in (probe-first, credential-file fallback). */
   authenticated: boolean;
   /** The model this agent would run with, or "default" to let the CLI decide. */
   model: string;
@@ -303,21 +339,215 @@ export interface LocalCodingAgentStatus {
   hint?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Auth probing
+// ---------------------------------------------------------------------------
+
 /**
- * Has this agent got a credential we can stage?
- *
- * Reuses `cli-detect`'s parsers rather than re-implementing the auth-file
- * formats — they already know that Codex keeps tokens under `tokens.access_token`
- * and Claude Code under `claudeAiOauth.accessToken`, and they mtime-cache the
- * reads so calling this per request is cheap.
+ * The CLI's own "am I signed in" subcommand, per agent. Verified against
+ * codex-cli 0.145.0 (`codex login status`: exit 0 / "Not logged in" + exit 1)
+ * and claude 2.1.220 (`claude auth status`: JSON with a `loggedIn` boolean).
  */
-async function isAgentAuthenticated(agent: CodingAgentId): Promise<boolean> {
-  const explicit = getAgentEnvValue(agent, "AUTH_FILE");
+const AGENT_AUTH_PROBE_ARGS: Partial<Record<CodingAgentId, string[]>> = {
+  "codex-cli": ["login", "status"],
+  "claude-code": ["auth", "status"],
+};
+
+const DEFAULT_AUTH_PROBE_TIMEOUT_MS = 15_000;
+/** A signed-in verdict only goes stale if the credential rotates underneath us. */
+const AUTH_PROBE_SIGNED_IN_TTL_MS = 10 * 60_000;
+/**
+ * A signed-out verdict expires fast: signing in mid-session usually touches
+ * the credential file (which invalidates by mtime), but not always — macOS
+ * Keychain logins leave no file to watch.
+ */
+const AUTH_PROBE_SIGNED_OUT_TTL_MS = 30_000;
+
+/** `"indeterminate"` = the probe could not run or its output fit no known shape. */
+type AuthProbeVerdict = boolean | "indeterminate";
+
+interface AuthProbeCacheEntry {
+  value: boolean;
+  credentialMtimeMs: number | null;
+  expiresAt: number;
+}
+
+const authProbeCache = new Map<string, AuthProbeCacheEntry>();
+const pendingAuthProbes = new Map<string, Promise<AuthProbeVerdict>>();
+
+/** Forget cached probe verdicts — for tests and the setup CLI. */
+export function resetLocalAgentAuthProbeCache(): void {
+  authProbeCache.clear();
+  pendingAuthProbes.clear();
+}
+
+async function credentialFileMtime(agent: CodingAgentId): Promise<number | null> {
+  const filePath = resolveAgentAuthFile(agent);
+  if (!filePath) return null;
+  try {
+    return (await stat(filePath)).mtimeMs;
+  } catch {
+    return null;
+  }
+}
+
+interface AuthProbeProcessResult {
+  exitCode: number | null;
+  stdout: string;
+  stderr: string;
+}
+
+/**
+ * Unlike `runProcess`, a non-zero exit here is an answer, not an error —
+ * "Not logged in" comes back as exit 1 — so all three streams are returned
+ * for interpretation instead of being folded into a thrown message.
+ */
+function runAuthProbeProcess(
+  command: string,
+  args: string[],
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  timeoutMs: number,
+): Promise<AuthProbeProcessResult> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    const timer = setTimeout(() => {
+      child.kill("SIGKILL");
+      reject(new Error(`auth probe timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString("utf8");
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString("utf8");
+    });
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.on("close", (exitCode) => {
+      clearTimeout(timer);
+      resolve({ exitCode, stdout, stderr });
+    });
+  });
+}
+
+function interpretAuthProbe(
+  agent: CodingAgentId,
+  result: AuthProbeProcessResult,
+): AuthProbeVerdict {
+  if (agent === "claude-code") {
+    // `claude auth status` prints JSON with a boolean `loggedIn` when the
+    // subcommand exists. That is the CLI's own answer — it wins over the exit
+    // code (and over whatever the credential file looks like).
+    try {
+      const json = extractBalancedJson(result.stdout);
+      if (json) {
+        const parsed = JSON.parse(json) as { loggedIn?: unknown };
+        if (typeof parsed.loggedIn === "boolean") {
+          return parsed.loggedIn;
+        }
+      }
+    } catch {
+      // Not JSON — fall through to the generic interpretation.
+    }
+  }
+
+  if (/not logged in/i.test(`${result.stdout}\n${result.stderr}`)) {
+    return false;
+  }
+  if (result.exitCode === 0) {
+    return true;
+  }
+  // Non-zero exit without a recognisable signed-out message: most likely an
+  // older/newer CLI that does not know the subcommand. Not a verdict.
+  return "indeterminate";
+}
+
+/**
+ * Ask the CLI itself whether it is signed in.
+ *
+ * The probe runs in the same sandbox a real invocation gets (staged
+ * credential, redirected HOME), so the verdict is by construction "would a
+ * real call authenticate" — including on macOS, where Claude Code may hold
+ * its credential in the Keychain and no file exists to shape-check.
+ */
+async function probeAgentAuthStatus(
+  agent: CodingAgentId,
+  command: string,
+): Promise<AuthProbeVerdict> {
+  const probeArgs = AGENT_AUTH_PROBE_ARGS[agent];
+  if (!probeArgs) return "indeterminate";
+  const timeoutMs = Number(
+    process.env.LLM_LOCAL_AGENT_PROBE_TIMEOUT_MS ?? DEFAULT_AUTH_PROBE_TIMEOUT_MS,
+  );
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "readable-agent-probe-"));
+  try {
+    await prepareInvocationDirs(tempDir);
+    const credentials = await stageAgentCredentials(agent, tempDir);
+    const env = { ...buildLocalAgentEnv(tempDir), ...credentials.env };
+    const result = await runAuthProbeProcess(command, probeArgs, tempDir, env, timeoutMs);
+    return interpretAuthProbe(agent, result);
+  } catch {
+    return "indeterminate";
+  } finally {
+    await rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
+async function probeAgentAuthStatusCached(
+  agent: CodingAgentId,
+  command: string,
+): Promise<AuthProbeVerdict> {
+  const key = `${agent}:${command}`;
+  const credentialMtimeMs = await credentialFileMtime(agent);
+  const cached = authProbeCache.get(key);
+  if (cached && cached.expiresAt > Date.now() && cached.credentialMtimeMs === credentialMtimeMs) {
+    return cached.value;
+  }
+
+  let pending = pendingAuthProbes.get(key);
+  if (!pending) {
+    pending = probeAgentAuthStatus(agent, command).finally(() => pendingAuthProbes.delete(key));
+    pendingAuthProbes.set(key, pending);
+  }
+  const verdict = await pending;
+  if (verdict !== "indeterminate") {
+    authProbeCache.set(key, {
+      value: verdict,
+      credentialMtimeMs,
+      expiresAt:
+        Date.now() + (verdict ? AUTH_PROBE_SIGNED_IN_TTL_MS : AUTH_PROBE_SIGNED_OUT_TTL_MS),
+    });
+  }
+  return verdict;
+}
+
+/**
+ * Is this agent signed in?
+ *
+ * Probe-first: the CLI's own status subcommand is the authority, because only
+ * the CLI tracks its own credential formats. Shape-checking the credential
+ * file — the previous implementation — is kept solely as the fallback for
+ * when the probe is indeterminate (a CLI too old or too new to know the
+ * subcommand, a spawn failure, a timeout). That fallback reuses `cli-detect`'s
+ * parsers, which mtime-cache their reads.
+ */
+async function isAgentAuthenticated(agent: CodingAgentId, command: string): Promise<boolean> {
   switch (agent) {
     case "codex-cli":
-      return (await readCodexCliCredentials(explicit).catch(() => null)) !== null;
-    case "claude-code":
-      return (await readClaudeCliCredentials(explicit).catch(() => null)) !== null;
+    case "claude-code": {
+      const probed = await probeAgentAuthStatusCached(agent, command);
+      if (probed !== "indeterminate") {
+        return probed;
+      }
+      const explicit = getAgentEnvValue(agent, "AUTH_FILE");
+      return agent === "codex-cli"
+        ? (await readCodexCliCredentials(explicit).catch(() => null)) !== null
+        : (await readClaudeCliCredentials(explicit).catch(() => null)) !== null;
+    }
     default:
       // Opt-in agents manage their own credentials; we cannot verify them, so
       // we do not claim they are broken either.
@@ -343,8 +573,9 @@ export async function describeLocalCodingAgents(
       const displayName = AGENT_DISPLAY_NAMES[agent];
       const model = getAgentModelName(agent);
       const enabled = canUseLocalAgent(agent);
-      const installed = enabled && resolveAgentCommand(agent) !== undefined;
-      const authenticated = installed && (await isAgentAuthenticated(agent));
+      const resolution = enabled ? resolveAgentCommand(agent) : undefined;
+      const installed = resolution !== undefined;
+      const authenticated = installed && (await isAgentAuthenticated(agent, resolution.command));
 
       const unavailableReason: LocalAgentUnavailableReason | null = !enabled
         ? "not_enabled"
@@ -485,20 +716,42 @@ function buildLocalAgentEnv(tempDir: string): NodeJS.ProcessEnv {
  * MCP server definitions, session transcripts, skills and plugins. Staging a
  * lone `auth.json` gives it strictly less.
  *
- * Known trade-off: the staged copy is write-through-to-nowhere. If the agent
- * refreshes its OAuth token mid-call it writes the new one into the temp dir,
- * which we then delete, so the refresh is discarded and the next invocation
- * starts from the same on-disk token. That is correct but wasteful — a
- * long-expired access token means one refresh round-trip per request — and it
- * would become a real problem if the upstream ever rotated refresh tokens on
- * use. Re-running `codex login` / `claude login` repairs it either way.
+ * A refresh the agent performs mid-call lands in the staged copy, which used
+ * to be deleted with the temp dir — correct but wasteful (one refresh
+ * round-trip per request once the access token expired), and a real problem
+ * the day upstream rotates refresh tokens on use. Each stager therefore
+ * returns a `persistRefresh` closure that copies a changed staged credential
+ * back to the real file after the invocation, guarded so it never overwrites
+ * a file that changed underneath it. Codex copies the file verbatim (it is
+ * the CLI's own format either way); Claude Code merges only the
+ * `claudeAiOauth` block back, so the `mcpOAuth` tokens that never entered the
+ * sandbox cannot be dropped by the write.
  */
 interface StagedCredentials {
   env: Record<string, string>;
   staged: boolean;
+  /**
+   * Copy a token refresh the agent wrote inside the sandbox back to the real
+   * credential file. Best-effort: it must never fail the request, and it
+   * refuses to write when the real file changed mid-call (a concurrent
+   * `codex login`, another invocation's write-back) — a lost refresh only
+   * costs one extra refresh round-trip, a clobbered login costs the user a
+   * re-auth.
+   */
+  persistRefresh?: () => Promise<void>;
 }
 
 const NO_CREDENTIALS: StagedCredentials = { env: {}, staged: false };
+
+/**
+ * Replace a credential file atomically (write-then-rename) so a crash
+ * mid-write can never leave the user's real auth file half-written.
+ */
+async function replacePrivateFile(filePath: string, contents: string): Promise<void> {
+  const tmpPath = `${filePath}.${process.pid}.tmp`;
+  await writeFile(tmpPath, contents, { encoding: "utf8", mode: 0o600 });
+  await rename(tmpPath, filePath);
+}
 
 function resolveAgentAuthFile(agent: CodingAgentId): string | undefined {
   const explicit = getAgentEnvValue(agent, "AUTH_FILE");
@@ -530,6 +783,31 @@ async function writePrivateFile(filePath: string, contents: string): Promise<voi
 }
 
 /**
+ * The write-back copies sandbox-written bytes over the user's real
+ * credential file, so before writing we insist the staged content still
+ * has the shape of the credential it is meant to be. A crashed agent,
+ * a truncated write, or a hostile process inside the sandbox must not
+ * be able to replace the user's auth file with arbitrary content.
+ */
+function isValidCodexAuthPayload(raw: string): boolean {
+  try {
+    const parsed = JSON.parse(raw) as { tokens?: { access_token?: unknown } };
+    return (
+      typeof parsed?.tokens?.access_token === "string" && parsed.tokens.access_token.length > 0
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Same shape check for Claude Code's `claudeAiOauth` block. */
+function isValidClaudeOauthPayload(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const accessToken = (value as { accessToken?: unknown }).accessToken;
+  return typeof accessToken === "string" && accessToken.length > 0;
+}
+
+/**
  * Codex reads `$CODEX_HOME/auth.json` and nothing else — there is no
  * `CODEX_AUTH_FILE`, which is why the old hook of that name was inert.
  * Everything in `auth.json` (`auth_mode`, `tokens`, `last_refresh`) is the
@@ -548,8 +826,20 @@ async function stageCodexCredentials(tempDir: string): Promise<StagedCredentials
   if (!raw) return NO_CREDENTIALS;
 
   const codexHome = path.join(tempDir, "codex-home");
-  await writePrivateFile(path.join(codexHome, "auth.json"), raw);
-  return { env: { CODEX_HOME: codexHome }, staged: true };
+  const stagedPath = path.join(codexHome, "auth.json");
+  await writePrivateFile(stagedPath, raw);
+  return {
+    env: { CODEX_HOME: codexHome },
+    staged: true,
+    persistRefresh: async () => {
+      const refreshed = await readFile(stagedPath, "utf8").catch(() => undefined);
+      if (!refreshed || refreshed === raw) return;
+      if (!isValidCodexAuthPayload(refreshed)) return;
+      const current = await readFile(source, "utf8").catch(() => undefined);
+      if (current !== raw) return;
+      await replacePrivateFile(source, refreshed);
+    },
+  };
 }
 
 /**
@@ -569,28 +859,67 @@ async function stageClaudeCredentials(tempDir: string): Promise<StagedCredential
   if (!oauth || typeof oauth !== "object") return NO_CREDENTIALS;
 
   const configDir = path.join(tempDir, "claude-home");
-  await writePrivateFile(
-    path.join(configDir, ".credentials.json"),
-    JSON.stringify({ claudeAiOauth: oauth }),
-  );
-  return { env: { CLAUDE_CONFIG_DIR: configDir }, staged: true };
+  const stagedPath = path.join(configDir, ".credentials.json");
+  const originalOauth = JSON.stringify(oauth);
+  await writePrivateFile(stagedPath, JSON.stringify({ claudeAiOauth: oauth }));
+  return {
+    env: { CLAUDE_CONFIG_DIR: configDir },
+    staged: true,
+    persistRefresh: async () => {
+      const staged = await readJsonFile(stagedPath);
+      const refreshed = staged?.claudeAiOauth;
+      if (!isValidClaudeOauthPayload(refreshed)) return;
+      if (JSON.stringify(refreshed) === originalOauth) return;
+      // Merge into the *current* file, not the one read at staging time, so
+      // keys that never entered the sandbox (mcpOAuth) survive — but only if
+      // Claude's own block is still the one we staged from.
+      const currentSource = await readJsonFile(source);
+      if (!currentSource) return;
+      if (JSON.stringify(currentSource.claudeAiOauth ?? null) !== originalOauth) return;
+      await replacePrivateFile(
+        source,
+        JSON.stringify({ ...currentSource, claudeAiOauth: refreshed }),
+      );
+    },
+  };
 }
 
 async function stageAgentCredentials(
   agent: CodingAgentId,
   tempDir: string,
 ): Promise<StagedCredentials> {
+  let credentials: StagedCredentials;
   switch (agent) {
     case "codex-cli":
-      return stageCodexCredentials(tempDir);
+      credentials = await stageCodexCredentials(tempDir);
+      break;
     case "claude-code":
-      return stageClaudeCredentials(tempDir);
+      credentials = await stageClaudeCredentials(tempDir);
+      break;
     default:
       // Agents behind the unsafe opt-in bring their own credentials via
       // LLM_LOCAL_AGENT_ENV_ALLOWLIST; we do not guess at their file layout.
       return NO_CREDENTIALS;
   }
+
+  // With LLM_AGENT_*_ARGS_JSON the invocation is whatever the developer
+  // typed, so the sandbox guarantees the write-back relies on no longer
+  // hold — an arbitrary argv can point the agent's config-dir env var
+  // anywhere or run something that is not the trusted CLI at all. Stage
+  // credentials so the call works, but never write anything back.
+  if (hasArgsOverride(agent) && credentials.persistRefresh) {
+    return { ...credentials, persistRefresh: undefined };
+  }
+
+  return credentials;
 }
+
+/** Test-only access to the credential staging/write-back internals. */
+export const _credentialStagingForTests = {
+  stageCodexCredentials,
+  stageClaudeCredentials,
+  stageAgentCredentials,
+};
 
 function getAgentModelName(agent: CodingAgentId): string {
   return getAgentEnvValue(agent, "MODEL") ?? "default";
@@ -713,6 +1042,7 @@ async function buildInvocation(
       stdin: prompt,
       outputFile,
       cleanupDir: tempDir,
+      persistCredentials: credentials.persistRefresh,
     };
   }
 
@@ -740,6 +1070,7 @@ async function buildInvocation(
         env,
         stdin: prompt,
         cleanupDir: tempDir,
+        persistCredentials: credentials.persistRefresh,
       };
     case "codex-cli":
       return {
@@ -769,6 +1100,7 @@ async function buildInvocation(
         stdin: prompt,
         outputFile,
         cleanupDir: tempDir,
+        persistCredentials: credentials.persistRefresh,
       };
     case "gemini-cli":
       return {
@@ -1035,6 +1367,9 @@ async function invokeLocalAgent(
     const stdout = await runProcess(spec, timeoutMs);
     return (await readAgentOutput(spec, stdout)).trim();
   } finally {
+    // Runs on failure too — a call can refresh the token and then fail on
+    // the model, and the refresh is still worth keeping.
+    await spec.persistCredentials?.().catch(() => undefined);
     if (spec.cleanupDir) {
       await rm(spec.cleanupDir, { recursive: true, force: true }).catch(() => undefined);
     }

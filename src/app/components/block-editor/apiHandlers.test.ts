@@ -117,6 +117,58 @@ describe("executeApiCommand", () => {
     const [, requestInit] = fetchSpy.mock.calls[0] as [string, { body: string }];
     expect(JSON.parse(requestInit.body)).toEqual({ paperId: "paper-1" });
   });
+
+  it("includes the pinned localAgent in the summary request body", async () => {
+    const onInsertBlocks = vi.fn();
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        paperId: "paper-1",
+        abstract: ["Short summary"],
+        sections: [],
+        keyTakeaways: [],
+        citations: [],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await executeApiCommand(
+      "summary",
+      createContext(onInsertBlocks, { localAgent: "claude-code" }),
+    );
+
+    const [, requestInit] = fetchSpy.mock.calls[0] as [string, { body: string }];
+    expect(JSON.parse(requestInit.body)).toEqual({
+      paperId: "paper-1",
+      localAgent: "claude-code",
+    });
+  });
+
+  it("includes the pinned localAgent in the selection summary body", async () => {
+    const onInsertBlocks = vi.fn();
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        callout: { bullets: [{ text: "Key point", citationIds: [] }], deeper: [], citations: [] },
+      }),
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await executeApiCommand(
+      "explain",
+      createContext(onInsertBlocks, {
+        selection: { text: "selected text" },
+        localAgent: "codex-cli",
+      }),
+    );
+
+    const [, requestInit] = fetchSpy.mock.calls[0] as [string, { body: string }];
+    expect(JSON.parse(requestInit.body)).toEqual({
+      paperId: "paper-1",
+      selection: { text: "selected text" },
+      localAgent: "codex-cli",
+    });
+  });
   it("routes /arxiv to ingest endpoint when target is provided", async () => {
     const onInsertBlocks = vi.fn();
     const fetchSpy = vi.fn().mockResolvedValue({

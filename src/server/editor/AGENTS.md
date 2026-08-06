@@ -26,9 +26,11 @@ Anything not listed here is internal to this module:
 
 Read only the *interface* of these — never their internals.
 
+- **server.explain** via `loadPersonaSplit / renderPersonaBlock`
 - **server.ingest** via `fetchArxivMetadata`
 - **server.llm** via `generateJson`
 - **server.llm-config** via `getSystemPrompt`
+- **server.persona** via `recordPersonaSignals`
 - **server.qa** via `loadQuestionEvidence`
 - **server.text** via `truncateWithEllipsis`
 

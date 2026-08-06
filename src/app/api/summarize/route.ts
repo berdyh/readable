@@ -5,10 +5,12 @@ import {
   isAuthenticationRequiredError,
   requireAuthenticatedUserId,
 } from "@/server/auth";
+import { parseLocalAgentPin } from "@/server/llm";
 import { summarizePaper } from "@/server/summarize";
 
 interface SummarizeRequestPayload {
   paperId: string;
+  localAgent?: string;
 }
 
 function parseRequestPayload(data: unknown): SummarizeRequestPayload {
@@ -26,6 +28,11 @@ function parseRequestPayload(data: unknown): SummarizeRequestPayload {
   const result: SummarizeRequestPayload = {
     paperId: paperIdRaw.trim(),
   };
+
+  const localAgent = parseLocalAgentPin(payload.localAgent);
+  if (localAgent) {
+    result.localAgent = localAgent;
+  }
 
   return result;
 }
@@ -56,6 +63,7 @@ export async function POST(request: NextRequest) {
     const userId = await requireAuthenticatedUserId();
     const result = await summarizePaper(payload.paperId, {
       userId,
+      localAgent: payload.localAgent,
     });
     return NextResponse.json(result, { status: 200 });
   } catch (error) {

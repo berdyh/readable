@@ -1,22 +1,48 @@
-import { loadPaperSummaryContext } from "./context";
+import { loadPaperSummaryContext, type PaperSummaryContext } from "./context";
 import { generateJson } from "@/server/llm";
-import { recordPersonaSignals } from "@/server/persona";
+import { recordConceptGraph, recordPersonaSignals } from "@/server/persona";
+import { fetchPaperCitationsByPaperId, type Citation } from "@/server/db";
+import {
+  MAX_CITATIONS_IN_SUMMARY_CONTEXT,
+  CITATION_ABSTRACT_TRUNCATE,
+  SOURCE_LABEL_INSTRUCTIONS,
+  SOURCE_LABEL_SCHEMA,
+  buildConceptKey,
+  loadIngestedIdsSafe,
+  loadPersonaSplit,
+  renderPersonaBlock,
+  renderRoutedCitationContext,
+  routeCitations,
+  selectGroundingTerms,
+  toCitationCandidate,
+  validateSourceLabel,
+  type CitationCandidate,
+  type PersonaSplit,
+} from "@/server/explain";
 import type {
   PageSpan,
+  SummaryConcept,
   SummaryFigure,
   SummaryKeyFinding,
   SummaryResult,
   SummarySection,
+  SummaryTerm,
 } from "./types";
 
 import { getSystemPrompt, getPaperSummaryRequirements, getPromptLimits } from "@/server/llm-config";
 import { truncateWithEllipsis } from "@/server/text";
 
 const PROMPT_LIMITS = getPromptLimits();
-const PROMPT_SECTION_LIMIT = PROMPT_LIMITS.section;
-const PROMPT_PARAGRAPH_LIMIT = PROMPT_LIMITS.paragraph;
 const PROMPT_FIGURE_LIMIT = PROMPT_LIMITS.figure;
 
+/**
+ * The explanation contract (decision 1A): every section is a teaching
+ * unit — hook → plain-language claim → mechanism (analogy when new) →
+ * evidence pointer → glossary of new terms with self-reported
+ * familiarity — plus a validated source label. Output stays 3–6
+ * aggregated sections; the output budget lives in the task requirements
+ * (prompt) and the maxLength bounds here.
+ */
 const SUMMARY_SCHEMA: Record<string, unknown> = {
   type: "object",
   additionalProperties: false,
@@ -29,18 +55,62 @@ const SUMMARY_SCHEMA: Record<string, unknown> = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["section_id", "title", "summary", "reasoning", "key_points"],
+        required: [
+          "section_id",
+          "title",
+          "hook",
+          "claim",
+          "mechanism",
+          "evidence",
+          "new_terms",
+          "source",
+        ],
         properties: {
           section_id: { type: "string" },
           title: { type: "string" },
-          summary: { type: "string" },
-          reasoning: { type: "string" },
-          key_points: {
-            type: "array",
-            minItems: 1,
-            items: { type: "string" },
-            maxItems: 4,
+          hook: {
+            type: "string",
+            maxLength: 400,
+            description:
+              "The motivating question or problem this section answers, in 1-2 sentences.",
           },
+          claim: {
+            type: "string",
+            maxLength: 900,
+            description: "The section's core claim in plain language a newcomer can follow.",
+          },
+          mechanism: {
+            type: "string",
+            maxLength: 2000,
+            description:
+              "How it actually works. Concrete example or analogy FIRST for anything new to the reader, then the general form.",
+          },
+          evidence: {
+            type: "string",
+            maxLength: 600,
+            description:
+              "What in the paper supports the claim — reference section IDs (S3) and figure IDs (F2).",
+          },
+          new_terms: {
+            type: "array",
+            maxItems: 5,
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["term", "definition", "familiarity"],
+              properties: {
+                term: { type: "string", minLength: 1, maxLength: 80 },
+                definition: { type: "string", maxLength: 320 },
+                familiarity: {
+                  type: "string",
+                  enum: ["high", "low"],
+                  description:
+                    'Your honest familiarity with this term/work: "low" if you are not confident you know it well.',
+                },
+              },
+            },
+          },
+          source: SOURCE_LABEL_SCHEMA,
         },
       },
     },
@@ -78,7 +148,10 @@ const SUMMARY_SCHEMA: Record<string, unknown> = {
         properties: {
           figure_id: { type: "string" },
           caption_summary: { type: "string" },
-          insight: { type: "string" },
+          insight: {
+            type: "string",
+            description: "Declarative takeaway: what the figure PROVES or shows.",
+          },
         },
       },
     },
@@ -86,28 +159,85 @@ const SUMMARY_SCHEMA: Record<string, unknown> = {
       type: "array",
       maxItems: 8,
       description:
-        'Concepts the reader was exposed to. Names should be terse domain phrases (e.g. "attention mechanism", "Bayesian inference"). Drawn only from the paper — do not invent.',
+        'Concepts the reader was exposed to. Names are terse domain phrases (e.g. "attention mechanism") — never people or paper titles. Drawn only from the paper.',
       items: {
         type: "object",
         additionalProperties: false,
         // description is nullable so non-strict providers can omit it
         // without violating the contract. The parser drops nulls.
-        required: ["concept", "description"],
+        required: ["concept", "domain", "description", "depends_on", "confidence"],
         properties: {
           concept: { type: "string", minLength: 1, maxLength: 80 },
+          domain: {
+            type: "string",
+            maxLength: 40,
+            description: 'Short field name, e.g. "ml", "nlp", "statistics".',
+          },
           description: { type: ["string", "null"], maxLength: 240 },
+          depends_on: {
+            type: "array",
+            maxItems: 4,
+            items: { type: "string", maxLength: 80 },
+            description: "Prerequisite concept names a reader should know first.",
+          },
+          confidence: {
+            type: "number",
+            minimum: 0,
+            maximum: 1,
+            description: "Confidence in the depends_on edges.",
+          },
         },
       },
     },
   },
 };
 
+/** Bounded second-pass grounding call (router trigger 4). */
+const TERM_GROUNDING_SCHEMA: Record<string, unknown> = {
+  type: "object",
+  additionalProperties: false,
+  required: ["terms"],
+  properties: {
+    terms: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["term", "definition", "depends_on"],
+        properties: {
+          term: { type: "string", minLength: 1, maxLength: 80 },
+          definition: {
+            type: ["string", "null"],
+            maxLength: 320,
+            description:
+              "Grounded plain-language definition, or null when the passages do not cover the term.",
+          },
+          depends_on: {
+            type: "array",
+            maxItems: 3,
+            items: { type: "string", maxLength: 80 },
+          },
+        },
+      },
+    },
+  },
+};
+
+interface LlmTerm {
+  term: string;
+  definition: string;
+  familiarity?: "high" | "low";
+}
+
 interface LlmSection {
   section_id: string;
   title: string;
-  summary: string;
-  reasoning: string;
-  key_points: string[];
+  hook?: string;
+  claim: string;
+  mechanism: string;
+  evidence?: string;
+  new_terms: LlmTerm[];
+  source?: string;
 }
 
 interface LlmKeyFinding {
@@ -125,7 +255,10 @@ interface LlmFigure {
 
 interface LlmConcept {
   concept: string;
+  domain?: string;
   description?: string;
+  depends_on?: string[];
+  confidence?: number;
 }
 
 interface LlmSummaryPayload {
@@ -137,6 +270,8 @@ interface LlmSummaryPayload {
 
 interface SummarizeOptions {
   userId?: string;
+  /** Pin the LLM call to a specific local coding agent (the chat picker's choice). */
+  localAgent?: string;
 }
 
 function truncateText(text: string, maxLength = PROMPT_LIMITS.text_truncate): string {
@@ -147,11 +282,13 @@ function truncateText(text: string, maxLength = PROMPT_LIMITS.text_truncate): st
   return truncateWithEllipsis(text, maxLength);
 }
 
-function formatPageSpan(span: PageSpan | undefined): string {
-  if (!span?.start && !span?.end) {
-    return "page ?";
-  }
-
+/**
+ * Renders a page span only when real page data exists. The ar5iv ingest
+ * path stores no page numbers, and rendering "(page ?)" on every section
+ * taught the model to echo unusable anchors — so unknown pages are now
+ * simply omitted.
+ */
+function formatPageSpan(span: PageSpan | undefined): string | undefined {
   const start = span?.start;
   const end = span?.end;
 
@@ -170,7 +307,7 @@ function formatPageSpan(span: PageSpan | undefined): string {
     return `page ${end}`;
   }
 
-  return "page ?";
+  return undefined;
 }
 
 function formatPageAnchorFromSpan(span: PageSpan | undefined): string | undefined {
@@ -197,20 +334,20 @@ function buildSectionOutlinePrompt(
     referencedFigureIds: string[];
   }>,
 ): string {
+  // No section cap and no per-section paragraph cap: the coverage +
+  // deepening fill in context.ts already selected content under the char
+  // budget. Slicing here is what used to drop the paper's back half.
   return sections
-    .slice(0, PROMPT_SECTION_LIMIT)
     .map((section) => {
-      const header = `- [${section.id}] ${section.title} (${formatPageSpan(section.pageSpan)})`;
+      const pageLabel = formatPageSpan(section.pageSpan);
+      const header = `- [${section.id}] ${section.title}${pageLabel ? ` (${pageLabel})` : ""}`;
       const figuresLine = section.referencedFigureIds.length
         ? `    Figures: ${section.referencedFigureIds.join(", ")}`
         : undefined;
 
-      const highlights = section.paragraphs
-        .slice(0, PROMPT_PARAGRAPH_LIMIT)
-        .map(
-          (paragraph, index) =>
-            `    Key ${index + 1}: ${truncateText(paragraph, PROMPT_LIMITS.paragraph_truncate)}`,
-        );
+      const highlights = section.paragraphs.map(
+        (paragraph, index) => `    Para ${index + 1}: ${paragraph}`,
+      );
 
       return [header, figuresLine, ...highlights].filter(Boolean).join("\n");
     })
@@ -223,30 +360,27 @@ function buildFigureContextPrompt(
     caption?: string;
     pageNumber?: number;
     referencedSectionIds: string[];
-    supportingParagraphs: string[];
   }>,
 ): string {
   if (!figures.length) {
     return "No figures were extracted for this paper.";
   }
 
+  // Captions + section references only. The old "Context N" lines were
+  // verbatim copies of section paragraphs already present in the outline.
   return figures
     .slice(0, PROMPT_FIGURE_LIMIT)
     .map((figure) => {
+      const pageAnchor = formatPageAnchor(figure.pageNumber);
       const header = `- [${figure.id}] ${truncateText(
         figure.caption ?? "No caption available",
         PROMPT_LIMITS.figure_caption_truncate,
-      )} (${formatPageAnchor(figure.pageNumber) ?? "page ?"})`;
+      )}${pageAnchor ? ` ${pageAnchor}` : ""}`;
       const sectionsLine = figure.referencedSectionIds.length
         ? `    Sections: ${figure.referencedSectionIds.join(", ")}`
         : undefined;
 
-      const contextLines = figure.supportingParagraphs.map(
-        (paragraph, index) =>
-          `    Context ${index + 1}: ${truncateText(paragraph, PROMPT_LIMITS.figure_context_truncate)}`,
-      );
-
-      return [header, sectionsLine, ...contextLines].filter(Boolean).join("\n");
+      return [header, sectionsLine].filter(Boolean).join("\n");
     })
     .join("\n");
 }
@@ -287,7 +421,15 @@ function buildMetadataPrompt(metadata?: {
   return parts.join("\n");
 }
 
-function buildUserPrompt(context: Awaited<ReturnType<typeof loadPaperSummaryContext>>): string {
+interface SummaryPromptBlocks {
+  personaBlock: string;
+  citationBlock?: string;
+}
+
+function buildUserPrompt(
+  context: Awaited<ReturnType<typeof loadPaperSummaryContext>>,
+  blocks: SummaryPromptBlocks,
+): string {
   const metadataBlock = buildMetadataPrompt(context.metadata);
   const sectionOutline = buildSectionOutlinePrompt(context.sections);
   const figureOutline = buildFigureContextPrompt(context.figures);
@@ -297,14 +439,21 @@ function buildUserPrompt(context: Awaited<ReturnType<typeof loadPaperSummaryCont
   return [
     `Paper ID: ${context.paperId}`,
     "",
+    blocks.personaBlock,
+    "",
     "# Metadata",
     metadataBlock,
     "",
     "# Section Outline",
+    ...(context.coverage.truncationNote ? [`(${context.coverage.truncationNote})`] : []),
     sectionOutline,
     "",
     "# Figure Context",
     figureOutline,
+    ...(blocks.citationBlock ? ["", blocks.citationBlock] : []),
+    "",
+    "# Source Rules",
+    SOURCE_LABEL_INSTRUCTIONS,
     "",
     "# Task Requirements",
     requirements.map((line) => `- ${line}`).join("\n"),
@@ -315,7 +464,56 @@ function extractJsonPayload(content: string): unknown {
   const trimmed = content.trim();
   const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const jsonText = fencedMatch ? fencedMatch[1] : trimmed;
-  return JSON.parse(jsonText);
+  const parsed = JSON.parse(jsonText) as unknown;
+
+  // Some models double-encode: the real payload arrives stringified inside a
+  // single-key envelope (observed live: {".json": "{\"sections\": ..."} from
+  // deepseek in json_object mode). Unwrap one level when the object has none
+  // of the expected top-level keys and exactly one string value that parses.
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    const record = parsed as Record<string, unknown>;
+    if (!("sections" in record)) {
+      const values = Object.values(record);
+      if (values.length === 1 && typeof values[0] === "string") {
+        try {
+          return JSON.parse(values[0]) as unknown;
+        } catch {
+          // Not double-encoded after all — fall through to the original.
+        }
+      }
+    }
+  }
+  return parsed;
+}
+
+function coerceString(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed || undefined;
+}
+
+function coerceTerms(input: unknown): LlmTerm[] {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+
+  const terms: LlmTerm[] = [];
+  for (const entry of input) {
+    if (!entry || typeof entry !== "object") {
+      continue;
+    }
+    const record = entry as Record<string, unknown>;
+    const term = coerceString(record.term);
+    const definition = coerceString(record.definition);
+    if (!term || !definition) {
+      continue;
+    }
+    const familiarity = record.familiarity === "low" ? "low" : "high";
+    terms.push({ term, definition, familiarity });
+  }
+  return terms.slice(0, 5);
 }
 
 function coerceSections(input: unknown): LlmSection[] {
@@ -332,32 +530,27 @@ function coerceSections(input: unknown): LlmSection[] {
 
     const record = entry as Record<string, unknown>;
 
-    const sectionId = typeof record.section_id === "string" ? record.section_id.trim() : undefined;
+    const sectionId = coerceString(record.section_id);
+    // Contract fields with legacy aliases: older persisted payloads (and
+    // models that regress to the old shape) used summary/reasoning.
+    const claim = coerceString(record.claim) ?? coerceString(record.summary);
+    const mechanism = coerceString(record.mechanism) ?? coerceString(record.reasoning);
 
-    const summary = typeof record.summary === "string" ? record.summary.trim() : undefined;
-
-    const reasoning = typeof record.reasoning === "string" ? record.reasoning.trim() : undefined;
-
-    if (!sectionId || !summary || !reasoning) {
+    if (!sectionId || !claim || !mechanism) {
       continue;
     }
 
-    const title = typeof record.title === "string" ? record.title.trim() : sectionId;
-
-    const keyPointsRaw = record.key_points;
-    const keyPoints = Array.isArray(keyPointsRaw)
-      ? keyPointsRaw
-          .map((item) => (typeof item === "string" ? item.trim() : undefined))
-          .filter((item): item is string => Boolean(item))
-          .slice(0, 4)
-      : [];
+    const title = coerceString(record.title) ?? sectionId;
 
     sections.push({
       section_id: sectionId,
       title,
-      summary,
-      reasoning,
-      key_points: keyPoints,
+      hook: coerceString(record.hook),
+      claim,
+      mechanism,
+      evidence: coerceString(record.evidence),
+      new_terms: coerceTerms(record.new_terms),
+      source: coerceString(record.source),
     });
   }
 
@@ -378,9 +571,8 @@ function coerceKeyFindings(input: unknown): LlmKeyFinding[] {
 
     const record = entry as Record<string, unknown>;
 
-    const statement = typeof record.statement === "string" ? record.statement.trim() : undefined;
-
-    const evidence = typeof record.evidence === "string" ? record.evidence.trim() : undefined;
+    const statement = coerceString(record.statement);
+    const evidence = coerceString(record.evidence);
 
     const supportingSectionsRaw = record.supporting_sections;
     const supportingSections = Array.isArray(supportingSectionsRaw)
@@ -427,15 +619,14 @@ function coerceFigures(input: unknown): LlmFigure[] {
 
     const record = entry as Record<string, unknown>;
 
-    const figureId = typeof record.figure_id === "string" ? record.figure_id.trim() : undefined;
-
-    const insight = typeof record.insight === "string" ? record.insight.trim() : undefined;
+    const figureId = coerceString(record.figure_id);
+    const insight = coerceString(record.insight);
 
     if (!figureId || !insight) {
       continue;
     }
 
-    const caption = typeof record.caption_summary === "string" ? record.caption_summary.trim() : "";
+    const caption = coerceString(record.caption_summary) ?? "";
 
     figures.push({
       figure_id: figureId,
@@ -455,11 +646,27 @@ function coerceConcepts(input: unknown): LlmConcept[] {
   for (const entry of input) {
     if (!entry || typeof entry !== "object") continue;
     const record = entry as Record<string, unknown>;
-    const concept = typeof record.concept === "string" ? record.concept.trim() : undefined;
+    const concept = coerceString(record.concept);
     if (!concept) continue;
-    const description =
-      typeof record.description === "string" ? record.description.trim() : undefined;
-    concepts.push({ concept, description: description || undefined });
+
+    const dependsOnRaw = record.depends_on;
+    const dependsOn = Array.isArray(dependsOnRaw)
+      ? dependsOnRaw
+          .map((item) => (typeof item === "string" ? item.trim() : ""))
+          .filter(Boolean)
+          .slice(0, 4)
+      : [];
+
+    concepts.push({
+      concept,
+      domain: coerceString(record.domain),
+      description: coerceString(record.description),
+      depends_on: dependsOn,
+      confidence:
+        typeof record.confidence === "number" && Number.isFinite(record.confidence)
+          ? Math.min(1, Math.max(0, record.confidence))
+          : undefined,
+    });
   }
   return concepts.slice(0, 8);
 }
@@ -472,7 +679,10 @@ function parseModelSummary(rawContent: string): LlmSummaryPayload {
   const concepts = coerceConcepts(payload.concepts);
 
   if (sections.length < 1) {
-    throw new Error("Model response did not include any sections.");
+    // Keep a bounded snippet of what actually came back — "no sections" with
+    // no evidence turns a five-minute model-drift diagnosis into an hour.
+    const snippet = rawContent.replace(/\s+/g, " ").slice(0, 500);
+    throw new Error(`Model response did not include any sections. Response head: ${snippet}`);
   }
 
   return {
@@ -486,6 +696,7 @@ function parseModelSummary(rawContent: string): LlmSummaryPayload {
 function postProcessSummary(
   llmSummary: LlmSummaryPayload,
   context: Awaited<ReturnType<typeof loadPaperSummaryContext>>,
+  hasRetrievedCitationEvidence: boolean,
 ): SummaryResult {
   const sectionOrder = new Map<string, number>();
   const sectionContext = new Map(
@@ -501,12 +712,27 @@ function postProcessSummary(
     .map((section) => {
       const source = sectionContext.get(section.section_id);
       const pageSpan = source?.pageSpan;
+
+      const newTerms: SummaryTerm[] = section.new_terms.map((term) => ({
+        term: term.term,
+        definition: term.definition,
+        familiarity: term.familiarity,
+      }));
+
       return {
         section_id: section.section_id,
         title: section.title || source?.title || section.section_id,
-        summary: section.summary,
-        reasoning: section.reasoning,
-        key_points: section.key_points,
+        // summary/reasoning stay populated (claim/mechanism) so older
+        // clients and persisted summaries keep rendering.
+        summary: section.claim,
+        reasoning: section.mechanism,
+        hook: section.hook,
+        evidence: section.evidence,
+        new_terms: newTerms.length ? newTerms : undefined,
+        // Server-validated: cited_text survives only when retrieved
+        // citation passages were actually supplied to the model.
+        source: validateSourceLabel(section.source, hasRetrievedCitationEvidence),
+        key_points: undefined,
         page_span: pageSpan,
         page_anchor: formatPageAnchorFromSpan(pageSpan),
       };
@@ -552,9 +778,8 @@ function postProcessSummary(
 
   llmSummary.figures.forEach((figure) => {
     const source = figureContext.get(figure.figure_id);
-    const pageAnchor = formatPageAnchor(source?.pageNumber);
 
-    if (!source || !pageAnchor) {
+    if (!source) {
       return;
     }
 
@@ -562,43 +787,226 @@ function postProcessSummary(
       figure_id: figure.figure_id,
       caption: figure.caption_summary || source.caption,
       insight: figure.insight,
-      page_anchor: pageAnchor,
+      page_anchor: formatPageAnchor(source.pageNumber),
     });
   });
 
   let figures: SummaryFigure[] = mappedFigures;
 
-  if (!figures.length) {
-    const fallback = context.figures.find((figure) => formatPageAnchor(figure.pageNumber));
-    const fallbackAnchor = formatPageAnchor(fallback?.pageNumber);
-
-    if (fallback && fallbackAnchor) {
-      figures = [
-        {
-          figure_id: fallback.id,
-          caption: fallback.caption,
-          insight: "Figure referenced in the paper; review the caption for context.",
-          page_anchor: fallbackAnchor,
-        },
-      ];
-    }
+  if (!figures.length && context.figures.length) {
+    const fallback = context.figures[0];
+    figures = [
+      {
+        figure_id: fallback.id,
+        caption: fallback.caption,
+        insight: "Figure referenced in the paper; review the caption for context.",
+        page_anchor: formatPageAnchor(fallback.pageNumber),
+      },
+    ];
   }
+
+  const concepts: SummaryConcept[] = llmSummary.concepts.map((concept) => ({
+    concept: concept.concept,
+    domain: concept.domain,
+    description: concept.description,
+    concept_key: buildConceptKey(concept.concept, concept.domain),
+  }));
 
   return {
     sections,
     key_findings: keyFindings,
     figures,
+    concepts: concepts.length ? concepts : undefined,
   };
 }
 
-export async function summarizePaper(
-  paperId: string,
-  options: SummarizeOptions = {},
+/** Loads citation candidates from Postgres only (S2 hygiene). */
+async function loadCitationCandidates(paperId: string): Promise<CitationCandidate[]> {
+  try {
+    const citations: Citation[] = await fetchPaperCitationsByPaperId(paperId);
+    return citations.map(toCitationCandidate);
+  } catch (error) {
+    console.warn(`[summarize] Failed to load citations for ${paperId}:`, error);
+    return [];
+  }
+}
+
+interface GroundedTerm {
+  term: string;
+  definition?: string;
+  dependsOn: string[];
+}
+
+function parseGroundingPayload(raw: string): GroundedTerm[] {
+  const payload = extractJsonPayload(raw) as { terms?: unknown };
+  if (!Array.isArray(payload.terms)) {
+    return [];
+  }
+
+  const terms: GroundedTerm[] = [];
+  for (const entry of payload.terms) {
+    if (!entry || typeof entry !== "object") continue;
+    const record = entry as Record<string, unknown>;
+    const term = coerceString(record.term);
+    if (!term) continue;
+    const dependsOn = Array.isArray(record.depends_on)
+      ? record.depends_on
+          .map((item) => (typeof item === "string" ? item.trim() : ""))
+          .filter(Boolean)
+          .slice(0, 3)
+      : [];
+    terms.push({ term, definition: coerceString(record.definition), dependsOn });
+  }
+  return terms;
+}
+
+/**
+ * Router trigger 4: ONE bounded second-pass grounding call for the
+ * low-familiarity glossary terms, batched per response. Grounded
+ * definitions are relabeled cited_text; prerequisite pairs from the
+ * grounding become citation-derived edges. Best-effort — any failure
+ * keeps the original definitions.
+ */
+async function groundLowFamiliarityTerms(
+  result: SummaryResult,
+  candidates: CitationCandidate[],
+  primaryDomain: string | undefined,
+  options: SummarizeOptions,
+): Promise<void> {
+  const allTerms = result.sections.flatMap((section) => section.new_terms ?? []);
+  const groundingTerms = selectGroundingTerms(
+    allTerms.map((term) => ({ term: term.term, familiarity: term.familiarity ?? "high" })),
+  );
+  if (groundingTerms.length === 0) {
+    return;
+  }
+
+  const withAbstracts = candidates.filter((candidate) => candidate.abstract);
+  if (withAbstracts.length === 0) {
+    return;
+  }
+
+  const passages = withAbstracts
+    .slice(0, 8)
+    .map(
+      (candidate) =>
+        `- [${candidate.citationId}] ${candidate.title ?? "Untitled"}${candidate.year ? ` (${candidate.year})` : ""}\n  ${truncateText((candidate.abstract ?? "").replace(/\s+/g, " "), CITATION_ABSTRACT_TRUNCATE)}`,
+    )
+    .join("\n");
+
+  const userPrompt = [
+    `Terms to ground: ${groundingTerms.join("; ")}`,
+    "",
+    "# Retrieved passages from cited papers",
+    passages,
+  ].join("\n");
+
+  try {
+    const raw = await generateJson(
+      {
+        systemPrompt: getSystemPrompt("term_grounding"),
+        userPrompt,
+        schema: TERM_GROUNDING_SCHEMA,
+      },
+      {
+        taskName: "term_grounding",
+        temperature: 0.1,
+        localAgent: options.localAgent,
+      },
+    );
+
+    const grounded = parseGroundingPayload(raw);
+    if (grounded.length === 0) {
+      return;
+    }
+
+    const byTerm = new Map(grounded.map((term) => [term.term.toLowerCase(), term]));
+
+    for (const section of result.sections) {
+      for (const term of section.new_terms ?? []) {
+        const match = byTerm.get(term.term.toLowerCase());
+        if (match?.definition) {
+          term.definition = match.definition;
+          term.source = "cited_text";
+        }
+      }
+    }
+
+    // Citation-derived edges: prerequisites extracted from cited text.
+    const withEdges = grounded.filter((term) => term.definition && term.dependsOn.length > 0);
+    if (withEdges.length > 0) {
+      void recordConceptGraph(
+        withEdges.map((term) => ({
+          concept: term.term,
+          domain: primaryDomain,
+          dependsOn: term.dependsOn,
+        })),
+        "citation",
+      ).catch((error) => {
+        console.warn("[summarize] failed to record citation-derived edges:", error);
+      });
+    }
+  } catch (error) {
+    console.warn("[summarize] term grounding pass failed; keeping model definitions:", error);
+  }
+}
+
+export interface SummarizeFromContextOptions extends SummarizeOptions {
+  /** Pre-built persona split (eval fixtures); loaded from the ledger when omitted. */
+  personaSplit?: PersonaSplit;
+  /** Pre-built citation candidates (eval fixtures); loaded from Postgres when omitted. */
+  citationCandidates?: CitationCandidate[];
+  /** Library paper ids for the router's ingested-lookup trigger. */
+  ingestedPaperIds?: string[];
+  /** Skip graph/interaction recording entirely (eval harness). */
+  skipRecording?: boolean;
+  /**
+   * Eval-only hook: observes the parsed model concepts (including
+   * depends_on prerequisites) so the eval harness can judge the LIVE
+   * model's edges instead of re-judging fixture canned edges. Called
+   * once per summarize call, before post-processing.
+   */
+  onConcepts?: (
+    concepts: Array<{ concept: string; domain?: string; dependsOn?: string[] }>,
+  ) => void;
+}
+
+/**
+ * The LLM half of summarize, split from the Postgres half so the eval
+ * harness can drive it from fixtures without a database. Production
+ * traffic goes through `summarizePaper`, which loads everything.
+ */
+export async function summarizePaperFromContext(
+  context: PaperSummaryContext,
+  options: SummarizeFromContextOptions = {},
 ): Promise<SummaryResult> {
-  const context = await loadPaperSummaryContext(paperId);
+  const paperId = context.paperId;
+  const [personaSplit, citationCandidates] = await Promise.all([
+    options.personaSplit ?? loadPersonaSplit(options.userId),
+    options.citationCandidates ?? loadCitationCandidates(paperId),
+  ]);
+  // Sequenced after the candidates: the ingested lookup is now a
+  // membership query over their arXiv ids rather than a full library scan.
+  const ingestedIds = options.ingestedPaperIds ?? (await loadIngestedIdsSafe(citationCandidates));
+
+  // Citation router (no question in the summarize flow): retrieval fires
+  // for obscure/recent or already-ingested cited work. Abstracts are
+  // router metadata — they enter the prompt only inside the clearly
+  // framed grounding block below, never as explanation text.
+  const decisions = routeCitations({
+    candidates: citationCandidates,
+    ingestedPaperIds: ingestedIds,
+  });
+  const citationBlock = renderRoutedCitationContext(citationCandidates, decisions, {
+    max: MAX_CITATIONS_IN_SUMMARY_CONTEXT,
+  });
 
   const systemPrompt = getSystemPrompt("paper_summary");
-  const userPrompt = buildUserPrompt(context);
+  const userPrompt = buildUserPrompt(context, {
+    personaBlock: renderPersonaBlock(personaSplit),
+    citationBlock,
+  });
+
   const rawContent = await generateJson(
     {
       systemPrompt,
@@ -607,21 +1015,46 @@ export async function summarizePaper(
     },
     {
       taskName: "summary",
+      localAgent: options.localAgent,
     },
   );
 
   const llmSummary = parseModelSummary(rawContent);
-  const result = postProcessSummary(llmSummary, context);
+  options.onConcepts?.(
+    llmSummary.concepts.map((concept) => ({
+      concept: concept.concept,
+      domain: concept.domain,
+      dependsOn: concept.depends_on,
+    })),
+  );
+  const result = postProcessSummary(llmSummary, context, Boolean(citationBlock));
 
-  // Persona writes are fire-and-forget; never block the summary on them.
+  const primaryDomain = llmSummary.concepts.find((concept) => concept.domain)?.domain;
+  await groundLowFamiliarityTerms(result, citationCandidates, primaryDomain, options);
+
+  if (options.skipRecording) {
+    return result;
+  }
+
+  // Graph + interaction recording is fire-and-forget; never block the
+  // summary on it. NOTE skipLedger: an auto-generated summary is not
+  // reader exposure — the reader surface records summary_exposure only
+  // when the contract content actually renders (render-gated).
   void recordPersonaSignals({
     userId: options.userId,
     paperId,
     interactionType: "summarize",
     prompt: `Summarize paper ${paperId}`,
-    response: result.sections.map((s) => s.summary).join("\n"),
+    response: result.sections.map((section) => section.summary).join("\n"),
     chunkIds: [],
-    concepts: llmSummary.concepts,
+    concepts: llmSummary.concepts.map((concept) => ({
+      concept: concept.concept,
+      description: concept.description,
+      domain: concept.domain,
+      dependsOn: concept.depends_on,
+      confidence: concept.confidence,
+    })),
+    skipLedger: true,
   }).catch((error) => {
     console.warn("[summarize] failed to persist persona signals:", error);
   });
@@ -629,5 +1062,22 @@ export async function summarizePaper(
   return result;
 }
 
-export type { SummaryResult, SummarySection, SummaryKeyFinding, SummaryFigure } from "./types";
+export async function summarizePaper(
+  paperId: string,
+  options: SummarizeOptions = {},
+): Promise<SummaryResult> {
+  const context = await loadPaperSummaryContext(paperId);
+  return summarizePaperFromContext(context, options);
+}
+
+export type {
+  SummaryResult,
+  SummarySection,
+  SummaryKeyFinding,
+  SummaryFigure,
+  SummaryConcept,
+  SummaryTerm,
+  SummarySource,
+} from "./types";
+export type { PaperSummaryContext } from "./context";
 export type { SummarizeOptions };

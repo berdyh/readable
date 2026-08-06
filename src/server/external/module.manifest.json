@@ -3,12 +3,23 @@
   "id": "server.external",
   "parent": "server",
   "path": "src/server/external",
-  "goal": "Enriches a citation from Semantic Scholar.",
+  "goal": "Enriches citations from Semantic Scholar, singly or as an ingest-time batch.",
   "owns": ["src/server/external"],
   "interface": {
     "entrypoint": "index.ts",
-    "exports": ["enrichCitation", "SemanticScholarPaper"]
+    "exports": [
+      "enrichCitation",
+      "enrichCitationsBatch",
+      "CitationEnrichmentInput",
+      "SemanticScholarPaper"
+    ]
   },
-  "constraints": ["outbound lookups", "response caching"],
+  "uses": [
+    {
+      "module": "server.config",
+      "via": "getTimeout / getUrl"
+    }
+  ],
+  "constraints": ["outbound lookups", "response caching", "rate-limit backoff", "single-flight"],
   "checks": ["pnpm vitest run src/server/external"]
 }

@@ -43,6 +43,7 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
     registerBlockFocusApi,
     unregisterBlockFocusApi,
     focusBlock,
+    getLocalAgent,
   } = useEditorStore();
   const [isFocused, setIsFocused] = useState(false);
   const [showOptions, setShowOptions] = useState(false);
@@ -91,9 +92,10 @@ export function Block({ block, index, onSlashCommand }: BlockProps) {
         },
         selection: params?.selection as QuestionSelection | undefined,
         target: params?.target as string | undefined,
+        localAgent: getLocalAgent(),
       });
     },
-    [state.paperId, index, insertBlock],
+    [state.paperId, index, insertBlock, getLocalAgent],
   );
 
   const handleUpdate = useCallback(

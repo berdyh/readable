@@ -4,6 +4,8 @@ export * from "./models";
 export interface PromptConfig {
   system: {
     paper_summary: { base: string };
+    term_grounding: { base: string };
+    eval_judge: { base: string };
     selection_summary: { base: string };
     qa: { base: string };
   };
@@ -13,12 +15,9 @@ export interface PromptConfig {
     };
   };
   limits: {
-    section: number;
-    paragraph: number;
+    context_char_budget: number;
     figure: number;
-    paragraph_truncate: number;
     figure_caption_truncate: number;
-    figure_context_truncate: number;
     abstract_truncate: number;
     text_truncate: number;
   };
@@ -32,7 +31,9 @@ export interface PromptConfig {
  * prompts.json for a while afterwards, where setting one produced silence rather
  * than an error. They are gone now — the base prompt is returned as-is.
  */
-export function getSystemPrompt(taskType: "paper_summary" | "selection_summary" | "qa"): string {
+export function getSystemPrompt(
+  taskType: "paper_summary" | "term_grounding" | "eval_judge" | "selection_summary" | "qa",
+): string {
   return promptsData.system[taskType].base;
 }
 

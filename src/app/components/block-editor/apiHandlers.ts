@@ -26,6 +26,12 @@ export interface ApiHandlerContext {
   onInsertBlocks: (blocks: Block[], insertIndex?: number) => void;
   selection?: QuestionSelection;
   target?: string;
+  /**
+   * The chat picker's local-agent pin. Sent only on the LLM-backed commands
+   * (/summary, /explain) — figures and citations are pure retrieval and have
+   * no agent to pin.
+   */
+  localAgent?: string;
 }
 
 const BACKEND_UNAVAILABLE_MESSAGES: Record<string, string> = {
@@ -41,12 +47,12 @@ export async function executeApiCommand(
   command: string,
   context: ApiHandlerContext,
 ): Promise<void> {
-  const { paperId, blockIndex, onInsertBlocks, selection, target } = context;
+  const { paperId, blockIndex, onInsertBlocks, selection, target, localAgent } = context;
 
   try {
     switch (command) {
       case "summary":
-        await executeSummary(paperId, blockIndex, onInsertBlocks);
+        await executeSummary(paperId, blockIndex, onInsertBlocks, localAgent);
         break;
       case "figure":
         await executeFigures(paperId, blockIndex, onInsertBlocks, selection);
@@ -55,7 +61,7 @@ export async function executeApiCommand(
         await executeCitations(paperId, blockIndex, onInsertBlocks, selection);
         break;
       case "explain":
-        await executeSelectionSummary(paperId, blockIndex, onInsertBlocks, selection);
+        await executeSelectionSummary(paperId, blockIndex, onInsertBlocks, selection, localAgent);
         break;
       case "arxiv":
         await executeArxiv(paperId, blockIndex, onInsertBlocks, target);
@@ -105,11 +111,12 @@ async function executeSummary(
   paperId: string,
   blockIndex: number,
   onInsertBlocks: (blocks: Block[], insertIndex?: number) => void,
+  localAgent?: string,
 ): Promise<void> {
   const response = await fetch("/api/summarize", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ paperId }),
+    body: JSON.stringify({ paperId, ...(localAgent ? { localAgent } : {}) }),
   });
 
   if (!response.ok) {
@@ -257,6 +264,7 @@ async function executeSelectionSummary(
   blockIndex: number,
   onInsertBlocks: (blocks: Block[], insertIndex?: number) => void,
   selection?: QuestionSelection,
+  localAgent?: string,
 ): Promise<void> {
   if (!selection?.text) {
     throw new Error("Text selection is required to summarize a selection");
@@ -265,7 +273,7 @@ async function executeSelectionSummary(
   const response = await fetch("/api/editor/selection/summary", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ paperId, selection }),
+    body: JSON.stringify({ paperId, selection, ...(localAgent ? { localAgent } : {}) }),
   });
 
   if (!response.ok) {

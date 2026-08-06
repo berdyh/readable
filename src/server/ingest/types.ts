@@ -34,6 +34,7 @@ export interface PaperReference {
   year?: number;
   source?: string;
   doi?: string;
+  arxivId?: string;
   url?: string;
   chunkIds?: string[];
 }
@@ -57,6 +58,8 @@ export interface ParsedTeiResult {
 export interface HtmlParseResult {
   sections: PaperSection[];
   figures: PaperFigure[];
+  /** Bibliography entries parsed from the ar5iv reference list. */
+  references: PaperReference[];
 }
 
 export interface PdfPageText {

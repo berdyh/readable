@@ -22,6 +22,8 @@ export interface TrustDisplayMetadata {
   warnings?: string[];
   confidence?: number | string;
   sourceCount?: number;
+  /** Explanation source label ("model_knowledge" | "cited_text"). */
+  source?: string;
 }
 
 type TrustTone = "trusted" | "partial" | "error" | "legacy" | "neutral";
@@ -103,6 +105,38 @@ const TRUST_TONE_CLASSES: Record<TrustTone, string> = {
  * The trust-first header. It is the first thing in the card because whether an
  * answer is grounded matters more than what it says.
  */
+/**
+ * Source-label chip: whether the explanation content came from the
+ * model's own knowledge or from retrieved cited text. The label was
+ * validated server-side, so rendering it verbatim is safe.
+ */
+function SourceLabelChip({ source }: { source?: string }) {
+  if (source !== "model_knowledge" && source !== "cited_text") {
+    return null;
+  }
+
+  const isCited = source === "cited_text";
+  const explanation = isCited
+    ? "Grounded in retrieved text from the paper's citations."
+    : "Explained from the model's own knowledge.";
+  return (
+    <span
+      data-testid="source-label-chip"
+      className={clsx(
+        "ml-auto inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide",
+        isCited
+          ? "border-sky-300 bg-sky-50 text-sky-800 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-200"
+          : "border-zinc-300 bg-white text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300",
+      )}
+      title={explanation}
+    >
+      {isCited ? "Cited text" : "Model knowledge"}
+      {/* The title tooltip is mouse-only; carry it for screen readers too. */}
+      <span className="sr-only">{` — ${explanation}`}</span>
+    </span>
+  );
+}
+
 function AnswerTrustStrip({
   status,
   trust,
@@ -132,6 +166,7 @@ function AnswerTrustStrip({
         <div className="font-medium">{trustState.label}</div>
         <div className="mt-0.5 text-[11px] leading-relaxed opacity-90">{trustState.detail}</div>
       </div>
+      <SourceLabelChip source={trust?.source} />
     </div>
   );
 }

@@ -1,110 +1,273 @@
 # Open issues and next steps
 
-Working state as of **2026-07-29**, `main`. `pnpm verify` green: 304 tests on `main`, 0 lint errors, 0 lint warnings. `pnpm test:api -- --live` is
-**5/5** — health, qa, summarize, chat session, arXiv ingest.
+Working state as of **2026-07-31**, branch `feat/explanation-engine` (PR #23, `v0.2.0.0`).
+`pnpm verify` green: 458 tests, 0 lint errors, 0 lint warnings. `pnpm eval -- --dry-run`
+passes all gates; the live eval baseline is not yet recorded (see below).
+
+The explanation-engine wave landed: document-order chunk fetch (`token_start` ordinal),
+coverage+deepening budget fill, the teaching contract in `/api/summarize`
+(hook → claim → mechanism → evidence → glossary with source labels), persona known/new
+calibration read from the mastery ledger, the concept graph (`concepts` / `concept_edges` +
+typed ledger signals), Semantic Scholar enrichment persisted at ingest (runtime reads
+Postgres only), the four-trigger citation router in `server/explain`, pass-1 contract
+rendering with render-gated exposure, and the `pnpm eval` harness with a pinned judge.
 
 This file is a **living checklist, not a record** — when an item is done, delete it rather
 than marking it ✅, and put the durable explanation in the doc that owns that subject.
-Anything frozen belongs in [`archive/`](./archive/).
+Anything frozen belongs in [`archive/`](./archive/). What shipped is recorded in
+`CHANGELOG.md` and the PR, not here.
+
+Items are grouped by component, then priority: **P0** (drop everything) through **P4**
+(someday). This file is the single tracker for this repo — there is deliberately no
+`TODOS.md`, because two lists of the same truth drift apart.
+
+---
 
 ## Next session — start here
 
-Two items, both deliberately deferred rather than rushed.
+Two P1 items, in this order. Everything below them is context, not queue.
 
-### 1. Make local coding-agent detection self-correcting
+### 1. Reader — pass toggle discards in-progress edits
 
-`isAgentAuthenticated()` in `src/server/llm/providers/local-coding-agent.ts` decides whether
-you are signed in by **reading and shape-checking the CLI's credential file**. It never asks
-the CLI. That makes the whole feature pinned to the file formats of `codex-cli 0.145.0` and
-`claude 2.1.220`.
+**Priority:** P1 · **Surfaced by:** /ship pre-landing review (coverage audit), 2026-07-31
 
-That assumption has already broken once: `codex exec --ask-for-approval never` used to be
-valid, the flag moved, and the resulting exit-2 was the original reason
-`LLM_PROVIDER=coding-agent` failed for everyone.
+Switching ThreePass passes regenerates `initialBlocks`, and the store effect in
+`block-editor/store.tsx` replaces every block when that array's identity changes — so any
+edit the reader made is discarded. The mechanism predates the explanation-engine wave (any
+summary arrival did this), but pass-aware rendering turned it into a one-click loss.
 
-What is genuinely portable today (verified by reading the code, not by running it elsewhere):
+- **Repro:** open a paper signed in, edit a block on the skim pass, switch to read → edits gone.
+- **Why it was not patched during the ship:** the fix is per-pass block state or dirty-checking
+  in the editor store — editor state architecture, not a patch. Rushing it into a 41-commit
+  wave risked new editor bugs in the surface the whole product runs on.
+- **Start at:** `src/app/components/workspace/ReaderWorkspace.tsx` (pass → `initialBlocks`),
+  `src/app/components/block-editor/store.tsx` (the replace-on-identity-change effect),
+  `src/app/components/workspace/usePaperContent.ts` (where the pass decides content).
+- **Design question to settle first:** are edits per-pass (three independent documents) or
+  one document the passes render differently? That answers whether to keep three block sets
+  or to diff-and-merge into one.
+- **Wants:** an E2E test for the repro above — neither half is wrong in isolation, so only an
+  integration-level test catches it.
 
-- No hardcoded paths — `os.homedir()`, and `CODEX_HOME` / `CLAUDE_CONFIG_DIR` are honoured.
-- `PATH` discovery splits on `path.delimiter`, so it is not Unix-only.
-- A missing or unparseable credential file returns `null`, so the agent renders **greyed out**
-  rather than crashing. The failure mode is safe.
+### 2. Concept graph — provenance, now blocking
 
-Where it will silently misreport on another machine:
+**Priority:** P1 · **Status:** confirmed **in scope** for the next wave (2026-07-31)
 
-- **macOS** — Claude Code may hold credentials in the Keychain rather than
-  `~/.claude/.credentials.json`. You would be signed in and the picker would grey it out.
-- **Any future format change** in either CLI — same false negative, no diagnostic.
+`concepts` and `concept_edges` are global tables written last-writer-wins from LLM output
+over user-ingested papers, with no record of which paper or user produced a node or edge.
+This was a latent risk while nothing read the graph cross-user. **The next wave adds a
+cross-user read path, so it is no longer latent — this is blocking work in that wave**, not
+a precondition to remember.
 
-**The fix:** probe rather than parse. Run the CLI's own status (or a trivial `exec`) once,
-cache it for the session, and trust _its_ answer. That survives format changes by
-construction, which file-shape checking cannot.
+Without provenance, one malicious or sloppy paper poisons shared concept descriptions and
+prerequisite ordering for every user, and there is no way to attribute or roll back a bad
+node.
 
-Related, from the same work and worth doing at the same time:
+Required before the read path ships:
 
-- The picker only reaches `/api/qa`. `/api/summarize` and `/api/editor/selection/*` still use
-  the configured order, so "I picked Claude Code" is scoped to chat only.
-- Credential refresh is write-through-to-nowhere: an agent refreshing its OAuth token mid-call
-  writes into the temp `CODEX_HOME` we then delete. Correct, but it repeats the refresh
-  round-trip every request, and would become a real problem if upstream ever rotated refresh
-  tokens on use.
-- `--tools ""` on Claude Code is a variadic flag — the empty string must stay last or it
-  swallows the following argument.
+- Provenance columns (`paper_id`, and `user_id` where it does not leak identity) on both
+  `concepts` and `concept_edges`, written by `recordConceptGraph`.
+- Treat `display_name` / `description` as untrusted text at **every** render site and every
+  prompt-composition site — they are LLM output derived from arbitrary uploaded documents.
+- Corroboration before overwrite: require agreement from more than one source/paper before an
+  LLM-sourced description replaces an existing shared one, rather than last-writer-wins.
+- Decide the read model: is the graph global-but-attributed, or per-user views over a shared
+  skeleton? This decision drives the schema, so make it before writing migrations.
 
-### 2. Stop sending the whole paper to the model
+**Start at:** `src/server/db/concepts.ts` (`upsertConcepts`, `upsertConceptEdges`),
+`src/server/persona/record.ts` (`recordConceptGraph`), `src/server/db/schema.ts` +
+`schema.sql` (both, together).
 
-`/api/summarize` currently assembles the entire paper into one prompt. That is wrong on cost,
-on latency, and on quality — the relevant couple of kB is buried in ~24kB of noise.
+Length caps and control-character stripping landed in the ship wave; they bound the blast
+radius of a single write but establish no provenance.
 
-**Measure before designing.** The one number that matters is not yet known: how much of the
-prompt is paper text versus assembled scaffolding. `gemma-4-26b:free` summarised the raw 24kB
-paper standalone in 47s, but `/api/summarize` still hit a 180s timeout with the same model —
-so the real prompt is _substantially_ larger than the paper and nobody has measured the
-difference. Get that number first; it should drive the design rather than assumptions.
+Related and unblocked by the same work: **`fetchConceptEdgesByFromKeys` currently has no
+callers** (`src/server/db/concepts.ts`) — it was built for exactly this read path. Its row
+mapper silently coerces any unknown `relation` to `depends_on` and any unknown `source` to
+`llm`, which will mask a future enum widening; pin that behavior with a test when it gains
+its first caller.
 
-Directions worth weighing once it is known, not before:
+---
 
-- **Retrieval-scoped summarisation** — `server.search` already does hybrid retrieval. Summarise
-  the top-k chunks rather than everything.
-- **Section-wise map-reduce** — summarise per section, cache those, reduce to a paper summary.
-  Plays well with the existing `paper_chunks` section metadata.
-- **Cheap-model triage** — a fast pass selects what the expensive pass reads.
+## Correctness — found in the ship review, not yet fixed
 
-Each has a different cost/quality trade-off, and the prompt-composition number decides which
-is worth building.
+### Chunk ordering comparator is non-transitive on mixed rows
 
-## Verification gaps
+**Priority:** P2 · `src/server/db/papers.ts:68`
 
-### Two of the six chat flows are still unverified
+`compareChunksByDocumentOrder` compares by `tokenStart` only when **both** sides have one,
+and otherwise falls through to natural chunk-id comparison. A paper holding both
+ordinal-bearing and legacy `NULL` rows can therefore form ordering cycles (A < B by ordinal,
+B < C by id, C < A by id), and `Array.sort` gives an unspecified order for cyclic comparators
+— silently reintroducing the exact class of bug this wave fixed.
 
-`pnpm test:api -- --live` covers the authenticated **API** surface end to end and runs
-unattended (it mints its own Clerk session token — `scripts/lib/clerk-test-session.ts`).
-The jsdom project now covers the UI half of four flows:
+Reachable when `upsertPaperChunks` runs without `replaceExistingForPaper`, interleaving new
+and legacy chunks. Fix: treat a missing `tokenStart` as `+Infinity` so ordinal rows always
+sort before legacy ones, then tiebreak by natural id — that restores a total order.
 
-- slash-command dispatch — `commands.test.ts`
-- citation click → block scroll/reveal — `useBlockNavigation.test.tsx`
-- chat tab deletion + confirmation — `ChatTabStrip.test.tsx`
-- insert-answer into the document — exercised through the navigate/intent contracts
+### Duplicate citations lose enrichment
 
-**Writing the first of those found a real bug**: the editor replied to a navigate
-request inline, inside the synchronous dispatch, so the caller always subscribed too
-late and a successfully revealed citation timed out into the red "unavailable" state.
-Fixed by deferring the reply to a microtask. Worth remembering as evidence that this
-seam needs rendered tests, not just review — both halves were individually correct and
-only the ordering between them was wrong.
+**Priority:** P3 · `src/server/external/semantic-scholar.ts:444`
 
-Still unverified:
+`batchKeyById` is a `Map<string, string>`, so when two bibliography entries resolve to the
+same Semantic Scholar id (the same work cited twice under different keys), the second
+`set(id, input.key)` overwrites the first and the earlier citation silently receives no
+enrichment. Fix: make it `Map<string, string[]>` and apply the result to every key that
+mapped to that id.
 
-- **sending and receiving a message**
-- **session persistence across a reload**
+### Degraded re-ingest drops citation-to-chunk anchors
 
-Both need meaningful fetch orchestration rather than a render, so they are better done
-alongside the ingestion work than bolted on separately.
+**Priority:** P3 · `src/server/db/papers.ts:496,600`
 
-## Smaller follow-ups
+`chunk_ids = EXCLUDED.chunk_ids` is the one citation field overwritten unconditionally while
+every other field COALESCE-preserves. If a paper is re-ingested through a path that maps no
+references to chunks (e.g. ar5iv previously, PDF fallback later), stored anchors reset to
+`{}` and citation-reveal navigation loses its targets — even though the S2 enrichment on the
+same row survives.
 
-- **Selection summaries do not feed the persona graph.** `qa` and `summarize` both call
-  `recordPersonaSignals()`; the selection path does not. Needs the selection summary schema to
-  return `concepts` first, so it is a feature rather than a fix.
+Arguably correct as written (fresh chunk ids are re-derived; stale ones would dangle), so
+this is a **deliberate-tradeoff note**, not a confirmed bug. If anchor loss matters, preserve
+stored `chunk_ids` when the incoming array is empty, mirroring the `authors` CASE guard.
+
+### The citation router's "recent work" trigger widens on its own
+
+**Priority:** P2 · `src/server/explain/constants.ts:29`
+
+`RECENT_YEAR_CUTOFF = 2025` is a frozen literal, but its own comment states the intent:
+"post-training-cutoff risk". Those are not the same thing. The model's training cutoff moves
+forward; the constant does not. Today (2026) every paper published in 2025 **or later** trips
+the obscure-or-recent trigger and pulls retrieval, whether or not the model knows the work —
+and that widens every year the constant sits still, silently increasing prompt size, cost, and
+latency on a path nobody is watching.
+
+Fix options, in preference order: derive the cutoff from the active model's known training
+cutoff (it is per-model data, so it belongs next to the model entry in `models.json`, not in a
+shared constant); or keep a constant but assert in a test that it is within N years of the
+current date, so it fails loudly instead of drifting.
+
+Found by the pre-merge review (2026-07-31), after the eight-reviewer pass missed it.
+
+### Legacy persona rows never join the ledger
+
+**Priority:** P3 · `src/server/db/persona.ts`
+
+Rows written before the concept-graph wave hold raw concept strings; ledger rows hold
+normalized `{domain}:{key}` keys. The same concept can exist twice for one user
+(`Transformer` and `ml:transformer`), and pre-wave reading history contributes nothing to
+derived mastery. Read paths tolerate the zero-state defaults, so nothing is broken — but the
+calibration is quietly less informed than it looks. Fix, if wanted: a one-time best-effort
+backfill mapping legacy strings through the `server/explain` normalizer, merging duplicates.
+
+---
+
+## Performance — measured, not urgent
+
+**Priority:** P3
+
+- **N+1 writes on the concept-graph path.** `upsertConcepts` and `upsertConceptEdges`
+  (`src/server/db/concepts.ts:20,49`) and `recordConceptSignal` (`src/server/db/persona.ts`)
+  each issue one `INSERT ... ON CONFLICT` per row inside a loop. Bounded today (≤8 concepts ×
+  ≤4 prerequisites per interaction) and fire-and-forget, but it is the classic batchable shape
+  on a path every QA/summarize/selection interaction touches. Fix: multi-row `VALUES` or
+  `unnest($1::text[], ...)` with the same conflict clause.
+- **Schema DDL takes table locks on every cold start.** The `ALTER TABLE ... ADD COLUMN IF NOT
+EXISTS` statements in `ensureSchema()` acquire `ACCESS EXCLUSIVE` on `paper_citations` and
+  `persona_concepts` even when the columns already exist (`IF NOT EXISTS` skips the change,
+  not the lock), inside one transaction. Harmless for a mostly single-instance local-first app
+  on PG16; if multi-instance deploys ever matter, gate the block behind an
+  `information_schema.columns` check or set a `lock_timeout` so a blocked migration fails fast.
+- **`/api/persona/exposure` has no rate limit.** Cosmetic today: the route is auth-gated and an
+  authenticated caller can only inflate their _own_ ledger, and field lengths and concept
+  counts are now capped. Worth a limit if the ledger ever feeds anything shared.
+- **Double sort on chunk fetch.** `fetchPaperChunksByPaperId` orders in SQL and then re-sorts
+  in JS with a comparator whose semantics differ from the SQL collation. The JS sort is
+  authoritative; the SQL `ORDER BY` is redundant work (keep it only as a stable pre-sort, or
+  drop it once legacy `NULL`-ordinal rows are gone).
+
+---
+
+## Test coverage — the honest number
+
+**Priority:** P2
+
+The ship audit traced 67 paths through the diff and found **31 covered (46%)** — code paths
+43%, user flows 57%, LLM behavior covered by `pnpm eval`. All **9 flagged regressions**
+(changed behavior with no covering test) were fixed before merge; **36 gaps remain**, of which
+7 want E2E and 2 want eval cases.
+
+The gaps worth closing first, because they guard data correctness rather than rendering:
+
+- `src/server/db/concepts.ts` — no tests at all: the `GREATEST(confidence)` edge merge, the
+  empty-input early returns, and the read-side `relation`/`source` coercions.
+- `src/server/db/persona.ts` — `recordConceptSignal`'s ledger upsert carries the subtlest
+  persistence semantics in the wave (per-signal `jsonb` counter increment, `distinct_paper_ids`
+  dedupe CASE, COALESCE name/description) with no SQL-shape test. `papers.test.ts` pins its
+  sibling upsert exactly this way — mirror that.
+- `src/server/qa/context.ts` — a 165-line rewrite (live enrichment → Postgres-only) with zero
+  direct tests; its `citationCount` mapping feeds the router's obscurity trigger, so a wrong
+  mapping silently disables retrieval.
+- `/api/persona/exposure` — the only new route with neither a unit test of the handler nor a
+  probe in `scripts/test-api-endpoints.ts`.
+
+---
+
+## Reader — source labels are invisible on the reading surface
+
+**Priority:** P2 · **Surfaced by:** /ship design review, 2026-07-31
+
+Contract blocks carry a server-validated `metadata.sourceLabel`
+(`model_knowledge` / `cited_text`), and chat renders the equivalent as a trust chip, but no
+block renderer reads it — so provenance shows in chat and silently vanishes in the product's
+main reading view. The plumbing is correct and tested; only rendering is missing.
+
+- **Why deferred:** chip placement in reading flow is a visual-hierarchy question, worth a
+  `/design-review` rather than a rushed inline chip.
+- **Start at:** `src/app/components/block-editor/parsers.ts` (sets the metadata),
+  `src/app/components/chat/primitives/answer-card.tsx` (`SourceLabelChip`, the pattern to match).
+- Unify the `new_terms` inline `*(from cited text)*` suffix with whatever chip lands.
+- Related, same area: on the skim pass the paper HTML renders first and is then wholesale
+  replaced when the summary arrives, with no loading state or transition. Verify visually
+  whether that reads as a glitch.
+
+---
+
+## Eval — record the live baseline
+
+**Priority:** P2 · **Blocked by:** nothing (needs one live model run)
+
+`scripts/eval/baseline.json` is committed with `recordedAt: null`. Run
+`pnpm eval -- --update-baseline` against live models once, review the scores, and commit the
+result. Until then the harness gates on absolute thresholds only, not on drift from a
+baseline. The judge model is pinned in `models.json` (`eval_judge`) — never point it at a
+floating alias, or scores stop being comparable.
+
+Known flake: long fixtures can exceed the provider timeout; raise it for the run
+(`OPENROUTER_TIMEOUT_MS=420000 pnpm eval -- --update-baseline`) rather than lowering the gate.
+Partial live runs during the ship scored coverage 0.97, hook 0.88, plain language 0.80,
+mechanism 0.90, evidence 0.95, glossary 0.90+, edge validity 1.00 — all above threshold.
+
+---
+
+## Explanation engine — deferred by design (not forgotten)
+
+**Priority:** P3
+
+- **Tier-3 on-demand ingest of cited papers.** The citation router already detects when a
+  cited paper is in the library (trigger 3) and is built ready for a "pull this citation in"
+  action, but the async ingest job + sidecar progress UX needs deliberate design before it
+  exists behind a user action. Do not bolt it onto the hot path.
+- **Spaced-repetition scheduling / review prompts.** The mastery ledger stores everything
+  scheduling would need (typed signals, exposure counts, distinct papers, last-seen, decay
+  derived at read). Scheduling itself is a later product feature.
+- **Page-number backfill for ar5iv ingest.** ar5iv chunks store no page numbers; conditional
+  rendering removed the "(page ?)" harm, so backfill is an enhancement, not a fix.
+
+---
+
+## Docs and housekeeping
+
+**Priority:** P4
+
 - **`docs/editor-architecture.md`** still describes the removed `EditorWorkspace`/Tiptap-ribbon
   tree. Its "Canonical helper locations" section is current; the component tree and state
   diagram are historical.
@@ -131,3 +294,9 @@ invented from the code. This is owned by the user.
 - OpenRouter's `:free` slugs rotate and are retired without notice; every model configured
   before 2026-07-29 had 404'd. The paid `deepseek-v4-flash` entries in `models.json` are
   deliberate — see the `openrouter_cost` note there.
+- **OpenRouter can silently truncate a prompt and return HTTP 200 with `{}`.** An upstream
+  provider cut the summarize prompt to exactly 2048 tokens and the model answered with an
+  empty object — a success response no failover path caught, invisible to unit tests and code
+  review. JSON calls now send `provider.require_parameters` + `transforms: []` and reject
+  degenerate `{}`/`[]` completions. The eval harness found this; keep it in the loop when
+  changing providers.

@@ -21,6 +21,7 @@ export {
   searchPaperChunksByText,
   fetchChunksByIds,
   fetchChunksByPageWindow,
+  filterIngestedPaperIds,
 } from "./papers";
 export type {
   PaperChunkTextSearchHit,
@@ -29,7 +30,14 @@ export type {
   ReplacePaperIngestDataResult,
   UpsertPaperChunksOptions,
 } from "./papers";
-export { upsertPersonaConcepts, upsertInteractions, listPersonaConceptsForUser } from "./persona";
+export {
+  upsertInteractions,
+  listPersonaConceptsForUser,
+  recordConceptSignal,
+  fetchConceptLedgerForUser,
+} from "./persona";
+export type { RecordConceptSignalArgs } from "./persona";
+export { upsertConcepts, upsertConceptEdges, fetchConceptEdgesByFromKeys } from "./concepts";
 export {
   ChatSessionOwnershipError,
   createChatSession,

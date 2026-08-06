@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "id": "server.explain",
+  "parent": "server",
+  "path": "src/server/explain",
+  "goal": "Mechanism library for teaching-quality explanations: persona split, source labels, citation routing.",
+  "owns": ["src/server/explain"],
+  "interface": {
+    "entrypoint": "index.ts",
+    "exports": [
+      "loadPersonaSplit",
+      "renderPersonaBlock",
+      "deriveConceptMastery",
+      "buildConceptKey",
+      "validateSourceLabel",
+      "SOURCE_LABEL_SCHEMA",
+      "SOURCE_LABEL_INSTRUCTIONS",
+      "routeCitations",
+      "selectGroundingTerms",
+      "renderRoutedCitationContext",
+      "SIGNAL_WEIGHTS",
+      "MASTERY_THRESHOLD"
+    ]
+  },
+  "uses": [
+    {
+      "module": "server.db",
+      "via": "fetchConceptLedgerForUser"
+    },
+    {
+      "module": "server.text",
+      "via": "truncateWithEllipsis"
+    }
+  ],
+  "constraints": [
+    "pure mechanisms, no flow policy",
+    "persona reads never block or throw",
+    "labels server-validated"
+  ],
+  "checks": ["pnpm vitest run src/server/explain"]
+}

@@ -22,6 +22,14 @@
       "via": "loadQuestionEvidence"
     },
     {
+      "module": "server.explain",
+      "via": "loadPersonaSplit / renderPersonaBlock"
+    },
+    {
+      "module": "server.persona",
+      "via": "recordPersonaSignals"
+    },
+    {
       "module": "server.ingest",
       "via": "fetchArxivMetadata"
     },

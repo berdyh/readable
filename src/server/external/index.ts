@@ -1,8 +1,10 @@
 /**
  * Public surface of the external module.
  *
- * Only citation enrichment is public. The per-lookup cache and the individual
- * DOI/arXiv/title lookups behind `enrichCitation()` are internal.
+ * Only citation enrichment is public: `enrichCitationsBatch()` for the
+ * ingest pipeline (batch endpoint + bounded title fallback) and
+ * `enrichCitation()` for single lookups. The per-lookup cache and the
+ * individual DOI/arXiv/title lookups are internal.
  */
-export { enrichCitation } from "./semantic-scholar";
-export type { SemanticScholarPaper } from "./semantic-scholar";
+export { enrichCitation, enrichCitationsBatch } from "./semantic-scholar";
+export type { CitationEnrichmentInput, SemanticScholarPaper } from "./semantic-scholar";

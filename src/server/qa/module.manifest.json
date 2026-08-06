@@ -19,20 +19,16 @@
       "via": "generateJson"
     },
     {
+      "module": "server.explain",
+      "via": "loadPersonaSplit / routeCitations / validateSourceLabel"
+    },
+    {
       "module": "server.persona",
       "via": "recordPersonaSignals"
     },
     {
-      "module": "server.external",
-      "via": "enrichCitation"
-    },
-    {
       "module": "server.db",
       "via": "fetchChunksByIds"
-    },
-    {
-      "module": "server.ingest",
-      "via": "@/server/ingest/types"
     },
     {
       "module": "server.llm-config",

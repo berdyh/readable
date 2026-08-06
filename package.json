@@ -1,6 +1,6 @@
 {
   "name": "readable",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -14,6 +14,7 @@
     "test": "vitest run",
     "prepare": "node scripts/prepare.mjs",
     "lint-staged": "lint-staged",
+    "eval": "tsx scripts/eval-explanations.ts",
     "test:stores": "tsx scripts/test-stores.ts",
     "test:api": "tsx scripts/test-api-endpoints.ts",
     "db:migrate": "tsx scripts/db-migrate.ts",

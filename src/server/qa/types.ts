@@ -1,3 +1,5 @@
+import type { ExplanationSource } from "@/server/explain";
+
 export interface QuestionSelection {
   text?: string;
   page?: number;
@@ -45,6 +47,8 @@ export interface QaCitationContext {
   url?: string;
   arxivId?: string;
   abstract?: string;
+  /** Persisted Semantic Scholar citation count (router obscurity signal). */
+  citationCount?: number;
 }
 
 export interface NormalizedSelection {
@@ -102,4 +106,9 @@ export interface AnswerResult {
   answer: string;
   cites: AnswerCitation[];
   trust: AnswerTrustMetadata;
+  /**
+   * Server-validated source label: "cited_text" only when the citation
+   * router supplied retrieved passages for this answer.
+   */
+  source?: ExplanationSource;
 }

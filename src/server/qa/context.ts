@@ -1,15 +1,9 @@
-import { fetchArxivMetadata } from "@/server/ingest";
-import type { ArxivMetadata } from "@/server/ingest/types";
 import {
   fetchPaperCitationsByPaperId,
   fetchPaperFiguresByPaperId,
   type Citation,
   type Figure,
 } from "@/server/db";
-import {
-  enrichCitation as enrichWithSemanticScholar,
-  type SemanticScholarPaper,
-} from "@/server/external";
 import { hybridPaperChunkSearch, type HybridPaperChunkHit } from "@/server/search";
 
 import type {
@@ -25,7 +19,7 @@ import type {
 const DEFAULT_HYBRID_LIMIT = 8;
 const DEFAULT_HYBRID_ALPHA = 0.65;
 const DEFAULT_PAGE_WINDOW = 1;
-const MAX_CITATIONS_TO_ENRICH = 4;
+const MAX_CITATIONS_IN_CONTEXT = 4;
 
 function normalizeTextValue(value: unknown): string | undefined {
   if (typeof value !== "string") {
@@ -127,162 +121,27 @@ function mapFigureToContext(figure: Figure | undefined): QaFigureContext | undef
   };
 }
 
-const ARXIV_PATTERNS: RegExp[] = [
-  /arxiv[:\s]+(\d{4}\.\d{4,5}(?:v\d+)?)/i,
-  /arxiv\.org\/(?:abs|pdf)\/([\w\-\.\/]+?)(?:v\d+)?(?:\.pdf)?(?:[#?].*)?$/i,
-  /10\.48550\/arXiv\.(\d{4}\.\d{4,5}(?:v\d+)?)/i,
-  /10\.48550\/ARXIV\.(\d{4}\.\d{4,5}(?:v\d+)?)/i,
-  /\b(\w+\/\d{7})(?:v\d+)?\b/i,
-  /\b(\d{4}\.\d{4,5})(?:v\d+)?\b/,
-];
-
-function normalizeArxivIdentifier(value: string | undefined): string | undefined {
-  if (!value) {
-    return undefined;
-  }
-
-  const cleaned = value.replace(/\.pdf$/i, "");
-  return cleaned.replace(/v\d+$/i, "").trim() || undefined;
-}
-
-function extractArxivIdFromCitation(citation: Citation | undefined): string | undefined {
-  if (!citation) {
-    return undefined;
-  }
-
-  const candidates: string[] = [];
-
-  if (citation.url) {
-    candidates.push(citation.url);
-  }
-  if (citation.doi) {
-    candidates.push(citation.doi);
-  }
-  if (citation.citationId) {
-    candidates.push(citation.citationId);
-  }
-  if (citation.title) {
-    candidates.push(citation.title);
-  }
-
-  for (const candidate of candidates) {
-    for (const pattern of ARXIV_PATTERNS) {
-      const match = candidate.match(pattern);
-      if (match?.[1]) {
-        const normalized = normalizeArxivIdentifier(match[1]);
-        if (normalized) {
-          return normalized;
-        }
-      }
-    }
-  }
-
-  return undefined;
-}
-
-function applyArxivMetadata(
-  context: QaCitationContext,
-  metadata: ArxivMetadata,
-  arxivId: string,
-): void {
-  context.arxivId = metadata.id ?? arxivId;
-  context.abstract = metadata.abstract ?? context.abstract;
-  if (!context.title && metadata.title) {
-    context.title = metadata.title;
-  }
-  if (!context.authors?.length && metadata.authors?.length) {
-    context.authors = metadata.authors;
-  }
-  if (!context.year && metadata.publishedAt) {
-    const year = new Date(metadata.publishedAt).getUTCFullYear();
-    if (!Number.isNaN(year)) {
-      context.year = year;
-    }
-  }
-}
-
-function applySemanticScholarMetadata(
-  context: QaCitationContext,
-  metadata: SemanticScholarPaper,
-): void {
-  if (!context.abstract && metadata.abstract) {
-    context.abstract = metadata.abstract;
-  }
-  if (!context.title && metadata.title) {
-    context.title = metadata.title;
-  }
-  if (!context.authors?.length && metadata.authors?.length) {
-    context.authors = metadata.authors;
-  }
-  if (!context.year && metadata.year) {
-    context.year = metadata.year;
-  }
-  if (!context.doi && metadata.doi) {
-    context.doi = metadata.doi;
-  }
-  if (!context.arxivId && metadata.arxivId) {
-    context.arxivId = metadata.arxivId;
-  }
-  if (!context.url && (metadata.openAccessPdfUrl || metadata.url)) {
-    context.url = metadata.openAccessPdfUrl ?? metadata.url;
-  }
-  if (!context.source && metadata.venue) {
-    context.source = metadata.venue;
-  }
-}
-
-async function enrichCitation(
+/**
+ * Citation context comes from Postgres only (S2 hygiene): enrichment —
+ * abstract, venue, citation counts, arXiv ids — was persisted at ingest.
+ * The QA hot path no longer calls arXiv or Semantic Scholar.
+ */
+function mapCitationToContext(
   citationId: string,
   citation: Citation | undefined,
-  arxivCache: Map<string, ArxivMetadata | null>,
-): Promise<QaCitationContext> {
-  const context: QaCitationContext = {
+): QaCitationContext {
+  return {
     citationId,
     title: citation?.title,
     authors: citation?.authors,
     year: citation?.year,
-    source: citation?.source,
+    source: citation?.source ?? citation?.venue,
     doi: citation?.doi,
-    url: citation?.url,
+    url: citation?.url ?? citation?.openAccessPdfUrl,
+    arxivId: citation?.arxivId,
+    abstract: citation?.abstract,
+    citationCount: citation?.citationCount,
   };
-
-  // arXiv enrichment — most precise when available.
-  const arxivId = extractArxivIdFromCitation(citation);
-  if (arxivId) {
-    if (!arxivCache.has(arxivId)) {
-      const metadata = await fetchArxivMetadata(arxivId).catch(() => undefined);
-      arxivCache.set(arxivId, metadata ?? null);
-    }
-    const metadata = arxivCache.get(arxivId);
-    if (metadata) {
-      applyArxivMetadata(context, metadata, arxivId);
-    }
-  }
-
-  // Semantic Scholar enrichment — fills gaps for citations without an
-  // arXiv id, or backfills abstracts/venues/openAccessPdf URLs the
-  // arXiv path doesn't provide. Best-effort; module handles its own
-  // caching + error swallowing.
-  const ssEnrichInput: {
-    arxivId?: string;
-    doi?: string;
-    title?: string;
-    year?: number;
-  } = {};
-  if (context.arxivId) ssEnrichInput.arxivId = context.arxivId;
-  if (context.doi) ssEnrichInput.doi = context.doi;
-  if (!context.abstract && context.title) {
-    ssEnrichInput.title = context.title;
-    ssEnrichInput.year = context.year;
-  }
-  if (ssEnrichInput.arxivId || ssEnrichInput.doi || ssEnrichInput.title) {
-    const ss = await enrichWithSemanticScholar(ssEnrichInput).catch(() => undefined);
-    if (ss) {
-      applySemanticScholarMetadata(context, ss);
-    }
-  }
-
-  return context;
 }
 
 async function collectRelevantFigures(
@@ -322,8 +181,7 @@ async function collectRelevantCitations(
   }
 
   const sorted = Array.from(citationCounts.entries()).sort((a, b) => b[1] - a[1]);
-
-  const candidates = sorted.slice(0, MAX_CITATIONS_TO_ENRICH).map(([citationId]) => citationId);
+  const candidates = sorted.slice(0, MAX_CITATIONS_IN_CONTEXT).map(([citationId]) => citationId);
 
   const citations = await fetchPaperCitationsByPaperId(paperId);
   const citationMap = new Map<string, Citation>();
@@ -331,16 +189,9 @@ async function collectRelevantCitations(
     citationMap.set(citation.citationId, citation);
   }
 
-  const cache = new Map<string, ArxivMetadata | null>();
-  const contexts: QaCitationContext[] = [];
-
-  for (const citationId of candidates) {
-    const citation = citationMap.get(citationId);
-    const context = await enrichCitation(citationId, citation, cache);
-    contexts.push(context);
-  }
-
-  return contexts;
+  return candidates.map((citationId) =>
+    mapCitationToContext(citationId, citationMap.get(citationId)),
+  );
 }
 
 export async function loadQuestionEvidence(

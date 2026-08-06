@@ -17,7 +17,11 @@ import type {
   ChatMessageMetadata as WireChatMessageMetadata,
   ChatTrustMetadata,
 } from "@/server/chat/types";
-import type { AnswerCitation, AnswerTrustMetadata as QaTrustMetadata } from "@/server/qa/types";
+import type {
+  AnswerCitation,
+  AnswerResult,
+  AnswerTrustMetadata as QaTrustMetadata,
+} from "@/server/qa/types";
 
 import type { TrustDisplayMetadata } from "../primitives/answer-card";
 import type { Source } from "../primitives/sources";
@@ -91,6 +95,26 @@ export interface ChatAnswerResponse {
   cites?: Source[];
   reasoning?: string;
   trust?: TrustDisplayMetadata;
+  /**
+   * Server-validated source label; folded into `trust` for display.
+   * Derived, not redeclared — adding a label server-side breaks this build
+   * rather than silently rendering nothing.
+   */
+  source?: AnswerResult["source"];
+}
+
+/**
+ * Lifts the answer-level source label into the trust display block so
+ * the trust strip is the single place that renders provenance.
+ */
+export function withSourceLabel(
+  trust: TrustDisplayMetadata | undefined,
+  source: ChatAnswerResponse["source"],
+): TrustDisplayMetadata | undefined {
+  if (!source) {
+    return trust;
+  }
+  return { ...(trust ?? {}), source };
 }
 
 export function createLocalId(prefix: string): string {

@@ -1,3 +1,5 @@
+import type { ExplanationSource } from "@/server/explain";
+
 export type ChatTrustStatus = "sourced" | "uncited" | "refused" | "unavailable" | "unknown";
 
 export type ChatVectorRetrievalStatus =
@@ -19,12 +21,21 @@ export interface ChatCitation {
   quote?: string;
 }
 
+/** Alias, not a copy: server/explain owns the label vocabulary. */
+export type ChatSourceLabel = ExplanationSource;
+
 export interface ChatTrustMetadata {
   status: ChatTrustStatus;
   hasEvidence: boolean;
   validCitationCount: number;
   invalidCitationCount: number;
   warnings: string[];
+  /**
+   * Explanation source label (server-validated upstream): whether the
+   * answer content came from the model's own knowledge or retrieved
+   * cited text. Optional — older persisted rows predate it.
+   */
+  source?: ChatSourceLabel;
   retrieval: {
     vector: {
       status: ChatVectorRetrievalStatus;

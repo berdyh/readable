@@ -65,6 +65,37 @@ CREATE TABLE IF NOT EXISTS paper_citations (
 );
 CREATE INDEX IF NOT EXISTS paper_citations_paper_idx ON paper_citations(paper_id);
 
+-- Semantic Scholar enrichment, persisted at ingest so the runtime
+-- explanation path reads Postgres only. enriched_at marks when the row
+-- was last enriched; NULL means never.
+ALTER TABLE paper_citations ADD COLUMN IF NOT EXISTS abstract TEXT;
+ALTER TABLE paper_citations ADD COLUMN IF NOT EXISTS arxiv_id TEXT;
+ALTER TABLE paper_citations ADD COLUMN IF NOT EXISTS venue TEXT;
+ALTER TABLE paper_citations ADD COLUMN IF NOT EXISTS citation_count INT;
+ALTER TABLE paper_citations ADD COLUMN IF NOT EXISTS open_access_pdf_url TEXT;
+ALTER TABLE paper_citations ADD COLUMN IF NOT EXISTS enriched_at TIMESTAMPTZ;
+
+-- Global concept graph. concept_key is normalized and domain-faceted
+-- ("{domain}:{key}") to avoid cross-field homonym merges.
+CREATE TABLE IF NOT EXISTS concepts (
+  concept_key TEXT PRIMARY KEY,
+  display_name TEXT NOT NULL,
+  description TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS concept_edges (
+  from_key TEXT NOT NULL REFERENCES concepts(concept_key) ON DELETE CASCADE,
+  to_key TEXT NOT NULL REFERENCES concepts(concept_key) ON DELETE CASCADE,
+  relation TEXT NOT NULL DEFAULT 'depends_on' CHECK (relation IN ('depends_on')),
+  confidence DOUBLE PRECISION,
+  source TEXT NOT NULL CHECK (source IN ('llm', 'citation')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (from_key, to_key, relation, source)
+);
+CREATE INDEX IF NOT EXISTS concept_edges_to_idx ON concept_edges(to_key);
+
 CREATE TABLE IF NOT EXISTS persona_concepts (
   id UUID PRIMARY KEY,
   user_id TEXT NOT NULL,
@@ -77,6 +108,20 @@ CREATE TABLE IF NOT EXISTS persona_concepts (
 );
 CREATE INDEX IF NOT EXISTS persona_concepts_user_idx ON persona_concepts(user_id);
 
+-- Ledger evolution (additive). For ledger-evolved rows the concept
+-- column stores the normalized concept_key (so UNIQUE(user_id, concept)
+-- is the upsert target) and display_name carries the human name; legacy
+-- rows keep their raw concept string and NULL display_name.
+-- signal_counts is a JSONB map of typed signal -> count
+-- (summary_exposure, selection_explained, qa_asked, explicit_confirmed).
+-- known/new is derived at read time from weighted signals with time
+-- decay — never stored.
+ALTER TABLE persona_concepts ADD COLUMN IF NOT EXISTS display_name TEXT;
+ALTER TABLE persona_concepts ADD COLUMN IF NOT EXISTS exposure_count INT NOT NULL DEFAULT 0;
+ALTER TABLE persona_concepts ADD COLUMN IF NOT EXISTS distinct_paper_ids TEXT[] NOT NULL DEFAULT '{}';
+ALTER TABLE persona_concepts ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ;
+ALTER TABLE persona_concepts ADD COLUMN IF NOT EXISTS signal_counts JSONB NOT NULL DEFAULT '{}';
+
 CREATE TABLE IF NOT EXISTS interactions (
   id UUID PRIMARY KEY,
   user_id TEXT NOT NULL,
@@ -85,6 +130,10 @@ CREATE TABLE IF NOT EXISTS interactions (
   prompt TEXT NOT NULL,
   response TEXT,
   chunk_ids TEXT[] NOT NULL DEFAULT '{}',
+  -- Dual encoding by era: rows written before the concept-graph wave hold
+  -- persona_concepts UUIDs; rows written after hold normalized concept keys
+  -- ("ml:attention mechanism"). Nothing joins this column today — a future
+  -- reader must handle both, or backfill first.
   persona_concept_ids TEXT[] NOT NULL DEFAULT '{}',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

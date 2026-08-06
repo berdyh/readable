@@ -1,0 +1,39 @@
+{
+  "personas": [
+    {
+      "id": "uncalibrated",
+      "description": "Anonymous or brand-new reader — the default calibration.",
+      "split": { "uncalibrated": true, "known": [], "seen": [] }
+    },
+    {
+      "id": "ml-veteran",
+      "description": "Reader with an established ML mastery ledger.",
+      "split": {
+        "uncalibrated": false,
+        "known": [
+          { "conceptKey": "ml:softmax", "displayName": "Softmax", "score": 6, "known": true },
+          {
+            "conceptKey": "ml:dot product",
+            "displayName": "Dot product",
+            "score": 5,
+            "known": true
+          },
+          {
+            "conceptKey": "ml:recurrent neural network",
+            "displayName": "Recurrent neural network",
+            "score": 7,
+            "known": true
+          }
+        ],
+        "seen": [
+          {
+            "conceptKey": "ml:layer normalization",
+            "displayName": "Layer normalization",
+            "score": 1.5,
+            "known": false
+          }
+        ]
+      }
+    }
+  ]
+}

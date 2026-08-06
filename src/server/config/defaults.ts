@@ -33,6 +33,7 @@ export const DEFAULT_TIMEOUTS = {
     fetch: 20_000, // General HTTP fetches (arXiv, ar5iv)
     pdf: 20_000, // PDF downloads
     ocr: 90_000, // OCR processing (slowest operation)
+    enrichment: 20_000, // Overall citation-enrichment budget per ingest
   },
 } as const;
 
@@ -58,7 +59,12 @@ export const DEFAULT_URLS = {
  * Get timeout value with environment variable override
  */
 export function getTimeout(
-  service: keyof typeof DEFAULT_TIMEOUTS | "ingest.fetch" | "ingest.pdf" | "ingest.ocr",
+  service:
+    | keyof typeof DEFAULT_TIMEOUTS
+    | "ingest.fetch"
+    | "ingest.pdf"
+    | "ingest.ocr"
+    | "ingest.enrichment",
   envVarName: string,
 ): number {
   let defaultValue: number;

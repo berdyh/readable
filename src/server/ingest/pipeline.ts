@@ -6,6 +6,8 @@ import {
   type PaperChunk,
   type PaperRecord,
 } from "@/server/db";
+import { getTimeout } from "@/server/config";
+import { enrichCitationsBatch, type SemanticScholarPaper } from "@/server/external";
 import { embedTexts, getEmbeddingEnvironment } from "@/server/vector";
 import {
   deletePaperChunkVectorsByPaper,
@@ -343,14 +345,27 @@ function selectFigures(
   return [];
 }
 
-function selectReferences(teiResult: ParsedTeiResult | undefined): PaperReference[] {
-  return teiResult?.references ?? [];
+function selectReferences(
+  teiResult: ParsedTeiResult | undefined,
+  htmlResult: HtmlParseResult | undefined,
+): PaperReference[] {
+  if (teiResult?.references.length) {
+    return teiResult.references;
+  }
+
+  return htmlResult?.references ?? [];
 }
 
-function buildChunks(paperId: string, sections: PaperSection[]): BuildChunkResult {
+export function buildChunks(paperId: string, sections: PaperSection[]): BuildChunkResult {
   const chunks: PaperChunk[] = [];
   const citationToChunks = new Map<string, Set<string>>();
   const figureToChunks = new Map<string, Set<string>>();
+
+  // Document-order ordinal. Ingest never had real token offsets, so
+  // `token_start` doubles as the paper-wide reading-order ordinal: the
+  // fetch path orders by it and only falls back to natural-sorting
+  // `chunk_id` for legacy rows ingested before this ordinal existed.
+  let ordinal = 0;
 
   sections.forEach((section) => {
     section.paragraphs.forEach((paragraph, index) => {
@@ -361,9 +376,11 @@ function buildChunks(paperId: string, sections: PaperSection[]): BuildChunkResul
         text: paragraph.text,
         section: section.title,
         pageNumber: paragraph.pageNumber ?? section.pageStart,
+        tokenStart: ordinal,
         citations: paragraph.citations,
         figureIds: paragraph.figureIds,
       });
+      ordinal += 1;
 
       paragraph.citations.forEach((citationId) => {
         const entry = citationToChunks.get(citationId) ?? new Set<string>();
@@ -486,9 +503,77 @@ function toCitationRecords(paperId: string, references: PaperReference[]): Citat
     year: reference.year,
     source: reference.source,
     doi: reference.doi,
+    arxivId: reference.arxivId,
     url: reference.url,
     chunkIds: reference.chunkIds,
   }));
+}
+
+/**
+ * Merges Semantic Scholar batch results into citation records. Stored
+ * bibliography fields win when present; enrichment fills the gaps and
+ * owns the S2-specific columns. `enrichedAt` is stamped only on rows
+ * that actually got a hit.
+ */
+export function applyCitationEnrichment(
+  citations: Citation[],
+  enrichment: Map<string, SemanticScholarPaper>,
+): Citation[] {
+  const enrichedAt = new Date().toISOString();
+
+  return citations.map((citation) => {
+    const paper = enrichment.get(citation.citationId);
+    if (!paper) {
+      return citation;
+    }
+
+    return {
+      ...citation,
+      title: citation.title?.trim() ? citation.title : (paper.title ?? citation.title),
+      authors: citation.authors?.length ? citation.authors : paper.authors,
+      year: citation.year ?? paper.year,
+      doi: citation.doi ?? paper.doi,
+      arxivId: citation.arxivId ?? paper.arxivId,
+      url: citation.url ?? paper.openAccessPdfUrl ?? paper.url,
+      abstract: paper.abstract ?? citation.abstract,
+      venue: paper.venue ?? citation.venue,
+      citationCount: paper.citationCount ?? citation.citationCount,
+      openAccessPdfUrl: paper.openAccessPdfUrl ?? citation.openAccessPdfUrl,
+      enrichedAt,
+    };
+  });
+}
+
+/**
+ * Ingest-time enrichment (S2 hygiene): one batch call per ingest,
+ * persisted to Postgres so runtime explanation paths never touch the
+ * Semantic Scholar API. Best-effort — when S2 is down the flows work
+ * with unenriched citations and the next re-ingest retries. The whole
+ * operation runs under an overall deadline: ingest is user-facing, so
+ * citations not enriched in time are stored unenriched instead of
+ * stacking rate-limit sleeps into minutes of wait.
+ */
+async function enrichCitationsAtIngest(citations: Citation[]): Promise<Citation[]> {
+  if (citations.length === 0) {
+    return citations;
+  }
+
+  try {
+    const enrichment = await enrichCitationsBatch(
+      citations.map((citation) => ({
+        key: citation.citationId,
+        arxivId: citation.arxivId,
+        doi: citation.doi,
+        title: citation.title || undefined,
+        year: citation.year,
+      })),
+      { deadlineMs: getTimeout("ingest.enrichment", "INGEST_ENRICHMENT_DEADLINE_MS") },
+    );
+    return applyCitationEnrichment(citations, enrichment);
+  } catch (error) {
+    console.warn("[ingest] Citation enrichment failed; storing unenriched citations.", error);
+    return citations;
+  }
 }
 
 async function indexChunkVectors(
@@ -631,7 +716,7 @@ export async function ingestPaper(
 
   const extractedFigures = selectFigures(teiResult, htmlResult, fallbackExtraction);
   const figures = enrichFiguresWithPdfData(extractedFigures, fallbackExtraction);
-  const references = selectReferences(teiResult);
+  const references = selectReferences(teiResult, htmlResult);
 
   const { chunks, citationToChunks, figureToChunks } = buildChunks(metadata.id, sections);
 
@@ -661,12 +746,16 @@ export async function ingestPaper(
     pages,
   };
 
+  const citationRecords = await enrichCitationsAtIngest(
+    toCitationRecords(metadata.id, referencesWithChunks),
+  );
+
   await replacePaperIngestData(
     {
       paper: paperRecord,
       chunks,
       figures: toFigureRecords(metadata.id, figuresWithChunks),
-      citations: toCitationRecords(metadata.id, referencesWithChunks),
+      citations: citationRecords,
     },
     {
       afterCommit: async ({ chunkIds: committedChunkIds }) => {

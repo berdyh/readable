@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { clsx } from "clsx";
 import { Loader2 } from "lucide-react";
 
@@ -25,6 +25,13 @@ export interface ChatSidePanelProps {
   onInsertBlocks?: (blocks: Block[], insertIndex?: number) => void;
   selection?: QuestionSelection;
   onSelectionClear?: () => void;
+  /**
+   * Reports the picker's current local-agent choice to the parent, so slash
+   * commands outside the chat (summaries, selection explains) can honour the
+   * same pin. `undefined` means no usable pick — callers fall back to the
+   * server's configured order.
+   */
+  onLocalAgentChange?: (agentId: string | undefined) => void;
 }
 
 /**
@@ -39,6 +46,7 @@ export function ChatSidePanel({
   onInsertBlocks,
   selection,
   onSelectionClear,
+  onLocalAgentChange,
 }: ChatSidePanelProps) {
   const [input, setInput] = useState("");
   const { mounted, width, isResizing, onResizePointerDown, onResizeKeyDown } = useChatPanelWidth();
@@ -47,6 +55,10 @@ export function ChatSidePanel({
   // server's machine, not the paper, and asking on every mount would spawn a
   // PATH scan behind a panel nobody looked at.
   const localAgents = useLocalAgents(mounted && isOpen);
+
+  useEffect(() => {
+    onLocalAgentChange?.(localAgents.selectedAgentId);
+  }, [localAgents.selectedAgentId, onLocalAgentChange]);
 
   const chat = useChatSessions({
     paperId,

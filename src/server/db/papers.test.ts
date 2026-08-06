@@ -27,6 +27,8 @@ const mocks = vi.hoisted(() => {
     lockHeld = false;
   };
 
+  const statements: string[] = [];
+
   const createClient = () => {
     const clientId = nextClientId;
     nextClientId += 1;
@@ -34,6 +36,7 @@ const mocks = vi.hoisted(() => {
     return {
       query: vi.fn(async (statement: string) => {
         const sql = statement.replace(/\s+/g, " ").trim();
+        statements.push(sql);
 
         if (sql.includes("pg_advisory_lock")) {
           await acquireLock(clientId);
@@ -56,12 +59,13 @@ const mocks = vi.hoisted(() => {
 
   const reset = () => {
     events.length = 0;
+    statements.length = 0;
     nextClientId = 1;
     lockHeld = false;
     lockWaiters = [];
   };
 
-  return { createClient, events, reset };
+  return { createClient, events, statements, reset };
 });
 
 vi.mock("./migrate", () => ({
@@ -75,7 +79,77 @@ vi.mock("./postgres", () => ({
   ),
 }));
 
-import { replacePaperIngestData } from "./papers";
+import { compareChunksByDocumentOrder, replacePaperIngestData, upsertCitations } from "./papers";
+
+describe("upsertCitations", () => {
+  beforeEach(() => {
+    mocks.reset();
+  });
+
+  it("preserves persisted enrichment on unenriched re-ingest (COALESCE semantics)", async () => {
+    await upsertCitations([
+      {
+        paperId: "2401.00001",
+        citationId: "bib.bib1",
+        title: "Layer normalization",
+      },
+    ]);
+
+    const upsert = mocks.statements.find((sql) => sql.startsWith("INSERT INTO paper_citations"));
+    expect(upsert).toBeDefined();
+
+    for (const column of [
+      "abstract",
+      "arxiv_id",
+      "venue",
+      "citation_count",
+      "open_access_pdf_url",
+      "enriched_at",
+    ]) {
+      expect(upsert).toContain(
+        `${column} = COALESCE(EXCLUDED.${column}, paper_citations.${column})`,
+      );
+    }
+
+    // Base fields must not null-overwrite stored values either.
+    expect(upsert).toContain("title = COALESCE(NULLIF(EXCLUDED.title, ''), paper_citations.title)");
+    expect(upsert).toContain("year = COALESCE(EXCLUDED.year, paper_citations.year)");
+  });
+});
+
+describe("compareChunksByDocumentOrder", () => {
+  it("orders by token_start ordinal when both rows carry one", () => {
+    const rows = [
+      { chunkId: "S9-p1", tokenStart: 2 },
+      { chunkId: "S1-p1", tokenStart: 0 },
+      { chunkId: "S2-p1", tokenStart: 1 },
+    ];
+    rows.sort(compareChunksByDocumentOrder);
+    expect(rows.map((row) => row.chunkId)).toEqual(["S1-p1", "S2-p1", "S9-p1"]);
+  });
+
+  it("natural-sorts legacy rows without token_start (regression pin: S10 must follow S2)", () => {
+    // The original `ORDER BY chunk_id ASC` was lexicographic: "S10-p1" < "S2-p1",
+    // which shuffled the back half of every paper out of reading order.
+    const rows = [
+      { chunkId: "S10-p1", tokenStart: undefined },
+      { chunkId: "S2-p10", tokenStart: undefined },
+      { chunkId: "S2-p2", tokenStart: undefined },
+      { chunkId: "S1-p1", tokenStart: undefined },
+    ];
+    rows.sort(compareChunksByDocumentOrder);
+    expect(rows.map((row) => row.chunkId)).toEqual(["S1-p1", "S2-p2", "S2-p10", "S10-p1"]);
+  });
+
+  it("breaks token_start ties and mixed rows via natural chunk_id order", () => {
+    const rows = [
+      { chunkId: "S1-p10", tokenStart: 5 },
+      { chunkId: "S1-p2", tokenStart: 5 },
+    ];
+    rows.sort(compareChunksByDocumentOrder);
+    expect(rows.map((row) => row.chunkId)).toEqual(["S1-p2", "S1-p10"]);
+  });
+});
 
 describe("replacePaperIngestData", () => {
   beforeEach(() => {

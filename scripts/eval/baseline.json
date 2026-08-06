@@ -1,0 +1,6 @@
+{
+  "note": "Committed baseline for `pnpm eval`. recordedAt=null means no live baseline has been recorded yet — run `pnpm eval -- --update-baseline` against live models to populate it. Scores are per fixture/persona case: mean rubric score per dimension over N runs, sampled depends_on edge validity, and mean end-to-end latency. Regression = a mean falling below the thresholds in scripts/eval-explanations.ts; the judge model is pinned in models.json (eval_judge) so scores stay comparable.",
+  "recordedAt": null,
+  "runsPerCase": 3,
+  "cases": {}
+}

@@ -1,0 +1,159 @@
+{
+  "id": "causal-inference-stats",
+  "domain": "statistics",
+  "paperId": "eval:causal-forests",
+  "metadata": {
+    "title": "Estimation and Inference of Heterogeneous Treatment Effects using Random Forests",
+    "abstract": "We propose causal forests for estimating heterogeneous treatment effects, and establish asymptotic normality enabling valid confidence intervals.",
+    "authors": ["Stefan Wager", "Susan Athey"]
+  },
+  "sections": [
+    {
+      "title": "Introduction",
+      "paragraphs": [
+        "Classical methods for treatment effect estimation report a single average effect, hiding the fact that a drug or policy may help one subgroup and harm another.",
+        "We adapt random forests to estimate how treatment effects vary with covariates, while retaining statistical guarantees."
+      ]
+    },
+    {
+      "title": "Causal Forests",
+      "paragraphs": [
+        "Each causal tree splits the covariate space to maximize heterogeneity in estimated treatment effects rather than predictive accuracy.",
+        "Honesty is the key device: each tree uses one subsample to place splits and a disjoint subsample to estimate effects within leaves, which removes overfitting bias from the estimates.",
+        "The forest averages many honest trees grown on random subsamples, and the resulting estimator is pointwise consistent for the true conditional treatment effect."
+      ]
+    },
+    {
+      "title": "Asymptotic Theory",
+      "paragraphs": [
+        "Under regularity conditions on subsample size and split behavior, the causal forest estimator is asymptotically Gaussian, and its variance can be estimated with the infinitesimal jackknife.",
+        "This yields confidence intervals for individual-level treatment effects, which prior forest-based methods could not provide."
+      ]
+    },
+    {
+      "title": "Experiments",
+      "paragraphs": [
+        "In simulations with strong effect heterogeneity, causal forests outperform nearest-neighbor matching and series estimation in mean squared error.",
+        "Coverage of the constructed confidence intervals approaches the nominal level as sample size grows."
+      ],
+      "figureIds": ["F1"]
+    }
+  ],
+  "figures": [
+    {
+      "id": "F1",
+      "caption": "Coverage of confidence intervals versus sample size across simulation designs."
+    }
+  ],
+  "citations": [
+    {
+      "citationId": "bib.bib1",
+      "title": "Random Forests",
+      "year": 2001,
+      "citationCount": 100000,
+      "abstract": "Random forests are a combination of tree predictors such that each tree depends on the values of a random vector sampled independently."
+    },
+    {
+      "citationId": "bib.bib2",
+      "title": "Recursive Partitioning for Heterogeneous Causal Effects",
+      "year": 2016,
+      "citationCount": 150,
+      "abstract": "We propose honest estimation of treatment effects: one sample selects the partition, an independent sample estimates effects within it."
+    }
+  ],
+  "cannedSummary": {
+    "sections": [
+      {
+        "section_id": "S1",
+        "title": "One average hides many truths",
+        "hook": "What if a drug helps half the patients and harms the other half?",
+        "claim": "Average treatment effects can be misleading; this paper builds a machine that estimates the effect for each kind of patient.",
+        "mechanism": "Think of dividing patients into ever finer groups — by age, weight, history — and measuring the treated-versus-control difference inside each group. Causal forests automate that division with trees that split where the effect changes most.",
+        "evidence": "Supported by S1.",
+        "new_terms": [
+          {
+            "term": "heterogeneous treatment effect",
+            "definition": "A treatment effect that differs across subgroups defined by covariates.",
+            "familiarity": "high"
+          }
+        ],
+        "source": "model_knowledge"
+      },
+      {
+        "section_id": "S2",
+        "title": "Honesty buys validity",
+        "hook": "Why not just fit a normal random forest to the outcomes?",
+        "claim": "Splitting and estimating on the same data overfits; using disjoint subsamples for each — honesty — removes that bias.",
+        "mechanism": "It is the difference between a student writing the exam questions and also grading their own answers, versus two independent students. One subsample chooses where to split; a fresh one measures effects inside each leaf.",
+        "evidence": "Supported by S2.",
+        "new_terms": [
+          {
+            "term": "honest estimation",
+            "definition": "Using one subsample to choose the model structure and a disjoint one to estimate values within it.",
+            "familiarity": "high"
+          }
+        ],
+        "source": "model_knowledge"
+      },
+      {
+        "section_id": "S3",
+        "title": "Error bars for individuals",
+        "hook": "Can you trust a per-person effect estimate?",
+        "claim": "Yes, asymptotically: the estimator is Gaussian around the truth, so confidence intervals are valid.",
+        "mechanism": "Averaging many honest trees over random subsamples behaves like a well-understood statistical average, and the infinitesimal jackknife estimates its spread — coverage that Figure F1 confirms empirically.",
+        "evidence": "Supported by S3, S4 and Figure F1.",
+        "new_terms": [
+          {
+            "term": "infinitesimal jackknife",
+            "definition": "A variance estimator based on how each observation perturbs the ensemble.",
+            "familiarity": "low"
+          }
+        ],
+        "source": "model_knowledge"
+      }
+    ],
+    "key_findings": [
+      {
+        "statement": "Forests can estimate individual-level causal effects, not just averages.",
+        "evidence": "Pointwise consistency for the conditional treatment effect.",
+        "supporting_sections": ["S2"],
+        "related_figures": []
+      },
+      {
+        "statement": "Honesty is what makes the inference valid.",
+        "evidence": "Disjoint split/estimate subsamples remove overfitting bias.",
+        "supporting_sections": ["S2"],
+        "related_figures": []
+      },
+      {
+        "statement": "Confidence intervals achieve near-nominal coverage.",
+        "evidence": "Simulation coverage approaches the nominal level with sample size.",
+        "supporting_sections": ["S4"],
+        "related_figures": ["F1"]
+      }
+    ],
+    "figures": [
+      {
+        "figure_id": "F1",
+        "caption_summary": "Interval coverage",
+        "insight": "The figure shows the intervals actually cover the truth at close to the promised rate."
+      }
+    ],
+    "concepts": [
+      {
+        "concept": "causal forest",
+        "domain": "statistics",
+        "description": "Forest estimator of conditional treatment effects",
+        "depends_on": ["random forest", "honest estimation"],
+        "confidence": 0.9
+      },
+      {
+        "concept": "honest estimation",
+        "domain": "statistics",
+        "description": "Split selection and effect estimation on disjoint subsamples",
+        "depends_on": ["sample splitting"],
+        "confidence": 0.85
+      }
+    ]
+  }
+}

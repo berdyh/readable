@@ -1,6 +1,18 @@
 import { loadQuestionEvidence } from "./context";
 import { generateJson } from "@/server/llm";
 import { recordPersonaSignals } from "@/server/persona";
+import {
+  SOURCE_LABEL_INSTRUCTIONS,
+  SOURCE_LABEL_SCHEMA,
+  loadIngestedIdsSafe,
+  loadPersonaSplit,
+  renderPersonaBlock,
+  renderRoutedCitationContext,
+  routeCitations,
+  toCitationCandidate,
+  validateSourceLabel,
+  type CitationCandidate,
+} from "@/server/explain";
 import type {
   AnswerCitation,
   AnswerResult,
@@ -17,12 +29,13 @@ import { truncateSafely, truncateWithEllipsis } from "@/server/text";
 const QA_RESPONSE_SCHEMA: Record<string, unknown> = {
   type: "object",
   additionalProperties: false,
-  required: ["answer", "citations", "concepts"],
+  required: ["answer", "citations", "concepts", "source"],
   properties: {
     answer: {
       type: "string",
       minLength: 1,
     },
+    source: SOURCE_LABEL_SCHEMA,
     citations: {
       type: "array",
       maxItems: 8,
@@ -45,14 +58,16 @@ const QA_RESPONSE_SCHEMA: Record<string, unknown> = {
       items: {
         type: "object",
         additionalProperties: false,
-        // Both fields are required so OpenAI's strict json_schema mode
-        // accepts the schema, but description is nullable — non-strict
-        // providers (Anthropic / Gemini / OpenRouter free) often omit
-        // descriptions when none is meaningful. The parser drops nulls.
-        required: ["concept", "description"],
+        // All fields are required so OpenAI's strict json_schema mode
+        // accepts the schema, but description/domain are nullable —
+        // non-strict providers (Anthropic / Gemini / OpenRouter free)
+        // often omit them when none is meaningful. The parser drops
+        // nulls.
+        required: ["concept", "description", "domain"],
         properties: {
           concept: { type: "string", minLength: 1, maxLength: 80 },
           description: { type: ["string", "null"], maxLength: 240 },
+          domain: { type: ["string", "null"], maxLength: 40 },
         },
       },
     },
@@ -67,13 +82,15 @@ interface LlmCitationPayload {
 
 interface LlmConceptPayload {
   concept: string;
-  description?: string;
+  description?: string | null;
+  domain?: string | null;
 }
 
 interface LlmQaPayload {
   answer?: string;
   citations?: LlmCitationPayload[];
   concepts?: LlmConceptPayload[];
+  source?: string;
 }
 
 function truncateText(text: string, maxLength = 600): string {
@@ -84,17 +101,22 @@ function truncateText(text: string, maxLength = 600): string {
   return truncateWithEllipsis(text, maxLength);
 }
 
-function formatPage(page?: number): string {
+/** Page label rendered only when real page data exists — never "page ?". */
+function formatPage(page?: number): string | undefined {
   if (typeof page === "number" && Number.isFinite(page) && page > 0) {
     return `page ${page}`;
   }
-  return "page ?";
+  return undefined;
 }
 
 function formatChunk(chunk: QaChunkContext, index: number, label: string): string {
-  const header = `${label} ${index + 1}: chunk_id=${chunk.chunkId} (${formatPage(
-    chunk.pageNumber,
-  )}${chunk.section ? ` · section: ${chunk.section}` : ""})`;
+  const meta = [
+    formatPage(chunk.pageNumber),
+    chunk.section ? `section: ${chunk.section}` : undefined,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const header = `${label} ${index + 1}: chunk_id=${chunk.chunkId}${meta ? ` (${meta})` : ""}`;
   const body = truncateText(chunk.text.replace(/\s+/g, " ").trim(), 700);
   return `${header}\n${body}`;
 }
@@ -223,11 +245,22 @@ function buildTrustMetadata(
   };
 }
 
-function buildQaUserPrompt(question: string, evidence: QuestionEvidenceContext): string {
+interface QaPromptBlocks {
+  personaBlock: string;
+  citationBlock?: string;
+}
+
+function buildQaUserPrompt(
+  question: string,
+  evidence: QuestionEvidenceContext,
+  blocks: QaPromptBlocks,
+): string {
   const lines: string[] = [];
 
   lines.push(`Paper ID: ${evidence.paperId}`);
   lines.push(`Question: ${question.trim()}`);
+  lines.push("");
+  lines.push(blocks.personaBlock);
 
   if (evidence.selection) {
     const parts: string[] = [];
@@ -265,44 +298,24 @@ function buildQaUserPrompt(question: string, evidence: QuestionEvidenceContext):
     lines.push("\nReferenced figures:");
     evidence.figures.forEach((figure) => {
       const caption = truncateText(figure.caption, 360);
-      lines.push(`- ${figure.figureId} (${formatPage(figure.pageNumber)}): ${caption}`);
+      const page = formatPage(figure.pageNumber);
+      lines.push(`- ${figure.figureId}${page ? ` (${page})` : ""}: ${caption}`);
     });
   }
 
-  if (evidence.citations.length) {
-    lines.push("\nCited background for potential prerequisites:");
-    evidence.citations.forEach((citation) => {
-      const parts: string[] = [];
-      const title = citation.title
-        ? truncateText(citation.title, 240)
-        : `Citation ${citation.citationId}`;
-      parts.push(title);
-
-      if (citation.source) {
-        parts.push(`source: ${citation.source}`);
-      }
-      if (citation.year) {
-        parts.push(`year: ${citation.year}`);
-      }
-      if (citation.authors?.length) {
-        parts.push(`authors: ${citation.authors.join(", ")}`);
-      }
-      if (citation.url) {
-        parts.push(`url: ${citation.url}`);
-      }
-      if (citation.arxivId) {
-        parts.push(`arXiv: ${citation.arxivId}`);
-      }
-      lines.push(`- ${parts.join(" · ")}`);
-
-      if (citation.abstract) {
-        lines.push(`  abstract: ${truncateText(citation.abstract.replace(/\s+/g, " "), 480)}`);
-      }
-    });
+  // Routed citations only (the four-trigger router decided). The old
+  // always-on "cited background" dump is gone — citation metadata is
+  // router metadata, not default prompt filler.
+  if (blocks.citationBlock) {
+    lines.push("");
+    lines.push(blocks.citationBlock);
   }
+
+  lines.push("");
+  lines.push(`Source rules: ${SOURCE_LABEL_INSTRUCTIONS}`);
 
   lines.push(
-    '\nInstructions: Use the evidence above to answer the question. Reference specific chunk_ids and include page numbers in the answer (e.g., "(page 4)"). If the evidence is insufficient, respond that the paper does not address the question. After answering, list up to 6 *concepts* (terse domain phrases — never names of people, never paper titles) that the reader was exposed to while resolving this question. Return JSON that matches the provided schema.',
+    '\nInstructions: Use the evidence above to answer the question. Reference specific chunk_ids and include page numbers in the answer (e.g., "(page 4)") only when the evidence shows a real page number. If the evidence is insufficient, respond that the paper does not address the question. After answering, list up to 6 *concepts* (terse domain phrases — never names of people, never paper titles) that the reader was exposed to while resolving this question. Return JSON that matches the provided schema.',
   );
 
   return lines.join("\n");
@@ -325,10 +338,28 @@ export async function answerPaperQuestion(
   question: string,
   options: QuestionOptions = {},
 ): Promise<AnswerResult> {
-  const evidence = await loadQuestionEvidence(paperId, question, options);
+  const [evidence, personaSplit] = await Promise.all([
+    loadQuestionEvidence(paperId, question, options),
+    loadPersonaSplit(options.userId),
+  ]);
+
+  const citationCandidates: CitationCandidate[] = evidence.citations.map(toCitationCandidate);
+  // Sequenced after the candidates: the ingested lookup is now a
+  // membership query over their arXiv ids rather than a full library scan.
+  const ingestedIds = await loadIngestedIdsSafe(citationCandidates);
+
+  const decisions = routeCitations({
+    question,
+    candidates: citationCandidates,
+    ingestedPaperIds: ingestedIds,
+  });
+  const citationBlock = renderRoutedCitationContext(citationCandidates, decisions);
 
   const systemPrompt = getSystemPrompt("qa");
-  const userPrompt = buildQaUserPrompt(question, evidence);
+  const userPrompt = buildQaUserPrompt(question, evidence, {
+    personaBlock: renderPersonaBlock(personaSplit),
+    citationBlock,
+  });
 
   const raw = await generateJson(
     {
@@ -369,7 +400,11 @@ export async function answerPaperQuestion(
     prompt: question,
     response: answer,
     chunkIds: citations.map((c) => c.chunkId),
-    concepts: payload.concepts ?? [],
+    concepts: (payload.concepts ?? []).map((concept) => ({
+      concept: concept?.concept ?? "",
+      description: concept?.description ?? undefined,
+      domain: concept?.domain ?? undefined,
+    })),
   }).catch((error) => {
     console.warn("[qa] failed to persist persona signals:", error);
   });
@@ -378,6 +413,9 @@ export async function answerPaperQuestion(
     answer,
     cites: citations,
     trust,
+    // Server-validated: cited_text survives only when the router actually
+    // supplied retrieved citation passages for this answer.
+    source: validateSourceLabel(payload.source, Boolean(citationBlock)),
   };
 }
 

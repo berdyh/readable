@@ -1,12 +1,13 @@
 "use client";
 
 import { useUser } from "@clerk/nextjs";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { Block } from "../block-editor/types";
 import { parseArxivHtmlToBlocks, parseSummaryToBlocks } from "../block-editor/parsers";
 import type { InlineArxivIngestResult } from "@/server/editor/types";
 import type { SummaryResult } from "@/server/summarize/types";
+import type { ThreePass } from "./usePassState";
 
 const DEFAULT_PDF_URL = "https://arxiv.org/pdf/1706.03762.pdf";
 const DEFAULT_PAPER_ID = "arxiv:1706.03762";
@@ -53,11 +54,21 @@ const isSummaryResult = (value: unknown): value is SummaryResult => {
 interface UsePaperContentOptions {
   paperId?: string;
   pdfUrl?: string;
+  /**
+   * Current three-pass reading stage. Pass 1 (skim) renders the
+   * explanation contract as the primary reading blocks; passes 2–3 keep
+   * the paper HTML primary. Defaults to "skim".
+   */
+  pass?: ThreePass;
 }
 
-export const usePaperContent = ({ paperId, pdfUrl }: UsePaperContentOptions) => {
+/** The same paper-id defaulting usePaperContent applies, usable before it runs. */
+export const resolvePaperId = (paperId: string | undefined): string =>
+  paperId && paperId.trim() ? paperId : DEFAULT_PAPER_ID;
+
+export const usePaperContent = ({ paperId, pdfUrl, pass = "skim" }: UsePaperContentOptions) => {
   const { isLoaded: isUserLoaded, isSignedIn } = useUser();
-  const resolvedPaperId = paperId && paperId.trim() ? paperId : DEFAULT_PAPER_ID;
+  const resolvedPaperId = resolvePaperId(paperId);
   const fallbackPdfUrl = inferArxivPdfUrl(resolvedPaperId);
   const resolvedPdfUrl = pdfUrl ?? fallbackPdfUrl ?? DEFAULT_PDF_URL;
 
@@ -203,7 +214,49 @@ export const usePaperContent = ({ paperId, pdfUrl }: UsePaperContentOptions) => 
   const effectiveSummaryError = authRequired ? AUTH_REQUIRED_SUMMARY_MESSAGE : summaryError;
   const effectiveIsSummaryLoading = isUserLoaded && isSignedIn ? isSummaryLoading : false;
 
+  // Pass 1 (skim) puts the explanation contract first; the paper HTML
+  // stays primary for passes 2–3 and as the fallback when no summary
+  // exists yet.
+  const summaryIsPrimary = pass === "skim" && Boolean(effectiveSummary);
+
+  // Render-gated exposure recording (never for an unseen auto-generated
+  // summary): fires once per paper, only when contract content is
+  // actually the rendered surface and the reader is signed in.
+  const exposureRecordedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!summaryIsPrimary || !isSignedIn) {
+      return;
+    }
+    const concepts = effectiveSummary?.concepts?.filter((concept) => concept.concept) ?? [];
+    if (concepts.length === 0) {
+      return;
+    }
+    if (exposureRecordedFor.current === resolvedPaperId) {
+      return;
+    }
+    exposureRecordedFor.current = resolvedPaperId;
+
+    void fetch("/api/persona/exposure", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        paperId: resolvedPaperId,
+        concepts: concepts.map((concept) => ({
+          concept: concept.concept,
+          domain: concept.domain,
+          description: concept.description,
+        })),
+      }),
+    }).catch(() => {
+      // Best-effort: a missed exposure signal never disturbs reading.
+    });
+  }, [effectiveSummary, isSignedIn, resolvedPaperId, summaryIsPrimary]);
+
   const initialBlocks = useMemo<Block[]>(() => {
+    if (summaryIsPrimary && effectiveSummary) {
+      return parseSummaryToBlocks(effectiveSummary);
+    }
+
     if (arxivHtmlContent) {
       return parseArxivHtmlToBlocks(arxivHtmlContent);
     }
@@ -274,6 +327,7 @@ export const usePaperContent = ({ paperId, pdfUrl }: UsePaperContentOptions) => 
     htmlError,
     isHtmlLoading,
     resolvedPaperId,
+    summaryIsPrimary,
   ]);
 
   return {

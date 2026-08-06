@@ -3,22 +3,32 @@
   "id": "server.persona",
   "parent": "server",
   "path": "src/server/persona",
-  "goal": "Records which concepts a user has been exposed to.",
+  "goal": "Records the concept graph, typed mastery-ledger signals, and interactions.",
   "owns": ["src/server/persona"],
   "interface": {
     "entrypoint": "index.ts",
-    "exports": ["recordPersonaSignals", "ConceptInput", "PersonaInteractionType"]
+    "exports": [
+      "recordPersonaSignals",
+      "recordExposureSignal",
+      "recordConceptGraph",
+      "ConceptInput",
+      "PersonaInteractionType"
+    ]
   },
   "uses": [
     {
       "module": "server.db",
-      "via": "upsertPersonaConcepts"
+      "via": "recordConceptSignal / upsertConcepts / upsertConceptEdges"
+    },
+    {
+      "module": "server.explain",
+      "via": "buildConceptKey"
     },
     {
       "module": "server.text",
       "via": "truncateSafely"
     }
   ],
-  "constraints": ["concept recording", "interaction logging"],
+  "constraints": ["graph + ledger recording", "interaction logging", "anonymous → graph only"],
   "checks": ["pnpm vitest run src/server/e2e"]
 }

@@ -1,14 +1,17 @@
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  _credentialStagingForTests,
   classifyLocalAgentFailure,
   describeLocalCodingAgents,
   LocalAgentInvocationError,
   LocalCodingAgentProvider,
+  parseLocalAgentPin,
+  resetLocalAgentAuthProbeCache,
 } from "./local-coding-agent";
 import { resetCliCredentialCache } from "../routing";
 
@@ -25,12 +28,15 @@ const ENV_KEYS = [
   "LLM_AGENT_OPENCODE_ALLOW_UNSAFE",
   "LLM_AGENT_CODEX_MODEL",
   "LLM_AGENT_CODEX_REASONING_EFFORT",
+  "LLM_AGENT_CODEX_ARGS_JSON",
+  "LLM_AGENT_CLAUDE_CODE_ARGS_JSON",
   "LLM_AGENT_OPENCODE_ARGS_JSON",
   "LLM_AGENT_ANTIGRAVITY_COMMAND",
   "LLM_AGENT_ANTIGRAVITY_ARGS_JSON",
   "LLM_LOCAL_AGENT_ALLOW_UNSAFE",
   "LLM_LOCAL_AGENT_ENV_ALLOWLIST",
   "LLM_LOCAL_AGENT_TIMEOUT_MS",
+  "LLM_LOCAL_AGENT_PROBE_TIMEOUT_MS",
   "CUSTOM_ALLOWED_AGENT_ENV",
   "DATABASE_URL",
   "OPENROUTER_API_KEY",
@@ -305,6 +311,35 @@ printf '%s' "$*"
     expect(output).toContain("--ephemeral");
   });
 
+  it("keeps the variadic --tools '' last in the Claude Code argv", async () => {
+    // `--tools` swallows every following argument as a tool name, so the empty
+    // string that means "no tools" only works as the final argument. Anything
+    // appended after it would silently become a tool name instead of a flag.
+    const claudeAgent = await makeAgentScript(
+      tempDir,
+      "claude.sh",
+      `
+cat >/dev/null
+for arg in "$@"; do printf 'arg:%s\\n' "$arg"; done
+`,
+    );
+    process.env.LLM_LOCAL_AGENTS = "claude-code";
+    process.env.LLM_AGENT_CLAUDE_CODE_COMMAND = claudeAgent;
+    // Exercise the model flag too, so the guard also covers argv built with
+    // optional segments present.
+    process.env.LLM_AGENT_CLAUDE_CODE_MODEL = "claude-sonnet-5";
+
+    const provider = new LocalCodingAgentProvider({ provider: "coding-agent" });
+    const output = await provider.generateText({
+      systemPrompt: "Be concise.",
+      userPrompt: "Check argv.",
+    });
+
+    const args = output.trimEnd().split("\n");
+    expect(args.at(-2)).toBe("arg:--tools");
+    expect(args.at(-1)).toBe("arg:");
+  });
+
   it("runs agents with throwaway HOME/XDG dirs and does not expose app secrets by default", async () => {
     const agent = await makeAgentScript(
       tempDir,
@@ -423,6 +458,93 @@ printf 'creds=%s' "$(cat "\${CLAUDE_CONFIG_DIR:-/nonexistent}/.credentials.json"
     expect(output).not.toContain("mcpOAuth");
   });
 
+  it("writes a mid-call Codex token refresh back to the real auth file", async () => {
+    const authFile = path.join(tempDir, "codex-auth.json");
+    await writeFile(authFile, JSON.stringify({ tokens: { access_token: "old-token" } }), "utf8");
+    // The fake CLI refreshes its token: it rewrites the staged auth.json the
+    // way Codex does when the access token has expired.
+    const agent = await makeAgentScript(
+      tempDir,
+      "codex.sh",
+      `
+cat >/dev/null
+printf '{"tokens":{"access_token":"new-token"}}' > "\${CODEX_HOME}/auth.json"
+printf 'answer'
+`,
+    );
+
+    process.env.LLM_LOCAL_AGENTS = "codex-cli";
+    process.env.LLM_AGENT_CODEX_COMMAND = agent;
+    process.env.LLM_AGENT_CODEX_AUTH_FILE = authFile;
+
+    const provider = new LocalCodingAgentProvider({ provider: "coding-agent" });
+    await provider.generateText({ systemPrompt: "Be concise.", userPrompt: "Refresh." });
+
+    const persisted = JSON.parse(await readFile(authFile, "utf8"));
+    expect(persisted.tokens.access_token).toBe("new-token");
+  });
+
+  it("does not clobber a real auth file that changed mid-call", async () => {
+    const authFile = path.join(tempDir, "codex-auth.json");
+    await writeFile(authFile, JSON.stringify({ tokens: { access_token: "old-token" } }), "utf8");
+    // Simulate a concurrent `codex login` racing the invocation: the fake CLI
+    // rewrites the REAL file (as the user's login would) and refreshes its
+    // staged copy. The user's newer login must win over our write-back.
+    const agent = await makeAgentScript(
+      tempDir,
+      "codex.sh",
+      `
+cat >/dev/null
+printf '{"tokens":{"access_token":"user-relogin"}}' > ${JSON.stringify(authFile)}
+printf '{"tokens":{"access_token":"stale-refresh"}}' > "\${CODEX_HOME}/auth.json"
+printf 'answer'
+`,
+    );
+
+    process.env.LLM_LOCAL_AGENTS = "codex-cli";
+    process.env.LLM_AGENT_CODEX_COMMAND = agent;
+    process.env.LLM_AGENT_CODEX_AUTH_FILE = authFile;
+
+    const provider = new LocalCodingAgentProvider({ provider: "coding-agent" });
+    await provider.generateText({ systemPrompt: "Be concise.", userPrompt: "Race." });
+
+    const persisted = JSON.parse(await readFile(authFile, "utf8"));
+    expect(persisted.tokens.access_token).toBe("user-relogin");
+  });
+
+  it("merges a Claude refresh back without dropping mcpOAuth tokens", async () => {
+    const credsFile = path.join(tempDir, "claude-credentials.json");
+    await writeFile(
+      credsFile,
+      JSON.stringify({
+        claudeAiOauth: { accessToken: "old-token", subscriptionType: "max" },
+        mcpOAuth: { "plugin:vercel": { accessToken: "third-party-secret" } },
+      }),
+      "utf8",
+    );
+    const agent = await makeAgentScript(
+      tempDir,
+      "claude.sh",
+      `
+cat >/dev/null
+printf '{"claudeAiOauth":{"accessToken":"new-token","subscriptionType":"max"}}' > "\${CLAUDE_CONFIG_DIR}/.credentials.json"
+printf 'answer'
+`,
+    );
+
+    process.env.LLM_LOCAL_AGENTS = "claude-code";
+    process.env.LLM_AGENT_CLAUDE_CODE_COMMAND = agent;
+    process.env.LLM_AGENT_CLAUDE_CODE_AUTH_FILE = credsFile;
+
+    const provider = new LocalCodingAgentProvider({ provider: "coding-agent" });
+    await provider.generateText({ systemPrompt: "Be concise.", userPrompt: "Refresh." });
+
+    const persisted = JSON.parse(await readFile(credsFile, "utf8"));
+    expect(persisted.claudeAiOauth.accessToken).toBe("new-token");
+    // The block that never entered the sandbox survives the write-back.
+    expect(persisted.mcpOAuth["plugin:vercel"].accessToken).toBe("third-party-secret");
+  });
+
   it("reports a signed-out agent as auth_permanent instead of unknown", async () => {
     const agent = await makeAgentScript(
       tempDir,
@@ -494,6 +616,24 @@ exit 1
   });
 });
 
+describe("parseLocalAgentPin", () => {
+  it("accepts safe built-in agents, normalizing aliases", () => {
+    expect(parseLocalAgentPin("claude-code")).toBe("claude-code");
+    expect(parseLocalAgentPin("claude")).toBe("claude-code");
+    expect(parseLocalAgentPin("Codex")).toBe("codex-cli");
+  });
+
+  it("rejects everything that is not a safe built-in", () => {
+    // The value selects a binary to spawn, so tool-capable agents and free
+    // text must never pass — even ones the provider knows about.
+    expect(parseLocalAgentPin("gemini-cli")).toBeUndefined();
+    expect(parseLocalAgentPin("opencode")).toBeUndefined();
+    expect(parseLocalAgentPin("/usr/bin/evil")).toBeUndefined();
+    expect(parseLocalAgentPin(42)).toBeUndefined();
+    expect(parseLocalAgentPin(undefined)).toBeUndefined();
+  });
+});
+
 describe("describeLocalCodingAgents", () => {
   let original: Record<string, string | undefined>;
   let tempDir: string;
@@ -501,7 +641,9 @@ describe("describeLocalCodingAgents", () => {
   beforeEach(async () => {
     original = snapshotEnv();
     tempDir = await mkdtemp(path.join(os.tmpdir(), "readable-agent-status-"));
+    process.env.LLM_LOCAL_AGENT_PROBE_TIMEOUT_MS = "5000";
     resetCliCredentialCache();
+    resetLocalAgentAuthProbeCache();
   });
 
   afterEach(async () => {
@@ -540,7 +682,14 @@ describe("describeLocalCodingAgents", () => {
   });
 
   it("marks an installed-but-signed-out agent as not_authenticated", async () => {
-    const codexBinary = await makeAgentScript(tempDir, "codex.sh", "exit 0");
+    const codexBinary = await makeAgentScript(
+      tempDir,
+      "codex.sh",
+      `
+if [ "$1 $2" = "login status" ]; then printf 'Not logged in\\n'; exit 1; fi
+exit 0
+`,
+    );
     process.env.LLM_LOCAL_AGENTS = "codex-cli";
     process.env.LLM_AGENT_CODEX_COMMAND = codexBinary;
     process.env.LLM_AGENT_CODEX_AUTH_FILE = path.join(tempDir, "no-such-auth.json");
@@ -552,5 +701,221 @@ describe("describeLocalCodingAgents", () => {
       authenticated: false,
       unavailableReason: "not_authenticated",
     });
+  });
+
+  it("trusts the CLI's signed-in answer over the credential file's shape", async () => {
+    // The macOS-Keychain scenario: no readable credential file at all, but the
+    // CLI itself says it is signed in. Shape-checking greyed this out; the
+    // probe must not.
+    const codexBinary = await makeAgentScript(
+      tempDir,
+      "codex.sh",
+      `
+if [ "$1 $2" = "login status" ]; then printf 'Logged in using ChatGPT\\n'; exit 0; fi
+exit 0
+`,
+    );
+    process.env.LLM_LOCAL_AGENTS = "codex-cli";
+    process.env.LLM_AGENT_CODEX_COMMAND = codexBinary;
+    process.env.LLM_AGENT_CODEX_AUTH_FILE = path.join(tempDir, "no-such-auth.json");
+
+    const [codex] = await describeLocalCodingAgents();
+
+    expect(codex).toMatchObject({
+      installed: true,
+      authenticated: true,
+      unavailableReason: null,
+    });
+  });
+
+  it("falls back to the credential file when the CLI has no status subcommand", async () => {
+    // An older codex that predates `login status` exits 2 with a usage error.
+    // That is not a signed-out verdict — the file shape-check decides instead.
+    const codexBinary = await makeAgentScript(
+      tempDir,
+      "codex.sh",
+      `
+if [ "$1 $2" = "login status" ]; then printf "error: unrecognized subcommand 'login'\\n" >&2; exit 2; fi
+exit 0
+`,
+    );
+    const authFile = path.join(tempDir, "codex-auth.json");
+    await writeFile(authFile, JSON.stringify({ tokens: { access_token: "t" } }), "utf8");
+
+    process.env.LLM_LOCAL_AGENTS = "codex-cli";
+    process.env.LLM_AGENT_CODEX_COMMAND = codexBinary;
+    process.env.LLM_AGENT_CODEX_AUTH_FILE = authFile;
+
+    const [codex] = await describeLocalCodingAgents();
+
+    expect(codex).toMatchObject({ installed: true, authenticated: true });
+  });
+
+  it("lets Claude's JSON loggedIn verdict override the exit code", async () => {
+    // `claude auth status` prints {"loggedIn": ...} JSON. The boolean is the
+    // CLI's own answer and must win even when the exit code disagrees.
+    const claudeBinary = await makeAgentScript(
+      tempDir,
+      "claude.sh",
+      `
+if [ "$1 $2" = "auth status" ]; then printf '{"loggedIn": false, "authMethod": "none"}\\n'; exit 0; fi
+exit 0
+`,
+    );
+    const credsFile = path.join(tempDir, "claude-credentials.json");
+    await writeFile(credsFile, JSON.stringify({ claudeAiOauth: { accessToken: "t" } }), "utf8");
+
+    process.env.LLM_LOCAL_AGENTS = "claude-code";
+    process.env.LLM_AGENT_CLAUDE_CODE_COMMAND = claudeBinary;
+    process.env.LLM_AGENT_CLAUDE_CODE_AUTH_FILE = credsFile;
+
+    const [claude] = await describeLocalCodingAgents();
+
+    expect(claude).toMatchObject({
+      installed: true,
+      authenticated: false,
+      unavailableReason: "not_authenticated",
+    });
+  });
+
+  it("caches the probe verdict instead of re-spawning the CLI per call", async () => {
+    const counterFile = path.join(tempDir, "probe-count");
+    const codexBinary = await makeAgentScript(
+      tempDir,
+      "codex.sh",
+      `
+if [ "$1 $2" = "login status" ]; then echo probe >> ${JSON.stringify(counterFile)}; exit 0; fi
+exit 0
+`,
+    );
+    process.env.LLM_LOCAL_AGENTS = "codex-cli";
+    process.env.LLM_AGENT_CODEX_COMMAND = codexBinary;
+    // Point staging away from any real ~/.codex so the probe sandbox never
+    // sees the developer's credential and the mtime input stays stable.
+    process.env.LLM_AGENT_CODEX_AUTH_FILE = path.join(tempDir, "no-such-auth.json");
+
+    await describeLocalCodingAgents();
+    await describeLocalCodingAgents();
+
+    const probes = (await readFile(counterFile, "utf8")).trim().split("\n");
+    expect(probes).toHaveLength(1);
+  });
+});
+
+describe("credential write-back hardening", () => {
+  let original: Record<string, string | undefined>;
+  let tempDir: string;
+
+  const codexAuth = JSON.stringify({
+    auth_mode: "chatgpt",
+    tokens: { access_token: "codex-token", refresh_token: "codex-refresh" },
+  });
+  const claudeCredentials = JSON.stringify({
+    claudeAiOauth: { accessToken: "claude-token", refreshToken: "claude-refresh" },
+    mcpOAuth: { vercel: { accessToken: "unrelated" } },
+  });
+
+  beforeEach(async () => {
+    original = snapshotEnv();
+    tempDir = await mkdtemp(path.join(os.tmpdir(), "readable-agent-writeback-"));
+  });
+
+  afterEach(async () => {
+    restoreEnv(original);
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it("persists a valid Codex token refresh back to the real auth file", async () => {
+    const source = path.join(tempDir, "auth.json");
+    await writeFile(source, codexAuth, "utf8");
+    process.env.LLM_AGENT_CODEX_AUTH_FILE = source;
+
+    const sandbox = path.join(tempDir, "sandbox");
+    const staged = await _credentialStagingForTests.stageCodexCredentials(sandbox);
+    expect(staged.staged).toBe(true);
+
+    const refreshed = JSON.stringify({
+      auth_mode: "chatgpt",
+      tokens: { access_token: "rotated-token", refresh_token: "rotated-refresh" },
+    });
+    await writeFile(path.join(sandbox, "codex-home", "auth.json"), refreshed, "utf8");
+    await staged.persistRefresh?.();
+
+    expect(await readFile(source, "utf8")).toBe(refreshed);
+  });
+
+  it("refuses to write back Codex content that is not a credential", async () => {
+    const source = path.join(tempDir, "auth.json");
+    await writeFile(source, codexAuth, "utf8");
+    process.env.LLM_AGENT_CODEX_AUTH_FILE = source;
+
+    const sandbox = path.join(tempDir, "sandbox");
+    const staged = await _credentialStagingForTests.stageCodexCredentials(sandbox);
+    const stagedPath = path.join(sandbox, "codex-home", "auth.json");
+
+    for (const garbage of [
+      "not json at all",
+      JSON.stringify({ tokens: {} }),
+      JSON.stringify({ tokens: { access_token: 42 } }),
+      JSON.stringify({ evil: "payload" }),
+    ]) {
+      await writeFile(stagedPath, garbage, "utf8");
+      await staged.persistRefresh?.();
+      expect(await readFile(source, "utf8")).toBe(codexAuth);
+    }
+  });
+
+  it("merges a valid Claude refresh while refusing malformed oauth blocks", async () => {
+    const source = path.join(tempDir, ".credentials.json");
+    await writeFile(source, claudeCredentials, "utf8");
+    process.env.LLM_AGENT_CLAUDE_CODE_AUTH_FILE = source;
+
+    const sandbox = path.join(tempDir, "sandbox");
+    const staged = await _credentialStagingForTests.stageClaudeCredentials(sandbox);
+    expect(staged.staged).toBe(true);
+    const stagedPath = path.join(sandbox, "claude-home", ".credentials.json");
+
+    // Malformed refresh: accessToken missing / wrong type — never written.
+    await writeFile(stagedPath, JSON.stringify({ claudeAiOauth: { accessToken: 42 } }), "utf8");
+    await staged.persistRefresh?.();
+    expect(await readFile(source, "utf8")).toBe(claudeCredentials);
+
+    // Valid refresh: merged into the current file, mcpOAuth preserved.
+    await writeFile(
+      stagedPath,
+      JSON.stringify({ claudeAiOauth: { accessToken: "rotated", refreshToken: "r2" } }),
+      "utf8",
+    );
+    await staged.persistRefresh?.();
+    const merged = JSON.parse(await readFile(source, "utf8")) as Record<string, unknown>;
+    expect(merged.claudeAiOauth).toEqual({ accessToken: "rotated", refreshToken: "r2" });
+    expect(merged.mcpOAuth).toEqual({ vercel: { accessToken: "unrelated" } });
+  });
+
+  it("skips write-back entirely when custom ARGS_JSON overrides are in use", async () => {
+    const source = path.join(tempDir, "auth.json");
+    await writeFile(source, codexAuth, "utf8");
+    process.env.LLM_AGENT_CODEX_AUTH_FILE = source;
+    process.env.LLM_AGENT_CODEX_ARGS_JSON = JSON.stringify(["exec", "--custom"]);
+
+    const sandbox = path.join(tempDir, "sandbox");
+    const staged = await _credentialStagingForTests.stageAgentCredentials("codex-cli", sandbox);
+
+    // Credentials still stage (the call should work)…
+    expect(staged.staged).toBe(true);
+    // …but nothing may ever be written back from an untrusted invocation.
+    expect(staged.persistRefresh).toBeUndefined();
+  });
+
+  it("keeps write-back for the trusted built-in invocation", async () => {
+    const source = path.join(tempDir, "auth.json");
+    await writeFile(source, codexAuth, "utf8");
+    process.env.LLM_AGENT_CODEX_AUTH_FILE = source;
+    delete process.env.LLM_AGENT_CODEX_ARGS_JSON;
+
+    const sandbox = path.join(tempDir, "sandbox");
+    const staged = await _credentialStagingForTests.stageAgentCredentials("codex-cli", sandbox);
+
+    expect(staged.persistRefresh).toBeDefined();
   });
 });

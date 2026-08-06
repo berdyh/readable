@@ -7,6 +7,8 @@ import type {
   QaChunkContext,
 } from "@/server/qa/types";
 import { generateJson } from "@/server/llm";
+import { loadPersonaSplit, renderPersonaBlock } from "@/server/explain";
+import { recordPersonaSignals } from "@/server/persona";
 
 import type {
   SelectionCalloutResult,
@@ -22,8 +24,26 @@ import { truncateSafely, truncateWithEllipsis } from "@/server/text";
 const SELECTION_SUMMARY_SCHEMA: Record<string, unknown> = {
   type: "object",
   additionalProperties: false,
-  required: ["bullets", "more", "citations"],
+  required: ["bullets", "more", "citations", "concepts"],
   properties: {
+    concepts: {
+      type: "array",
+      maxItems: 4,
+      description:
+        "Concepts the reader was exposed to while this selection was explained. Terse domain phrases only — never people or paper titles.",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        // All fields required for OpenAI strict mode; description and
+        // domain are nullable and nulls are dropped by the parser.
+        required: ["concept", "description", "domain"],
+        properties: {
+          concept: { type: "string", minLength: 1, maxLength: 80 },
+          description: { type: ["string", "null"], maxLength: 240 },
+          domain: { type: ["string", "null"], maxLength: 40 },
+        },
+      },
+    },
     bullets: {
       type: "array",
       minItems: 2,
@@ -77,6 +97,11 @@ interface LlmSummaryPayload {
     page?: number;
     quote?: string;
   }>;
+  concepts?: Array<{
+    concept?: string;
+    description?: string | null;
+    domain?: string | null;
+  }>;
 }
 
 function truncate(text: string, max = 420): string {
@@ -100,10 +125,12 @@ function buildSelectionUserPrompt(
   paperId: string,
   selection: QuestionSelection,
   evidence: QuestionEvidenceContext,
+  personaBlock: string,
 ): string {
   const lines: string[] = [];
 
   lines.push(`Paper ID: ${paperId}`);
+  lines.push(personaBlock);
   if (selection.text) {
     lines.push(`Highlighted text: “${truncate(selection.text, 420)}”`);
   }
@@ -345,27 +372,34 @@ function buildCalloutResult(
   };
 }
 
-// NOTE: this used to accept `options: { userId?: string }`, which it never read.
-// The route authenticates and passed a real userId in, so selection summaries
-// looked like they fed the persona graph the way qa and summarize do — they
-// never have. The dead parameter is removed rather than left to imply otherwise;
-// wiring up persona recording here is tracked in docs/open-issues.md.
+// The userId option is back — and this time it is read: selection
+// explanations now record selection_explained ledger signals plus the
+// concept graph, the same fire-and-forget way qa does.
 export async function summarizeSelection(
   paperId: string,
   selectionInput: QuestionSelection,
+  options: { localAgent?: string; userId?: string } = {},
 ): Promise<SelectionSummaryResult> {
   const selection = parseQuestionSelection(selectionInput);
   if (!selection?.text) {
     throw new Error("Selection text is required for inline summary.");
   }
 
-  const evidence = await loadQuestionEvidence(paperId, selection.text, {
-    selection,
-  });
+  const [evidence, personaSplit] = await Promise.all([
+    loadQuestionEvidence(paperId, selection.text, {
+      selection,
+    }),
+    loadPersonaSplit(options.userId),
+  ]);
 
   const systemPrompt = getSystemPrompt("selection_summary");
 
-  const userPrompt = buildSelectionUserPrompt(paperId, selection, evidence);
+  const userPrompt = buildSelectionUserPrompt(
+    paperId,
+    selection,
+    evidence,
+    renderPersonaBlock(personaSplit),
+  );
 
   const raw = await generateJson(
     {
@@ -376,11 +410,33 @@ export async function summarizeSelection(
     },
     {
       taskName: "selection_summary",
+      localAgent: options.localAgent,
     },
   );
 
   const payload = parseLlmPayload(raw);
   const callout = buildCalloutResult(payload, evidence);
+
+  const concepts = (payload.concepts ?? [])
+    .map((entry) => ({
+      concept: (entry?.concept ?? "").trim(),
+      description: entry?.description?.trim() || undefined,
+      domain: entry?.domain?.trim() || undefined,
+    }))
+    .filter((entry) => entry.concept.length > 0);
+
+  // Fire-and-forget: a missed skill update never blocks the callout.
+  void recordPersonaSignals({
+    userId: options.userId,
+    paperId,
+    interactionType: "selection_summary",
+    prompt: selection.text,
+    response: callout.bullets.map((bullet) => bullet.text).join("\n"),
+    chunkIds: callout.citations.map((citation) => citation.chunkId),
+    concepts,
+  }).catch((error) => {
+    console.warn("[editor] failed to persist selection persona signals:", error);
+  });
 
   return {
     callout,

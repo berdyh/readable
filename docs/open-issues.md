@@ -26,31 +26,9 @@ Items are grouped by component, then priority: **P0** (drop everything) through 
 
 ## Next session — start here
 
-Two P1 items, in this order. Everything below them is context, not queue.
+One P1 item. Everything below it is context, not queue.
 
-### 1. Reader — pass toggle discards in-progress edits
-
-**Priority:** P1 · **Surfaced by:** /ship pre-landing review (coverage audit), 2026-07-31
-
-Switching ThreePass passes regenerates `initialBlocks`, and the store effect in
-`block-editor/store.tsx` replaces every block when that array's identity changes — so any
-edit the reader made is discarded. The mechanism predates the explanation-engine wave (any
-summary arrival did this), but pass-aware rendering turned it into a one-click loss.
-
-- **Repro:** open a paper signed in, edit a block on the skim pass, switch to read → edits gone.
-- **Why it was not patched during the ship:** the fix is per-pass block state or dirty-checking
-  in the editor store — editor state architecture, not a patch. Rushing it into a 41-commit
-  wave risked new editor bugs in the surface the whole product runs on.
-- **Start at:** `src/app/components/workspace/ReaderWorkspace.tsx` (pass → `initialBlocks`),
-  `src/app/components/block-editor/store.tsx` (the replace-on-identity-change effect),
-  `src/app/components/workspace/usePaperContent.ts` (where the pass decides content).
-- **Design question to settle first:** are edits per-pass (three independent documents) or
-  one document the passes render differently? That answers whether to keep three block sets
-  or to diff-and-merge into one.
-- **Wants:** an E2E test for the repro above — neither half is wrong in isolation, so only an
-  integration-level test catches it.
-
-### 2. Concept graph — provenance, now blocking
+### 1. Concept graph — provenance, now blocking
 
 **Priority:** P1 · **Status:** confirmed **in scope** for the next wave (2026-07-31)
 
@@ -228,7 +206,44 @@ main reading view. The plumbing is correct and tested; only rendering is missing
 - Unify the `new_terms` inline `*(from cited text)*` suffix with whatever chip lands.
 - Related, same area: on the skim pass the paper HTML renders first and is then wholesale
   replaced when the summary arrives, with no loading state or transition. Verify visually
-  whether that reads as a glitch.
+  whether that reads as a glitch. (Reader edits now survive that swap, but the swap itself is
+  still abrupt — the fix was about state, not transition.)
+
+---
+
+## Reader — the markdown round trip collapses single newlines
+
+**Priority:** P3 · **Surfaced by:** fixing the unlock-rewrites-content bug, 2026-08-06
+
+`parseSelectionSummaryToBlocks` joins a selection summary's bullets with `\n`
+(`parsers.ts`), but `marked` runs with `breaks: false`, so a single newline renders as a
+soft break and Turndown reads it back as a space. The first time such a callout is unlocked
+its bullets collapse onto one line — the same "unlocking rewrites the block" symptom as the
+block-marker bug, but a different cause, and it survives that fix.
+
+Same shape for any paragraph whose text carries single newlines. Turndown's escaping is a
+third instance: a paragraph containing `x_i` comes back as `x\_i`.
+
+- **Start at:** the `breaks` option in `src/app/components/block-editor/utils/markdown.ts`
+  and the `\n` join in `parsers.ts`. The known-loss cases are pinned as tests at the bottom
+  of `utils/markdown.test.ts`, so a fix has somewhere to land.
+- Deciding whether a soft break should become `<br>` is a rendering choice, not just a
+  serializer bug — a callout of bullets and a wrapped paragraph want different answers.
+
+---
+
+## Reader — passes 2 and 3 render identical content
+
+**Priority:** P3 · **Surfaced by:** the pass-toggle investigation, 2026-08-06
+
+`pass` reaches content selection in exactly one place — `usePaperContent.ts`,
+`summaryIsPrimary = pass === "skim" && Boolean(effectiveSummary)`. So read and deep resolve to
+the same memoized paper-HTML block array; the only difference a reader sees between them is
+the guidance-card text in `usePassState.ts:40-61`.
+
+That may be the intended product design (same text, different instruction to the reader), or
+it may be an unfinished third pass. Worth an explicit decision rather than leaving it as an
+accident of the code: if deep is meant to differ, nothing currently makes it differ.
 
 ---
 

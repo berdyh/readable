@@ -8,6 +8,30 @@ The block-based editor now stores content in **Markdown format** instead of HTML
 2. **Editing Format**: TipTap uses HTML internally for editing (better cursor management, formatting, etc.)
 3. **Conversion**: Automatic conversion between Markdown ↔ HTML happens transparently
 
+### The one storage rule
+
+**Content never carries the block-level marker its `type` already encodes.** A `heading_2`
+stores `Introduction`, not `## Introduction`; a `bullet_list` stores `key point`, not
+`- key point`. The marker is added when the block is rendered and dropped when it is read back.
+
+Storing it twice means the two copies can disagree, and the round trip "corrects" the
+difference — rewriting a block the reader never touched, which is exactly what unlocking a
+generated heading used to do. Every producer (`parsers.ts`, `store.tsx`) already writes bare
+content; the serializer is what drifted.
+
+Markers that carry something the type does **not** encode stay in the content, because there is
+nowhere else for them to live:
+
+| Marker              | Stored? | Why                                                   |
+| ------------------- | ------- | ----------------------------------------------------- |
+| `#`, `-`, `1.`, `>` | No      | `heading_*` / `bullet_list` / `number_list` / `quote` |
+| `[ ]` / `[x]`       | Yes     | carries the to-do's checked state                     |
+| ` ```lang `         | Yes     | carries the code block's language                     |
+
+Inline markdown (`**bold**`, `*italic*`, links, `` `code` ``) is stored in content for every
+block type. The invariant that keeps this honest is pinned in `utils/markdown.test.ts`:
+`htmlToMarkdown(markdownToHtml(content, type), type) === content`.
+
 ## Markdown Syntax Supported
 
 ### Text Blocks
@@ -19,15 +43,16 @@ The block-based editor now stores content in **Markdown format** instead of HTML
 
 ### Headings
 
-- **Heading 1**: `# Heading`
-- **Heading 2**: `## Heading`
-- **Heading 3**: `### Heading`
+Stored bare — the level is the block type (`heading_1`, `heading_2`, `heading_3`), so
+`Heading`, not `# Heading`. A leading `#` in incoming content is accepted and dropped.
 
 ### Lists
 
-- **Bullet lists**: `* item` or `- item`
-- **Numbered lists**: `1. item` (automatically numbered)
-- **Todo lists**: `[ ] unchecked` or `[x] checked`
+- **Bullet lists** (`bullet_list`): stored bare as `item`; rendered as `- item`
+- **Numbered lists** (`number_list`): stored bare as `item`; numbered by position, so no
+  start number is kept
+- **Todo lists** (`to_do_list`): `[ ] unchecked` or `[x] checked` — the marker stays, it is
+  the checked state
 
 ### Code Blocks
 
@@ -46,7 +71,8 @@ The block-based editor now stores content in **Markdown format** instead of HTML
 
 ### Quotes
 
-- **Blockquote**: `> quoted text`
+Stored bare as `quoted text` — the `quote` block type is the `>`; a leading `>` in incoming
+content is accepted and dropped.
 
 ### Images
 

@@ -1,42 +1,69 @@
 /**
  * Utility functions for converting between HTML (TipTap format) and Markdown
  * This allows us to store content as Markdown while using TipTap for editing
+ *
+ * The one rule that keeps the conversion honest: **content never carries the
+ * block-level marker its type already encodes**. A `heading_2` stores
+ * `Introduction`, not `## Introduction`; a `bullet_list` stores the item text,
+ * not `- item`. Storing it twice means the two copies can disagree, and the
+ * round trip "corrects" the difference — rewriting a block the reader never
+ * touched the moment TipTap is handed the block. Markers that carry something
+ * the type does not — a to-do's checked state, a code block's language — stay
+ * in the content, because there is nowhere else for them to live.
  */
 
 import TurndownService from "turndown";
 import { marked } from "marked";
 
-// Configure Turndown for converting HTML to Markdown
-const turndownService = new TurndownService({
-  headingStyle: "atx", // Use # for headings
-  codeBlockStyle: "fenced", // Use ``` for code blocks
-  bulletListMarker: "-", // Use - for bullet lists
-  emDelimiter: "*", // Use * for emphasis
-});
+function createTurndownService(): TurndownService {
+  const service = new TurndownService({
+    headingStyle: "atx", // Use # for headings
+    codeBlockStyle: "fenced", // Use ``` for code blocks
+    bulletListMarker: "-", // Use - for bullet lists
+    emDelimiter: "*", // Use * for emphasis
+  });
 
-// Custom rules for better Markdown conversion
-turndownService.addRule("strikethrough", {
-  filter: (node) => {
-    return (
-      node.nodeName === "DEL" ||
-      node.nodeName === "S" ||
-      (node.nodeName === "SPAN" &&
-        (node as HTMLElement).style.textDecoration?.includes("line-through"))
-    );
-  },
-  replacement: (content) => `~~${content}~~`,
-});
+  // Custom rules for better Markdown conversion
+  service.addRule("strikethrough", {
+    filter: (node) => {
+      return (
+        node.nodeName === "DEL" ||
+        node.nodeName === "S" ||
+        (node.nodeName === "SPAN" &&
+          (node as HTMLElement).style.textDecoration?.includes("line-through"))
+      );
+    },
+    replacement: (content) => `~~${content}~~`,
+  });
 
-// Preserve checkbox syntax for todo lists
-turndownService.addRule("checkbox", {
-  filter: (node) => {
-    return node.nodeName === "INPUT" && (node as HTMLInputElement).type === "checkbox";
-  },
-  replacement: (_content, node) => {
-    const input = node as HTMLInputElement;
-    return input.checked ? "[x]" : "[ ]";
-  },
-});
+  // Preserve checkbox syntax for todo lists
+  service.addRule("checkbox", {
+    filter: (node) => {
+      return node.nodeName === "INPUT" && (node as HTMLInputElement).type === "checkbox";
+    },
+    replacement: (_content, node) => {
+      const input = node as HTMLInputElement;
+      return input.checked ? "[x]" : "[ ]";
+    },
+  });
+
+  return service;
+}
+
+const turndownService = createTurndownService();
+
+/**
+ * Same conversion, minus Turndown's escaping.
+ *
+ * Turndown escapes anything that could be read back as block syntax, so a
+ * heading titled `1. Introduction` comes back as `1\. Introduction` and
+ * `x_i` as `x\_i`. For prose that escape is load-bearing; for a heading it is
+ * not, because headings are rendered with `marked.parseInline`, which never
+ * applies block rules. Without this the heading round trip would rewrite the
+ * very titles it is supposed to leave alone.
+ */
+const inlineTurndownService = createTurndownService();
+inlineTurndownService.escape = (text: string) => text;
 
 // Configure marked for converting Markdown to HTML
 marked.setOptions({
@@ -67,49 +94,61 @@ function stripNumberPrefix(markdown: string): { marker: string; content: string 
   };
 }
 
-function normalizeSingleItemListMarkdown(markdown: string, blockType?: string): string {
+function stripHeadingPrefix(markdown: string): string | null {
+  const match = markdown.trim().match(/^#{1,6}\s+(.*)$/);
+  return match ? match[1] : null;
+}
+
+function stripQuotePrefix(markdown: string): string {
+  return markdown
+    .split("\n")
+    .map((line) => line.trim().replace(/^>\s*/, "").trim())
+    .filter(Boolean)
+    .join("\n");
+}
+
+/**
+ * The item text of a single-item list block, with whichever marker it happens
+ * to arrive with removed.
+ *
+ * Any flavour is accepted, not just the block's own: a bullet pasted into a
+ * numbered list, or content converted between list types, must not end up
+ * carrying a marker of the type it left behind.
+ */
+function listItemText(markdown: string): string {
   const trimmed = markdown.trim();
 
-  if (blockType === "bullet_list") {
-    const bullet = stripBulletPrefix(trimmed);
-    if (bullet !== null) return bullet ? `- ${bullet.trim()}` : "";
+  const bullet = stripBulletPrefix(trimmed);
+  if (bullet !== null) return bullet.trim();
 
-    const number = stripNumberPrefix(trimmed);
-    if (number) return number.content.trim() ? `- ${number.content.trim()}` : "";
+  const number = stripNumberPrefix(trimmed);
+  if (number) return number.content.trim();
 
-    const todo = stripTodoPrefix(trimmed);
-    if (todo) return todo.content.trim() ? `- ${todo.content.trim()}` : "";
-
-    return trimmed ? `- ${trimmed}` : "";
-  }
-
-  if (blockType === "number_list") {
-    const number = stripNumberPrefix(trimmed);
-    if (number) {
-      const content = number.content.trim();
-      return content ? `${number.marker} ${content}` : "";
-    }
-
-    const bullet = stripBulletPrefix(trimmed);
-    if (bullet !== null) return bullet.trim() ? `1. ${bullet.trim()}` : "";
-
-    const todo = stripTodoPrefix(trimmed);
-    if (todo) return todo.content.trim() ? `1. ${todo.content.trim()}` : "";
-
-    return trimmed ? `1. ${trimmed}` : "";
-  }
-
-  if (blockType === "to_do_list") {
-    const todo = stripTodoPrefix(trimmed);
-    if (todo) {
-      const content = todo.content.trim();
-      return content ? `[${todo.checked ? "x" : " "}] ${content}` : `[${todo.checked ? "x" : " "}]`;
-    }
-
-    return trimmed ? `[ ] ${trimmed}` : "";
-  }
+  const todo = stripTodoPrefix(trimmed);
+  if (todo) return todo.content.trim();
 
   return trimmed;
+}
+
+/**
+ * Strip whatever block-level marker `blockType` implies, so that stored content
+ * is the same string whether it arrived from a parser (bare, as they all write
+ * it) or from a document written before this rule existed (marked up).
+ */
+function stripBlockMarker(markdown: string, blockType?: string): string {
+  if (blockType?.startsWith("heading_")) {
+    return (stripHeadingPrefix(markdown) ?? markdown).trim();
+  }
+
+  if (blockType === "quote") {
+    return stripQuotePrefix(markdown);
+  }
+
+  if (blockType === "bullet_list" || blockType === "number_list") {
+    return listItemText(markdown);
+  }
+
+  return markdown.trim();
 }
 
 /**
@@ -163,35 +202,22 @@ export function htmlToMarkdown(html: string, blockType?: string): string {
       .replace(/^\\([*+-]\s)/gm, "$1");
   }
 
-  // Handle headings
+  // Handle headings. The level lives in `blockType`, so no `#` is written:
+  // re-deriving one here is what used to rewrite `Paper Summary` into
+  // `# Paper Summary` the moment a locked heading was unlocked.
   if (blockType?.startsWith("heading_")) {
-    const level = blockType === "heading_1" ? 1 : blockType === "heading_2" ? 2 : 3;
     const headingMatch = html.match(/<h\d[^>]*>([\s\S]*?)<\/h\d>/);
-    if (headingMatch) {
-      const content = turndownService.turndown(headingMatch[1]).trim();
-      return `${"#".repeat(level)} ${content}`;
-    }
-    const content = html.replace(/<[^>]+>/g, "").trim();
-    if (content) {
-      return `${"#".repeat(level)} ${content}`;
-    }
+    const source = headingMatch ? headingMatch[1] : html;
+    return stripBlockMarker(inlineTurndownService.turndown(source), blockType);
   }
 
   // Handle quotes
   if (blockType === "quote") {
-    const content = turndownService.turndown(html);
-    return content
-      .split("\n")
-      .map((line) => {
-        const normalized = line.trim().replace(/^>\s*/, "").trim();
-        return normalized ? `> ${normalized}` : "";
-      })
-      .filter(Boolean)
-      .join("\n");
+    return stripBlockMarker(turndownService.turndown(html), blockType);
   }
 
   const markdown = turndownService.turndown(html).trim();
-  return normalizeSingleItemListMarkdown(markdown, blockType);
+  return stripBlockMarker(markdown, blockType);
 }
 
 /**
@@ -220,23 +246,18 @@ export function markdownToHtml(markdown: string, blockType?: string): string {
     }
   }
 
-  // Handle headings
+  // Handle headings. A heading holds one line of title text, so it is parsed
+  // inline: block rules would read a title like `1. Introduction` as an ordered
+  // list and lose the number. TipTap has `heading: false` — the level is styled
+  // from the block type — so a paragraph is the right host element.
   if (blockType?.startsWith("heading_")) {
-    const headingMatch = markdown.match(/^(#{1,6})\s+(.+)$/);
-    if (headingMatch) {
-      const level = headingMatch[1].length;
-      const content = headingMatch[2];
-      return `<h${level}>${content}</h${level}>`;
-    }
-    if (markdown.startsWith("#")) {
-      const parsed = marked.parse(markdown) as string;
-      return parsed;
-    }
+    const title = stripBlockMarker(markdown, blockType);
+    return title ? `<p>${marked.parseInline(title) as string}</p>` : "";
   }
 
   // Handle quotes
   if (blockType === "quote") {
-    const content = markdown.replace(/^>\s*/gm, "");
+    const content = stripBlockMarker(markdown, blockType);
     const parsed = marked.parse(content) as string;
     if (!parsed.includes("<blockquote")) {
       return `<blockquote>${parsed}</blockquote>`;
@@ -245,22 +266,18 @@ export function markdownToHtml(markdown: string, blockType?: string): string {
   }
 
   if (blockType === "to_do_list") {
-    const normalized = normalizeSingleItemListMarkdown(markdown, blockType);
-    if (!normalized) {
-      return "";
-    }
-    const content = normalized.replace(/^\[[ xX]\]\s*/, "").trim();
-    return marked.parseInline(content) as string;
+    const content = listItemText(markdown);
+    return content ? (marked.parseInline(content) as string) : "";
   }
 
   if (blockType === "bullet_list") {
-    const normalized = normalizeSingleItemListMarkdown(markdown, blockType);
-    return normalized ? (marked.parse(normalized) as string) : "";
+    const item = listItemText(markdown);
+    return item ? (marked.parse(`- ${item}`) as string) : "";
   }
 
   if (blockType === "number_list") {
-    const normalized = normalizeSingleItemListMarkdown(markdown, blockType);
-    return normalized ? (marked.parse(normalized) as string) : "";
+    const item = listItemText(markdown);
+    return item ? (marked.parse(`1. ${item}`) as string) : "";
   }
 
   return marked.parse(markdown) as string;

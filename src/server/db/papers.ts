@@ -61,19 +61,28 @@ function naturalCompareChunkIds(a: string, b: string): number {
 
 /**
  * Document-order comparator for paper chunks. `token_start` carries the
- * ingest-time reading-order ordinal; rows ingested before the ordinal
- * existed have NULL `token_start` permanently and fall back to
- * natural-sorting `chunk_id`.
+ * ingest-time reading-order ordinal; rows ingested before the ordinal existed
+ * have NULL `token_start` permanently.
+ *
+ * A missing ordinal sorts as `+Infinity` rather than deferring to `chunk_id`,
+ * which is what makes this a total order. Comparing mixed rows by id instead
+ * would let ordering cycle — A before B by ordinal, B before C by id, C before
+ * A by id — and `Array.sort` is free to return anything for a cyclic
+ * comparator, silently reintroducing the out-of-order chunks this ordinal was
+ * added to fix. A paper holds mixed rows whenever `upsertPaperChunks` runs
+ * without `replaceExistingForPaper`, interleaving new and legacy chunks.
  */
 export function compareChunksByDocumentOrder(
   a: Pick<PaperChunk, "chunkId" | "tokenStart">,
   b: Pick<PaperChunk, "chunkId" | "tokenStart">,
 ): number {
-  if (typeof a.tokenStart === "number" && typeof b.tokenStart === "number") {
-    if (a.tokenStart !== b.tokenStart) {
-      return a.tokenStart - b.tokenStart;
-    }
+  const aStart = typeof a.tokenStart === "number" ? a.tokenStart : Number.POSITIVE_INFINITY;
+  const bStart = typeof b.tokenStart === "number" ? b.tokenStart : Number.POSITIVE_INFINITY;
+
+  if (aStart !== bStart) {
+    return aStart < bStart ? -1 : 1;
   }
+
   return naturalCompareChunkIds(a.chunkId, b.chunkId);
 }
 

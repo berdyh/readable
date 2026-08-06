@@ -1,6 +1,13 @@
 import { ensureSchema } from "./migrate";
 import { withPgClient } from "./postgres";
-import type { ConceptEdgeRecord, ConceptRecord } from "./types";
+import { CONCEPT_EDGE_RELATIONS, CONCEPT_EDGE_SOURCES } from "./types";
+import type {
+  ConceptEdgeRecord,
+  ConceptEdgeRelation,
+  ConceptEdgeSource,
+  ConceptEdgeWithProvenance,
+  ConceptRecord,
+} from "./types";
 
 /**
  * Global concept graph persistence. Nodes are keyed by a normalized,
@@ -142,7 +149,31 @@ export async function upsertConceptEdges(
   });
 }
 
-export async function fetchConceptEdgesByFromKeys(keys: string[]): Promise<ConceptEdgeRecord[]> {
+function asEdgeRelation(value: string): ConceptEdgeRelation {
+  return (CONCEPT_EDGE_RELATIONS as readonly string[]).includes(value)
+    ? (value as ConceptEdgeRelation)
+    : "depends_on";
+}
+
+function asEdgeSource(value: string): ConceptEdgeSource {
+  return (CONCEPT_EDGE_SOURCES as readonly string[]).includes(value)
+    ? (value as ConceptEdgeSource)
+    : "llm";
+}
+
+/**
+ * Reads outgoing edges with their provenance.
+ *
+ * `corroborated` is the read-time answer to a question the write path
+ * deliberately never asks: writes are never rejected, so agreement is
+ * counted here instead. An edge read out of cited text is trusted on its
+ * own; an LLM-asserted one needs two distinct papers to have said it.
+ * A caller ranking or filtering the graph should use this rather than
+ * `confidence`, which the model that produced the edge chose for itself.
+ */
+export async function fetchConceptEdgesByFromKeys(
+  keys: string[],
+): Promise<ConceptEdgeWithProvenance[]> {
   const cleaned = Array.from(new Set(keys.map((key) => key.trim()).filter(Boolean)));
   if (cleaned.length === 0) {
     return [];
@@ -157,19 +188,28 @@ export async function fetchConceptEdgesByFromKeys(keys: string[]): Promise<Conce
       relation: string;
       confidence: number | null;
       source: string;
+      paper_ids: string[] | null;
     }>(
-      `SELECT from_key, to_key, relation, confidence, source
+      `SELECT from_key, to_key, relation, confidence, source, paper_ids
        FROM concept_edges
        WHERE from_key = ANY($1::text[])`,
       [cleaned],
     );
 
-    return rows.map((row) => ({
-      fromKey: row.from_key,
-      toKey: row.to_key,
-      relation: "depends_on" as const,
-      confidence: typeof row.confidence === "number" ? row.confidence : undefined,
-      source: row.source === "citation" ? ("citation" as const) : ("llm" as const),
-    }));
+    return rows.map((row) => {
+      const paperIds = row.paper_ids ?? [];
+      const source = asEdgeSource(row.source);
+      return {
+        fromKey: row.from_key,
+        toKey: row.to_key,
+        // Values the declared union knows about round-trip; only a database
+        // that has drifted ahead of this code falls back to the default.
+        relation: asEdgeRelation(row.relation),
+        confidence: typeof row.confidence === "number" ? row.confidence : undefined,
+        source,
+        paperIds,
+        corroborated: source === "citation" || paperIds.length >= 2,
+      };
+    });
   });
 }

@@ -69,12 +69,41 @@ export interface ConceptRecord {
   description?: string;
 }
 
+/**
+ * The concept-graph enums, declared once as values so the read path can
+ * check a database string against them instead of hard-coding a literal.
+ * Both lists mirror a CHECK constraint in `schema.ts`, and `schema.test.ts`
+ * asserts they still agree — widening one without the other fails there,
+ * loudly, instead of being silently discarded on read.
+ */
+export const CONCEPT_EDGE_RELATIONS = ["depends_on"] as const;
+export type ConceptEdgeRelation = (typeof CONCEPT_EDGE_RELATIONS)[number];
+
+export const CONCEPT_EDGE_SOURCES = ["llm", "citation"] as const;
+export type ConceptEdgeSource = (typeof CONCEPT_EDGE_SOURCES)[number];
+
 export interface ConceptEdgeRecord {
   fromKey: string;
   toKey: string;
-  relation?: "depends_on";
+  relation?: ConceptEdgeRelation;
   confidence?: number;
-  source: "llm" | "citation";
+  source: ConceptEdgeSource;
+}
+
+/**
+ * Read shape: an edge plus the provenance the write path recorded.
+ * `paperIds` is empty for pre-provenance rows — absence of evidence, not
+ * evidence of a single source.
+ */
+export interface ConceptEdgeWithProvenance extends ConceptEdgeRecord {
+  paperIds: string[];
+  /**
+   * Whether the edge is worth trusting without a human: read out of cited
+   * text, or asserted independently by at least two papers. A future read
+   * path should rank or filter on this rather than on raw confidence,
+   * which is self-reported by the model that produced the edge.
+   */
+  corroborated: boolean;
 }
 
 /** Per-user mastery ledger row (evolved persona_concepts). */

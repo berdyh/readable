@@ -46,7 +46,7 @@ vi.mock("./postgres", () => ({
   ),
 }));
 
-import { upsertConceptEdges, upsertConcepts } from "./concepts";
+import { fetchConceptEdgesByFromKeys, upsertConceptEdges, upsertConcepts } from "./concepts";
 
 beforeEach(() => {
   mocks.reset();
@@ -178,5 +178,140 @@ describe("upsertConceptEdges", () => {
     expect(mocks.statements[0]).toContain(
       "confidence = GREATEST( COALESCE(EXCLUDED.confidence, 0), COALESCE(concept_edges.confidence, 0) )",
     );
+  });
+});
+
+describe("fetchConceptEdgesByFromKeys", () => {
+  it("returns nothing without querying when every key is blank", async () => {
+    expect(await fetchConceptEdgesByFromKeys([])).toEqual([]);
+    expect(await fetchConceptEdgesByFromKeys(["  ", ""])).toEqual([]);
+    expect(mocks.client.query).not.toHaveBeenCalled();
+  });
+
+  it("dedupes and trims the requested keys", async () => {
+    await fetchConceptEdgesByFromKeys([" ml:transformer ", "ml:transformer", "ml:attention"]);
+
+    expect(mocks.params[0]).toEqual([["ml:transformer", "ml:attention"]]);
+  });
+
+  it("returns the provenance array alongside each edge", async () => {
+    mocks.setRows([
+      {
+        from_key: "ml:transformer",
+        to_key: "ml:attention",
+        relation: "depends_on",
+        confidence: 0.8,
+        source: "llm",
+        paper_ids: ["1706.03762", "2005.14165"],
+      },
+    ]);
+
+    const [edge] = await fetchConceptEdgesByFromKeys(["ml:transformer"]);
+    expect(edge.paperIds).toEqual(["1706.03762", "2005.14165"]);
+    expect(mocks.statements[0]).toContain("paper_ids");
+  });
+
+  it("treats a NULL paper_ids column as unknown origin, not as a crash", async () => {
+    mocks.setRows([
+      {
+        from_key: "ml:transformer",
+        to_key: "ml:attention",
+        relation: "depends_on",
+        confidence: null,
+        source: "llm",
+        paper_ids: null,
+      },
+    ]);
+
+    const [edge] = await fetchConceptEdgesByFromKeys(["ml:transformer"]);
+    expect(edge.paperIds).toEqual([]);
+    expect(edge.confidence).toBeUndefined();
+    expect(edge.corroborated).toBe(false);
+  });
+
+  it("counts distinct papers for corroboration, and trusts citation-sourced edges outright", async () => {
+    mocks.setRows([
+      {
+        from_key: "ml:a",
+        to_key: "ml:b",
+        relation: "depends_on",
+        confidence: null,
+        source: "llm",
+        paper_ids: ["p1"],
+      },
+      {
+        from_key: "ml:a",
+        to_key: "ml:c",
+        relation: "depends_on",
+        confidence: null,
+        source: "llm",
+        paper_ids: ["p1", "p2"],
+      },
+      {
+        from_key: "ml:a",
+        to_key: "ml:d",
+        relation: "depends_on",
+        confidence: null,
+        source: "citation",
+        paper_ids: ["p1"],
+      },
+    ]);
+
+    const edges = await fetchConceptEdgesByFromKeys(["ml:a"]);
+    expect(edges.map((edge) => edge.corroborated)).toEqual([false, true, true]);
+  });
+});
+
+describe("fetchConceptEdgesByFromKeys enum handling", () => {
+  /**
+   * The mapper used to hard-code `relation: "depends_on"` and collapse any
+   * non-"citation" source to "llm", so widening either CHECK constraint
+   * would have been silently discarded on read. It now preserves any value
+   * the declared union knows about; these tests pin both halves — the
+   * preservation, and the fallback for a value the code has never heard of.
+   */
+  it("preserves every declared relation and source value", async () => {
+    mocks.setRows([
+      {
+        from_key: "ml:a",
+        to_key: "ml:b",
+        relation: "depends_on",
+        confidence: null,
+        source: "citation",
+        paper_ids: [],
+      },
+      {
+        from_key: "ml:a",
+        to_key: "ml:c",
+        relation: "depends_on",
+        confidence: null,
+        source: "llm",
+        paper_ids: [],
+      },
+    ]);
+
+    const edges = await fetchConceptEdgesByFromKeys(["ml:a"]);
+    expect(edges.map((edge) => edge.source)).toEqual(["citation", "llm"]);
+    expect(edges.map((edge) => edge.relation)).toEqual(["depends_on", "depends_on"]);
+  });
+
+  it("falls back to the defaults for a value the code has never heard of", async () => {
+    // Only reachable if the database drifts ahead of this deployment.
+    // `schema.test.ts` asserts the CHECK constraints and the TypeScript
+    // unions agree, so drift within one deploy fails there, loudly.
+    mocks.setRows([
+      {
+        from_key: "ml:a",
+        to_key: "ml:b",
+        relation: "contradicts",
+        confidence: null,
+        source: "handwritten",
+        paper_ids: [],
+      },
+    ]);
+
+    const [edge] = await fetchConceptEdgesByFromKeys(["ml:a"]);
+    expect(edge.relation).toBe("depends_on");
+    expect(edge.source).toBe("llm");
   });
 });

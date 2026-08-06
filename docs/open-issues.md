@@ -1,7 +1,8 @@
 # Open issues and next steps
 
-Working state: `main` at `v0.2.0.0` — the explanation-engine wave merged as PR #23 (`1ab4131`).
-`pnpm verify` green on the merged tree: 458 tests, 0 lint errors, 0 lint warnings.
+Working state: `main` at `v0.2.0.0` — the explanation-engine wave merged as PR #23 (`1ab4131`),
+then the reader-state and correctness fixes as PR #24 (`5cf90e1`) and PR #25 (`e91fb52`).
+`pnpm verify` green on the merged tree: 0 lint errors, 0 lint warnings.
 `pnpm eval -- --dry-run` passes all gates; the live eval baseline is not yet recorded
 (see below).
 
@@ -26,73 +27,79 @@ Items are grouped by component, then priority: **P0** (drop everything) through 
 
 ## Next session — start here
 
-One P1 item. Everything below it is context, not queue.
+**No P1 item remains.** The concept-graph provenance work landed, and with it the last
+blocking item. The highest remaining priority is P2, and the two worth doing first are:
 
-### 1. Concept graph — provenance, now blocking
+1. **The citation router's "recent work" trigger widens on its own** (below, under
+   Correctness). It is the only open item that gets worse on its own with the calendar —
+   every year the frozen `RECENT_YEAR_CUTOFF` sits still, it pulls retrieval for more papers
+   on a path nobody is watching.
+2. **Record the live eval baseline** (below). One live model run, and the harness stops
+   gating on absolute thresholds only.
 
-**Priority:** P1 · **Status:** confirmed **in scope** for the next wave (2026-07-31)
+Everything else in this file is context, not queue.
 
-`concepts` and `concept_edges` are global tables written last-writer-wins from LLM output
-over user-ingested papers, with no record of which paper or user produced a node or edge.
-This was a latent risk while nothing read the graph cross-user. **The next wave adds a
-cross-user read path, so it is no longer latent — this is blocking work in that wave**, not
-a precondition to remember.
+---
 
-Without provenance, one malicious or sloppy paper poisons shared concept descriptions and
-prerequisite ordering for every user, and there is no way to attribute or roll back a bad
-node.
+## Concept graph — the read path is still unbuilt
 
-Required before the read path ships:
+**Priority:** P3 · **Status:** provenance landed 2026-08-07; nothing reads the graph yet
 
-- Provenance columns (`paper_id`, and `user_id` where it does not leak identity) on both
-  `concepts` and `concept_edges`, written by `recordConceptGraph`.
-- Treat `display_name` / `description` as untrusted text at **every** render site and every
-  prompt-composition site — they are LLM output derived from arbitrary uploaded documents.
-- Corroboration before overwrite: require agreement from more than one source/paper before an
-  LLM-sourced description replaces an existing shared one, rather than last-writer-wins.
-- Decide the read model: is the graph global-but-attributed, or per-user views over a shared
-  skeleton? This decision drives the schema, so make it before writing migrations.
+The read model is settled and implemented on the storage side: **the skeleton (keys and
+edges) is global but attributed, and every human-readable string stays per-user in
+`persona_concepts`.** `concepts.display_name` / `concepts.description` still have zero
+readers anywhere in the tree, and the first implementer of a read path must keep it that way:
 
-**Start at:** `src/server/db/concepts.ts` (`upsertConcepts`, `upsertConceptEdges`),
-`src/server/persona/record.ts` (`recordConceptGraph`), `src/server/db/schema.ts` +
-`schema.sql` (both, together).
+- **Never render or prompt with stored `display_name` / `description`.** They are LLM output
+  derived from arbitrary uploaded documents. Derive a display string from the normalized
+  concept key, or read the user's own row in `persona_concepts` — which is already the render
+  source and already handles cold start.
+- **Rank and filter on `corroborated`, not on `confidence`.** `fetchConceptEdgesByFromKeys`
+  returns both, plus `paperIds`. `confidence` is self-reported by the model that produced the
+  edge; `corroborated` means the edge was read out of cited text or asserted independently by
+  at least two papers.
+- Writes are never rejected and never should be. `cardinality(paper_ids)` is the agreement
+  counter, and it is also the rollback handle: a bad contributor is found by the paper id, not
+  by re-running anything.
 
-Length caps and control-character stripping landed in the ship wave; they bound the blast
-radius of a single write but establish no provenance.
+**Start at:** `src/server/db/concepts.ts` (`fetchConceptEdgesByFromKeys`, still with no
+callers) and `src/server/db/persona.ts` (`fetchConceptLedgerForUser`, the per-user text).
 
-Related and unblocked by the same work: **`fetchConceptEdgesByFromKeys` currently has no
-callers** (`src/server/db/concepts.ts`) — it was built for exactly this read path. Its row
-mapper silently coerces any unknown `relation` to `depends_on` and any unknown `source` to
-`llm`, which will mask a future enum widening; pin that behavior with a test when it gains
-its first caller.
+---
+
+## Concept graph — citation edges name the summarization, not the source
+
+**Priority:** P2 · **Surfaced by:** codex review of the provenance wave, 2026-08-07
+
+`groundLowFamiliarityTerms` (`src/server/summarize/index.ts`) builds its prompt from up to
+eight **cited** papers' abstracts and extracts prerequisite pairs out of that text — then
+records the paper being _summarized_ as the provenance for every resulting edge.
+
+So the two questions provenance is supposed to answer come apart:
+
+- "Remove what paper A contributed" — works. A is genuinely the summarization that produced
+  the row.
+- "Find everything derived from cited work B, which turned out to be wrong" — does not work.
+  B is not recorded anywhere on the edge.
+
+**It does not inflate trust.** `corroborated` treats a `source = 'citation'` edge as trusted
+on its own and never consults `cardinality(paper_ids)` for it, so several papers citing one
+bad source cannot masquerade as independent agreement. Worth re-checking if that short-circuit
+is ever removed.
+
+The fix is not a patch: the grounding response would have to name which citation supported
+which term, which means changing `TERM_GROUNDING_SCHEMA` and the `term_grounding` prompt —
+a schema-enforced LLM contract. This repo has already shipped one unvalidated LLM-contract
+change that failed silently (see the OpenRouter truncation note below), so this wants an eval
+run, not a guess. The cited work also usually has no `papers` row, so the identifier would be
+the citation's arXiv id or DOI rather than a `paper_id`.
+
+**Start at:** `groundLowFamiliarityTerms` and `TERM_GROUNDING_SCHEMA` in
+`src/server/summarize/index.ts`, and `term_grounding` in `src/server/llm-config/prompts.json`.
 
 ---
 
 ## Correctness — found in the ship review, not yet fixed
-
-### Chunk ordering comparator is non-transitive on mixed rows
-
-**Priority:** P2 · `src/server/db/papers.ts:68`
-
-`compareChunksByDocumentOrder` compares by `tokenStart` only when **both** sides have one,
-and otherwise falls through to natural chunk-id comparison. A paper holding both
-ordinal-bearing and legacy `NULL` rows can therefore form ordering cycles (A < B by ordinal,
-B < C by id, C < A by id), and `Array.sort` gives an unspecified order for cyclic comparators
-— silently reintroducing the exact class of bug this wave fixed.
-
-Reachable when `upsertPaperChunks` runs without `replaceExistingForPaper`, interleaving new
-and legacy chunks. Fix: treat a missing `tokenStart` as `+Infinity` so ordinal rows always
-sort before legacy ones, then tiebreak by natural id — that restores a total order.
-
-### Duplicate citations lose enrichment
-
-**Priority:** P3 · `src/server/external/semantic-scholar.ts:444`
-
-`batchKeyById` is a `Map<string, string>`, so when two bibliography entries resolve to the
-same Semantic Scholar id (the same work cited twice under different keys), the second
-`set(id, input.key)` overwrites the first and the earlier citation silently receives no
-enrichment. Fix: make it `Map<string, string[]>` and apply the result to every key that
-mapped to that id.
 
 ### Degraded re-ingest drops citation-to-chunk anchors
 
@@ -144,7 +151,7 @@ backfill mapping legacy strings through the `server/explain` normalizer, merging
 **Priority:** P3
 
 - **N+1 writes on the concept-graph path.** `upsertConcepts` and `upsertConceptEdges`
-  (`src/server/db/concepts.ts:20,49`) and `recordConceptSignal` (`src/server/db/persona.ts`)
+  (`src/server/db/concepts.ts`) and `recordConceptSignal` (`src/server/db/persona.ts`)
   each issue one `INSERT ... ON CONFLICT` per row inside a loop. Bounded today (≤8 concepts ×
   ≤4 prerequisites per interaction) and fire-and-forget, but it is the classic batchable shape
   on a path every QA/summarize/selection interaction touches. Fix: multi-row `VALUES` or
@@ -176,8 +183,6 @@ The ship audit traced 67 paths through the diff and found **31 covered (46%)** �
 
 The gaps worth closing first, because they guard data correctness rather than rendering:
 
-- `src/server/db/concepts.ts` — no tests at all: the `GREATEST(confidence)` edge merge, the
-  empty-input early returns, and the read-side `relation`/`source` coercions.
 - `src/server/db/persona.ts` — `recordConceptSignal`'s ledger upsert carries the subtlest
   persistence semantics in the wave (per-signal `jsonb` counter increment, `distinct_paper_ids`
   dedupe CASE, COALESCE name/description) with no SQL-shape test. `papers.test.ts` pins its

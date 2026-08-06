@@ -96,6 +96,30 @@ CREATE TABLE IF NOT EXISTS concept_edges (
 );
 CREATE INDEX IF NOT EXISTS concept_edges_to_idx ON concept_edges(to_key);
 
+-- Concept-graph provenance (additive). Which papers a node or edge was
+-- derived from, so a bad contributor can be counted and rolled back.
+-- An empty array means "written before provenance existed / origin
+-- unknown"; there is no backfill, because edges were never recorded
+-- anywhere else.
+--
+-- The primary keys are deliberately NOT widened to include the paper:
+-- CREATE TABLE IF NOT EXISTS skips an existing table, so this machinery
+-- can never apply a key change to a live database. cardinality(paper_ids)
+-- gives the same corroboration count and the same rollback handle
+-- without a key migration.
+--
+-- No user_id on either table. Every graph-writing route is auth-gated and
+-- the interactions table already carries user_id + paper_id + concept keys, so
+-- operator attribution is a private join; a user_id on a shared row would
+-- deanonymize the sole contributor of a niche concept the moment anything
+-- serialized it.
+--
+-- description_paper_id records which paper supplied the stored
+-- description (descriptions are first-write-wins; see upsertConcepts).
+ALTER TABLE concepts ADD COLUMN IF NOT EXISTS source_paper_ids TEXT[] NOT NULL DEFAULT '{}';
+ALTER TABLE concepts ADD COLUMN IF NOT EXISTS description_paper_id TEXT;
+ALTER TABLE concept_edges ADD COLUMN IF NOT EXISTS paper_ids TEXT[] NOT NULL DEFAULT '{}';
+
 CREATE TABLE IF NOT EXISTS persona_concepts (
   id UUID PRIMARY KEY,
   user_id TEXT NOT NULL,

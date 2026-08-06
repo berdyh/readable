@@ -869,6 +869,7 @@ function parseGroundingPayload(raw: string): GroundedTerm[] {
  */
 async function groundLowFamiliarityTerms(
   result: SummaryResult,
+  paperId: string,
   candidates: CitationCandidate[],
   primaryDomain: string | undefined,
   options: SummarizeOptions,
@@ -933,6 +934,18 @@ async function groundLowFamiliarityTerms(
     }
 
     // Citation-derived edges: prerequisites extracted from cited text.
+    //
+    // Provenance here is the summarization that produced the row, NOT the
+    // work that asserted it — the passages come from up to eight cited
+    // papers' abstracts, and the grounding response does not say which one
+    // supported which term. So "remove what paper A contributed" works;
+    // "find everything derived from cited work B" does not. Naming the
+    // supporting citation means changing a schema-enforced LLM contract, so
+    // it is tracked in docs/open-issues.md rather than guessed at here.
+    //
+    // This does not inflate trust: `corroborated` treats a citation-sourced
+    // edge as trusted on its own and never consults paper count for it, so
+    // two papers citing one bad source cannot masquerade as agreement.
     const withEdges = grounded.filter((term) => term.definition && term.dependsOn.length > 0);
     if (withEdges.length > 0) {
       void recordConceptGraph(
@@ -941,6 +954,7 @@ async function groundLowFamiliarityTerms(
           domain: primaryDomain,
           dependsOn: term.dependsOn,
         })),
+        paperId,
         "citation",
       ).catch((error) => {
         console.warn("[summarize] failed to record citation-derived edges:", error);
@@ -1030,7 +1044,7 @@ export async function summarizePaperFromContext(
   const result = postProcessSummary(llmSummary, context, Boolean(citationBlock));
 
   const primaryDomain = llmSummary.concepts.find((concept) => concept.domain)?.domain;
-  await groundLowFamiliarityTerms(result, citationCandidates, primaryDomain, options);
+  await groundLowFamiliarityTerms(result, paperId, citationCandidates, primaryDomain, options);
 
   if (options.skipRecording) {
     return result;

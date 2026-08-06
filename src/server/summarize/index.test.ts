@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
   fetchPaperCitationsByPaperId: vi.fn(async (): Promise<unknown[]> => []),
   filterIngestedPaperIds: vi.fn(async (): Promise<string[]> => []),
   recordPersonaSignals: vi.fn(async (_args: unknown) => undefined),
-  recordConceptGraph: vi.fn(async (_concepts: unknown, _source?: unknown) => []),
+  recordConceptGraph: vi.fn(async (_concepts: unknown, _paperId: string, _source?: unknown) => []),
   fetchConceptLedgerForUser: vi.fn(async (): Promise<unknown[]> => []),
 }));
 
@@ -260,8 +260,11 @@ describe("summarizePaper — explanation contract", () => {
     expect(familiar?.source).toBeUndefined();
 
     // Citation-derived edges recorded from the grounding prerequisites.
+    // Attributed to the paper being summarized: its bibliography supplied
+    // the passages these prerequisites were read out of.
     expect(mocks.recordConceptGraph).toHaveBeenCalledWith(
       [expect.objectContaining({ concept: "flux capacitor", dependsOn: ["capacitance"] })],
+      PAPER_ID,
       "citation",
     );
   });

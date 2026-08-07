@@ -1,8 +1,9 @@
 # Open issues and next steps
 
 Working state: `main` at `v0.2.0.0` — the explanation-engine wave merged as PR #23 (`1ab4131`),
-then the reader-state and correctness fixes as PR #24 (`5cf90e1`) and PR #25 (`e91fb52`).
-`pnpm verify` green on the merged tree: 0 lint errors, 0 lint warnings.
+then seven follow-up PRs (#24–#30) covering reader state, the local-agent provider, the
+concept graph's provenance, the recency cutoff, and test coverage.
+`pnpm verify` green on the merged tree: 592 tests / 57 files, 0 lint errors, 0 lint warnings.
 `pnpm eval -- --dry-run` passes all gates; the live eval baseline is not yet recorded
 (see below).
 
@@ -27,16 +28,38 @@ Items are grouped by component, then priority: **P0** (drop everything) through 
 
 ## Next session — start here
 
-**No P1 item remains.** The concept-graph provenance work landed, and with it the last
-blocking item. The calendar-drifting citation-router cutoff is now fixed — the constant
-stayed at 2025 (no behaviour change) and a test in `src/server/explain/explain.test.ts`
-now fails loudly if it ever falls more than a year behind the real current year. That
-leaves one P2 worth doing first:
+**No P1 remains, and nothing left is blocked on more code.** Every remaining item is
+waiting on a decision, a budget, or a live service — which is why they are listed by what
+unblocks them rather than by priority.
 
-1. **Record the live eval baseline** (below). One live model run, and the harness stops
-   gating on absolute thresholds only.
+**Needs one live model run (costs API budget):**
 
-Everything else in this file is context, not queue.
+1. **Record the live eval baseline.** Until then the harness gates on absolute thresholds
+   only, never on drift.
+2. **Citation edges name the summarization, not the source.** The fix changes
+   `TERM_GROUNDING_SCHEMA` and the `term_grounding` prompt — a schema-enforced LLM contract,
+   on a repo that has already shipped one unvalidated contract change that failed silently.
+   Wants an eval run, not a guess.
+
+**Needs a design decision (and the dev stack up to judge it):**
+
+3. **Source labels are invisible on the reading surface.** Chip placement in reading flow is
+   a visual-hierarchy question — `/design-review`, not a rushed inline chip.
+4. **The markdown round trip collapses single newlines.** Whether a soft break becomes `<br>`
+   is a rendering choice: a callout of bullets and a wrapped paragraph want different answers.
+
+**Needs a product decision:**
+
+5. **Passes 2 and 3 render identical content.** Either that is the design (same text,
+   different instruction) or deep is unfinished. Nothing in the code decides it.
+6. **The concept-graph read path is unbuilt.** Deliberately — there is no consumer, and
+   inventing one would be inventing product. The contract a future implementer must honour
+   is written down below.
+
+**Deliberately not urgent:** everything under Performance. The section is measured, and
+several entries say in their own text that they do not matter at this app's scale. Batching
+the N+1 writes would churn write paths whose semantics were only just pinned by tests, for
+a bounded fire-and-forget win — motion rather than progress, unless the scale changes.
 
 ---
 

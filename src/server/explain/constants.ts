@@ -25,8 +25,37 @@ export const DECAY_HALF_LIFE_DAYS = 60;
  */
 export const OBSCURE_CITATION_COUNT_THRESHOLD = 200;
 
-/** …or was published in/after this year (post-training-cutoff risk). */
+/**
+ * …or was published in/after this year.
+ *
+ * A hand-maintained heuristic for "new enough that the model may not
+ * know it" — deliberately NOT a claim about any model's training
+ * cutoff. Nothing here can know which model answers: `routeCitations`
+ * runs while the prompt is being assembled, and the provider/model is
+ * resolved afterwards inside `llm/router.ts`, where
+ * `LLM_ALLOWED_PROVIDERS` failover can cross providers mid-call and env
+ * overrides can name models that have no entry in `llm-config`.
+ *
+ * Left alone, this literal widens the trigger every January: the span
+ * it calls "recent" grows by a year while the value stands still, so
+ * more citations pull retrieval on a path nobody watches. It is pinned
+ * to the calendar by `RECENT_YEAR_CUTOFF_MAX_LAG_YEARS` and the test in
+ * `explain.test.ts` that enforces it. When that test fails, the fix is
+ * to re-decide this value — not to widen the band.
+ */
 export const RECENT_YEAR_CUTOFF = 2025;
+
+/**
+ * How far behind the real current year `RECENT_YEAR_CUTOFF` is allowed
+ * to sit. 1 means: re-decide the cutoff once a year, which is the rate
+ * at which "recent" itself moves. The cutoff may also equal the current
+ * year, but never exceed it — a future cutoff would silently disable
+ * the recency half of the trigger altogether.
+ *
+ * Enforced only by the test; nothing in the request path reads the
+ * clock, so routing stays deterministic.
+ */
+export const RECENT_YEAR_CUTOFF_MAX_LAG_YEARS = 1;
 
 /**
  * Cap on low-familiarity glossary terms grounded by the single bounded

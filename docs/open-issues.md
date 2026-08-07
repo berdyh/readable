@@ -28,13 +28,12 @@ Items are grouped by component, then priority: **P0** (drop everything) through 
 ## Next session — start here
 
 **No P1 item remains.** The concept-graph provenance work landed, and with it the last
-blocking item. The highest remaining priority is P2, and the two worth doing first are:
+blocking item. The calendar-drifting citation-router cutoff is now fixed — the constant
+stayed at 2025 (no behaviour change) and a test in `src/server/explain/explain.test.ts`
+now fails loudly if it ever falls more than a year behind the real current year. That
+leaves one P2 worth doing first:
 
-1. **The citation router's "recent work" trigger widens on its own** (below, under
-   Correctness). It is the only open item that gets worse on its own with the calendar —
-   every year the frozen `RECENT_YEAR_CUTOFF` sits still, it pulls retrieval for more papers
-   on a path nobody is watching.
-2. **Record the live eval baseline** (below). One live model run, and the harness stops
+1. **Record the live eval baseline** (below). One live model run, and the harness stops
    gating on absolute thresholds only.
 
 Everything else in this file is context, not queue.
@@ -114,24 +113,6 @@ same row survives.
 Arguably correct as written (fresh chunk ids are re-derived; stale ones would dangle), so
 this is a **deliberate-tradeoff note**, not a confirmed bug. If anchor loss matters, preserve
 stored `chunk_ids` when the incoming array is empty, mirroring the `authors` CASE guard.
-
-### The citation router's "recent work" trigger widens on its own
-
-**Priority:** P2 · `src/server/explain/constants.ts:29`
-
-`RECENT_YEAR_CUTOFF = 2025` is a frozen literal, but its own comment states the intent:
-"post-training-cutoff risk". Those are not the same thing. The model's training cutoff moves
-forward; the constant does not. Today (2026) every paper published in 2025 **or later** trips
-the obscure-or-recent trigger and pulls retrieval, whether or not the model knows the work —
-and that widens every year the constant sits still, silently increasing prompt size, cost, and
-latency on a path nobody is watching.
-
-Fix options, in preference order: derive the cutoff from the active model's known training
-cutoff (it is per-model data, so it belongs next to the model entry in `models.json`, not in a
-shared constant); or keep a constant but assert in a test that it is within N years of the
-current date, so it fails loudly instead of drifting.
-
-Found by the pre-merge review (2026-07-31), after the eight-reviewer pass missed it.
 
 ### Legacy persona rows never join the ledger
 

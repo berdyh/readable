@@ -159,20 +159,26 @@ EXISTS` statements in `ensureSchema()` acquire `ACCESS EXCLUSIVE` on `paper_cita
 
 The ship audit traced 67 paths through the diff and found **31 covered (46%)** — code paths
 43%, user flows 57%, LLM behavior covered by `pnpm eval`. All **9 flagged regressions**
-(changed behavior with no covering test) were fixed before merge; **36 gaps remain**, of which
-7 want E2E and 2 want eval cases.
+(changed behavior with no covering test) were fixed before merge; **36 gaps remained**, of
+which 7 want E2E and 2 want eval cases.
 
-The gaps worth closing first, because they guard data correctness rather than rendering:
+**Closed since.** The three data-correctness gaps this section named first are covered, along
+with `src/server/db/concepts.ts` (closed by the provenance wave):
 
-- `src/server/db/persona.ts` — `recordConceptSignal`'s ledger upsert carries the subtlest
-  persistence semantics in the wave (per-signal `jsonb` counter increment, `distinct_paper_ids`
-  dedupe CASE, COALESCE name/description) with no SQL-shape test. `papers.test.ts` pins its
-  sibling upsert exactly this way — mirror that.
-- `src/server/qa/context.ts` — a 165-line rewrite (live enrichment → Postgres-only) with zero
-  direct tests; its `citationCount` mapping feeds the router's obscurity trigger, so a wrong
-  mapping silently disables retrieval.
-- `/api/persona/exposure` — the only new route with neither a unit test of the handler nor a
-  probe in `scripts/test-api-endpoints.ts`.
+- `recordConceptSignal`'s ledger upsert — `src/server/db/persona.test.ts` pins each conflict
+  clause separately (per-signal `jsonb` merge, `distinct_paper_ids` dedupe CASE, and the two
+  deliberately-opposite COALESCE orders).
+- `loadQuestionEvidence` — `src/server/qa/__tests__/context.test.ts` runs the mapped citation
+  through the real `isObscureOrRecent`, so a `citationCount` mapped from the in-context
+  occurrence tally instead of the stored count fails on the routing consequence.
+- `/api/persona/exposure` — handler test plus two probes in `scripts/test-api-endpoints.ts`
+  (empty body → 400 even anonymously; valid body → 401).
+
+That is **33 gaps left on the audit's ledger**, still including the 7 wanting E2E and the 2
+wanting eval cases. The 46% is _not_ recomputed here: it came from the ship audit's own
+enumeration of 67 diff paths, which is not reproducible from the repo, and the new tests cover
+more behaviors than the three lines they retire. The honest delta is the gate itself —
+`pnpm verify` went from 536 tests / 54 files to **592 tests / 57 files**.
 
 ---
 

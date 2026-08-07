@@ -184,6 +184,22 @@ function offlineRouteChecks(): TestCase[] {
       note: "Validates payload before arXiv/store work.",
     },
     {
+      name: "persona exposure validation",
+      endpoint: "/api/persona/exposure",
+      method: "POST",
+      body: {},
+      expectedStatuses: [400],
+      note: "Validates payload before auth/ledger work.",
+    },
+    {
+      name: "persona exposure auth gate",
+      endpoint: "/api/persona/exposure",
+      method: "POST",
+      body: { paperId: "test-paper-id", concepts: [{ concept: "attention" }] },
+      expectedStatuses: [401],
+      note: "Clerk-protected route should reject anonymous calls.",
+    },
+    {
       name: "chat session auth gate",
       endpoint: "/api/chat/session",
       method: "POST",

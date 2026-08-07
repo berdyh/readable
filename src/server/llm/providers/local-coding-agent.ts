@@ -52,6 +52,12 @@ interface InvocationSpec {
   agent: CodingAgentId;
   env: NodeJS.ProcessEnv;
   stdin?: string;
+  /**
+   * The prompt is also on the command line, so stdin is a duplicate rather
+   * than the only delivery channel. Set by a `{prompt}` placeholder in a
+   * custom `LLM_AGENT_*_ARGS_JSON`.
+   */
+  promptInArgs?: boolean;
   outputFile?: string;
   cleanupDir?: string;
   /** Write a mid-call token refresh back to the real credential file. */
@@ -983,7 +989,7 @@ function parseArgsJson(
   prompt: string,
   cwd: string,
   outputFile?: string,
-): string[] | null {
+): { args: string[]; promptInArgs: boolean } | null {
   const key = AGENT_ENV_KEYS[agent];
   const raw = process.env[`LLM_AGENT_${key}_ARGS_JSON`]?.trim();
   if (!raw) {
@@ -993,12 +999,19 @@ function parseArgsJson(
   if (!Array.isArray(parsed) || parsed.some((entry) => typeof entry !== "string")) {
     throw new Error(`LLM_AGENT_${key}_ARGS_JSON must be a JSON string array.`);
   }
-  return parsed.map((entry) =>
-    entry
-      .replaceAll("{prompt}", prompt)
-      .replaceAll("{cwd}", cwd)
-      .replaceAll("{output}", outputFile ?? ""),
-  );
+  // Whether the template asked for the prompt on the command line. The
+  // invocation sends it on stdin as well, so this is what distinguishes a
+  // stdin write failure that lost the prompt from one that lost a duplicate.
+  const promptInArgs = parsed.some((entry) => (entry as string).includes("{prompt}"));
+  return {
+    args: parsed.map((entry) =>
+      entry
+        .replaceAll("{prompt}", prompt)
+        .replaceAll("{cwd}", cwd)
+        .replaceAll("{output}", outputFile ?? ""),
+    ),
+    promptInArgs,
+  };
 }
 
 async function prepareInvocationDirs(tempDir: string): Promise<void> {
@@ -1035,11 +1048,12 @@ async function buildInvocation(
   if (overrideArgs) {
     return {
       command,
-      args: overrideArgs,
+      args: overrideArgs.args,
       cwd: tempDir,
       agent,
       env,
       stdin: prompt,
+      promptInArgs: overrideArgs.promptInArgs,
       outputFile,
       cleanupDir: tempDir,
       persistCredentials: credentials.persistRefresh,
@@ -1284,11 +1298,15 @@ function runProcess(spec: InvocationSpec, timeoutMs: number): Promise<string> {
         );
         return;
       }
-      if (stdinError) {
+      if (stdinError && !spec.promptInArgs) {
         // A clean exit is not a successful invocation if the agent never
         // received the prompt. Resolving `stdout` here would hand back an
         // answer to a question that was never asked — a silent wrong result,
         // which is worse than the crash this handler exists to prevent.
+        //
+        // Only when stdin was the sole delivery channel, though. A custom
+        // args template with `{prompt}` puts it on the command line too, so a
+        // failed stdin write there loses a duplicate, not the prompt.
         reject(
           new LocalAgentInvocationError({
             agent: spec.agent,

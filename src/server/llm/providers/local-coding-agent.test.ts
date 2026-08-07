@@ -169,6 +169,15 @@ describe("LocalCodingAgentProvider", () => {
     expect(result).toHaveProperty("rejected");
   });
 
+  // Not tested here directly: that a `{prompt}` custom-args invocation still
+  // succeeds when its stdin write fails, because argv already carried the
+  // prompt. Forcing the write to fail needs a payload past the pipe buffer
+  // AND past Node's userspace queueing, but the same string has to fit in one
+  // argv entry under Linux's 128 KB MAX_ARG_STRLEN — the two do not overlap.
+  // A test that cannot fail reads as coverage while proving nothing, so the
+  // behaviour is left to "allows custom unsafe invocations without the global
+  // unsafe flag" below, which is what caught the regression in the first place.
+
   it("routes text requests to the configured local agent executable", async () => {
     const agent = await makeAgentScript(
       tempDir,

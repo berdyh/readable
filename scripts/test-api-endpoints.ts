@@ -35,6 +35,15 @@ interface TestCase {
   expectedStatuses: number[];
   body?: unknown;
   formData?: FormData;
+  /**
+   * Send with no Authorization header even when a token is available.
+   *
+   * Required by any case asserting 401: `TEST_AUTH_TOKEN` is attached to every
+   * request by default, so an auth-gate probe would otherwise run
+   * authenticated, reach the handler, and report 200 or 500 — turning the one
+   * check that proves the gate exists into a check that never exercises it.
+   */
+  anonymous?: boolean;
   note: string;
 }
 
@@ -64,10 +73,12 @@ function authHeaders(): HeadersInit {
 }
 
 async function buildRequest(test: TestCase): Promise<RequestInit> {
+  const headers = test.anonymous ? {} : authHeaders();
+
   if (test.formData) {
     return {
       method: test.method,
-      headers: authHeaders(),
+      headers,
       body: test.formData,
     };
   }
@@ -75,7 +86,7 @@ async function buildRequest(test: TestCase): Promise<RequestInit> {
   return {
     method: test.method,
     headers: {
-      ...authHeaders(),
+      ...headers,
       ...(test.body === undefined ? {} : { "Content-Type": "application/json" }),
     },
     body: test.body === undefined ? undefined : JSON.stringify(test.body),
@@ -142,6 +153,7 @@ function offlineRouteChecks(): TestCase[] {
       method: "POST",
       body: {},
       expectedStatuses: [401],
+      anonymous: true,
       note: "Clerk-protected route should reject anonymous calls.",
     },
     {
@@ -149,6 +161,7 @@ function offlineRouteChecks(): TestCase[] {
       endpoint: "/api/extract-research-paper",
       method: "POST",
       expectedStatuses: [401],
+      anonymous: true,
       note: "Clerk-protected route should reject anonymous calls.",
     },
     {
@@ -197,6 +210,7 @@ function offlineRouteChecks(): TestCase[] {
       method: "POST",
       body: { paperId: "test-paper-id", concepts: [{ concept: "attention" }] },
       expectedStatuses: [401],
+      anonymous: true,
       note: "Clerk-protected route should reject anonymous calls.",
     },
     {
@@ -205,6 +219,7 @@ function offlineRouteChecks(): TestCase[] {
       method: "POST",
       body: { paperId: "test-paper-id" },
       expectedStatuses: [401],
+      anonymous: true,
       note: "Clerk-protected route should reject anonymous calls.",
     },
     {
@@ -212,6 +227,7 @@ function offlineRouteChecks(): TestCase[] {
       endpoint: "/api/chat/history?paperId=test-paper-id",
       method: "GET",
       expectedStatuses: [401],
+      anonymous: true,
       note: "Clerk-protected route should reject anonymous calls.",
     },
     {
@@ -229,6 +245,7 @@ function offlineRouteChecks(): TestCase[] {
         },
       },
       expectedStatuses: [401],
+      anonymous: true,
       note: "Clerk-protected route should reject anonymous calls.",
     },
   ];

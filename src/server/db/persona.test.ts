@@ -273,8 +273,63 @@ describe("recordConceptSignal conflict semantics", () => {
     expect(sql).toContain("last_seen_at = NOW()");
     // learned_at is set once by the insert. Touching it on conflict would
     // make every concept look newly learned on its latest exposure.
-    expect(sql).not.toContain("learned_at = NOW(),");
-    expect(sql).not.toContain("learned_at = EXCLUDED.learned_at");
+    //
+    // Reject any assignment to it rather than the two spellings that came to
+    // mind: `learned_at = CURRENT_TIMESTAMP`, or the same `NOW()` written as
+    // the final clause without a trailing comma, would both slip past a
+    // literal match while reintroducing exactly this bug.
+    const conflictClause = sql.slice(sql.indexOf("ON CONFLICT"));
+    expect(conflictClause).not.toMatch(/\blearned_at\s*=/);
+  });
+
+  it("fills each column from the placeholder that belongs to it", async () => {
+    const sql = await writeOnce();
+
+    // Every assertion above indexes the params array by position, which says
+    // nothing about which column a placeholder lands in. Swap $3 and $4 in the
+    // VALUES tuple and all of them still pass while the ledger stores the
+    // human-readable label as the concept key — the exact silent split those
+    // tests claim to guard. This is the half that notices.
+    const columns = /INSERT INTO persona_concepts \(([\s\S]*?)\)\s*VALUES/
+      .exec(sql)?.[1]
+      .split(",")
+      .map((column) => column.trim())
+      .filter(Boolean);
+    const valuesTuple = /VALUES \(([\s\S]*?)\)\s*ON CONFLICT/.exec(sql)?.[1];
+
+    expect(columns, "INSERT column list").toBeDefined();
+    expect(valuesTuple, "VALUES tuple").toBeDefined();
+
+    // Split on top-level commas only: `jsonb_build_object($7::text, 1)` and
+    // `ARRAY[$6::text]` both contain commas or brackets of their own.
+    const values: string[] = [];
+    let depth = 0;
+    let current = "";
+    for (const character of valuesTuple!) {
+      if (character === "(" || character === "[") depth += 1;
+      if (character === ")" || character === "]") depth -= 1;
+      if (character === "," && depth === 0) {
+        values.push(current.trim());
+        current = "";
+        continue;
+      }
+      current += character;
+    }
+    values.push(current.trim());
+
+    expect(values).toHaveLength(columns!.length);
+
+    const expressionFor = (column: string): string => values[columns!.indexOf(column)];
+
+    expect(expressionFor("user_id")).toBe("$2");
+    expect(expressionFor("concept")).toBe("$3");
+    expect(expressionFor("display_name")).toBe("$4");
+    expect(expressionFor("description")).toBe("$5");
+    expect(expressionFor("first_seen_paper_id")).toBe("$6");
+    expect(expressionFor("signal_counts")).toContain("$7");
+    // The paper id feeds both its own column and the seed array, so a change
+    // to one that misses the other would silently desync them.
+    expect(expressionFor("distinct_paper_ids")).toContain("$6");
   });
 
   it("never writes a known/new verdict — that is derived at read time", async () => {

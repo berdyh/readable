@@ -7,11 +7,20 @@
 # project's container already holding port 3000.
 name: readable
 
+# No `restart:` policy here on purpose. This is the local dev stack, and
+# `restart: unless-stopped` means "come back whenever dockerd starts, unless the
+# user explicitly stopped me" — so a stack left running at shutdown silently
+# reappears at next boot, holding RAM and port 5432 for a test nobody is running.
+# Docker has no idle timeout to counter it. Without a policy these come up only
+# when you run `docker compose up`, and `docker compose down` really ends them.
+#
+# In production this must be set back to `restart: unless-stopped` (or `always`)
+# on every service — surviving a host reboot unattended is the whole point there.
+
 services:
   postgres:
     image: postgres:16-alpine
     container_name: readable-postgres
-    restart: unless-stopped
     environment:
       POSTGRES_USER: readable
       POSTGRES_PASSWORD: readable
@@ -29,7 +38,6 @@ services:
   qdrant:
     image: qdrant/qdrant:latest
     container_name: readable-qdrant
-    restart: unless-stopped
     ports:
       - "6333:6333"
       - "6334:6334"
